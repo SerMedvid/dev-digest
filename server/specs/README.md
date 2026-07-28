@@ -26,4 +26,8 @@ Conventions:
 - Mark a spec as superseded rather than quietly editing it after ship, so the
   original intent stays readable.
 
-Empty on purpose — nothing in the starter was built spec-first.
+## Index
+
+- [`run-cost.md`](run-cost.md) — persisting per-run LLM cost on `agent_runs`,
+  exposing it on `RunSummary` / `RunTrace.stats`, and the per-PR roll-up on the
+  pulls list. Client half: [`client/specs/run-cost-display.md`](../../client/specs/run-cost-display.md).

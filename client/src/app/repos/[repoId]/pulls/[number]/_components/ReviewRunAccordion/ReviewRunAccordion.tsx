@@ -7,7 +7,8 @@
 
 import React from "react";
 import { Icon, Badge } from "@devdigest/ui";
-import type { ReviewRecord, Verdict } from "@devdigest/shared";
+import type { ReviewRecord, RunSummary, Verdict } from "@devdigest/shared";
+import { RunCostBadge } from "@/components/run-cost-badge";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
@@ -25,6 +26,7 @@ function formatWhen(iso: string): string {
 
 export function ReviewRunAccordion({
   review,
+  run,
   prId,
   defaultOpen = false,
   repoFullName,
@@ -33,6 +35,10 @@ export function ReviewRunAccordion({
   targetNonce = 0,
 }: {
   review: ReviewRecord;
+  /** The agent_run that produced this review, matched on `review.run_id`.
+   *  Carries the spend figures; undefined when the run row is gone (deleted
+   *  or not yet loaded), in which case cost renders as "—". */
+  run?: RunSummary;
   prId: string;
   defaultOpen?: boolean;
   repoFullName?: string | null;
@@ -103,6 +109,9 @@ export function ReviewRunAccordion({
             {review.score}
           </Badge>
         )}
+        {/* Collapsed-state spend. The expanded VerdictBanner repeats it with
+            the token flow — same number, different level of detail. */}
+        <RunCostBadge costUsd={run?.cost_usd} style={{ fontSize: 12 }} />
         <span className="mono" style={{ fontSize: 12, color: "var(--text-muted)" }}>
           {formatWhen(review.created_at)}
         </span>
@@ -144,6 +153,9 @@ export function ReviewRunAccordion({
                 findingsCount={findings.length}
                 blockers={blockers}
                 agentName={review.agent_name}
+                costUsd={run?.cost_usd}
+                tokensIn={run?.tokens_in}
+                tokensOut={run?.tokens_out}
               />
             </div>
           )}

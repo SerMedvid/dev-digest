@@ -104,6 +104,63 @@ describe('reviewPullRequest (engine)', () => {
     ).rejects.toThrow('cancelled');
   });
 
+  /**
+   * Cost null-poisoning. The studio persists `outcome.costUsd` verbatim and the
+   * UI renders null as "—", so a run where ANY chunk had an unknown price must
+   * report null overall rather than a partial sum that reads as the total.
+   */
+  it('sums costUsd across chunks, but nulls the total if any chunk is unpriced', async () => {
+    let calls = 0;
+    /** `perCall` decides what each chunk reports; `calls` counts the chunks. */
+    const provider = (perCall: (n: number) => number | null): LLMProvider => ({
+      id: 'openrouter',
+      async completeStructured<T>(req): Promise<StructuredResult<T>> {
+        return {
+          data: fixture as unknown as T,
+          model: req.model,
+          tokensIn: 10,
+          tokensOut: 5,
+          costUsd: perCall(calls++),
+          raw: '',
+          attempts: 1,
+        };
+      },
+      async listModels() {
+        return [];
+      },
+      async complete() {
+        throw new Error('not used');
+      },
+      async embed() {
+        return [];
+      },
+    });
+    const diff = await new MockGitClient().diff();
+
+    // Every chunk priced → the costs add up.
+    calls = 0;
+    const priced = await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff,
+      llm: provider(() => 0.001),
+    });
+    expect(calls).toBeGreaterThan(0);
+    expect(priced.costUsd).toBeCloseTo(0.001 * calls, 10);
+
+    // First chunk unpriced → the WHOLE run reports null, not a partial sum.
+    calls = 0;
+    const poisoned = await reviewPullRequest({
+      systemPrompt: 's',
+      model: 'm',
+      diff,
+      llm: provider((n) => (n === 0 ? null : 0.001)),
+    });
+    expect(poisoned.costUsd).toBeNull();
+    // Tokens still accumulate — only cost is poisoned by an unknown price.
+    expect(poisoned.tokensIn).toBeGreaterThan(0);
+  });
+
   it('forwards sessionId to every LLM call (OpenRouter session grouping)', async () => {
     const seen: (string | undefined)[] = [];
     const recorder: LLMProvider = {
