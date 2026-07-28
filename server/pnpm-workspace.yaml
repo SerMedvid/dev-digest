@@ -1,0 +1,8 @@
+allowBuilds:
+  # esbuild ships its platform binary as an optional dep; the install script only
+  # verifies/links it. Used by tsx (dev, db:migrate, db:seed) and vitest.
+  esbuild: true
+  # Optional native speedups pulled in via testcontainers → ssh2. Not required.
+  cpu-features: false
+  protobufjs: false
+  ssh2: false
