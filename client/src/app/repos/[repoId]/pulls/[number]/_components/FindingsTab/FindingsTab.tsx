@@ -41,6 +41,14 @@ export function FindingsTab({
   onDelete,
   onRunDone,
 }: FindingsTabProps) {
+  // Spend lives on the RUN row, not the review — `reviews` has no cost column
+  // and shouldn't grow one. Both lists are already fetched for this PR, so the
+  // accordion gets its cost by matching review.run_id against the run history.
+  const runById = React.useMemo(
+    () => new Map((prRuns ?? []).map((r) => [r.run_id, r])),
+    [prRuns],
+  );
+
   const handleCancelAll = useCallback(() => {
     liveRunIds.forEach((id) => cancelMutation.mutate(id));
   }, [liveRunIds, cancelMutation]);
@@ -158,6 +166,7 @@ export function FindingsTab({
           <ReviewRunAccordion
             key={review.id}
             review={review}
+            run={review.run_id ? runById.get(review.run_id) : undefined}
             prId={prId}
             defaultOpen={i === 0}
             repoFullName={repoFullName}

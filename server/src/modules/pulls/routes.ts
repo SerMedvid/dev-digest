@@ -129,6 +129,21 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    // Total SPEND per PR for the list's COST column — the sum of every run's
+    // cost, not just the latest (the score above is deliberately latest-only:
+    // a score is a verdict, spend accumulates). One grouped aggregate via the
+    // shared reviewRepo, since a module never imports another's repository.
+    // Cost is a nice-to-have on a list endpoint, so a failure here degrades to
+    // "—" rather than 500-ing the whole page.
+    let costByPr = new Map<string, number | null>();
+    if (prIds.length > 0) {
+      try {
+        costByPr = await container.reviewRepo.sumRunCostByPr(workspaceId, prIds);
+      } catch (err) {
+        app.log.warn({ err }, 'PR cost roll-up failed; serving list without costs');
+      }
+    }
+
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
@@ -153,6 +168,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         opened_at: r.openedAt?.toISOString() ?? null,
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
+        cost_usd: costByPr.get(r.id) ?? null,
       };
     });
   });

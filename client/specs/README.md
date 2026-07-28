@@ -24,4 +24,9 @@ Conventions:
   code; a spec that pins them just goes stale.
 - Reference the Zod contract for any shape rather than restating fields.
 
-Empty on purpose — nothing in the starter was built spec-first.
+## Index
+
+- [`run-cost-display.md`](run-cost-display.md) — the four surfaces that show what
+  a review run cost: PR list column, agent-runs timeline, trace drawer, review-run
+  header + verdict banner. Server half:
+  [`server/specs/run-cost.md`](../../server/specs/run-cost.md).

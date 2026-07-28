@@ -209,7 +209,68 @@ d('A2 reviews + agents (Testcontainers pg)', () => {
     expect(run!.findingsCount).toBe(1);
     expect(run!.grounding).toBe('1/2 passed');
 
+    // Cost survives the engine → executor → agent_runs → API path. The mock LLM
+    // reports 0.001 per call, so the persisted value is a positive number.
+    expect(run!.costUsd).toBeGreaterThan(0);
+    expect(trace.stats.cost_usd).toBeCloseTo(run!.costUsd!, 10);
+    const runsList = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/runs` })).json();
+    expect(runsList[0].cost_usd).toBeCloseTo(run!.costUsd!, 10);
+
     await app.close();
+  });
+
+  it('cost: PR list rolls up run spend; a failed run stores null, not 0', async () => {
+    const app = await appWith(REVIEW_FIXTURE);
+    const { repo, pr } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Cost', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sec' },
+      })
+    ).json();
+
+    // Two successful runs on the same PR — the list column shows the TOTAL.
+    for (let i = 0; i < 2; i++) {
+      await app.inject({ method: 'POST', url: `/pulls/${pr.id}/review`, payload: { agentId: agent.id } });
+      await waitForPrRuns(pg.handle.db, pr.id, { expected: i + 1 });
+    }
+    const runs = (await app.inject({ method: 'GET', url: `/pulls/${pr.id}/runs` })).json();
+    expect(runs).toHaveLength(2);
+    const expectedTotal = runs.reduce((n: number, r: { cost_usd: number | null }) => n + (r.cost_usd ?? 0), 0);
+    expect(expectedTotal).toBeGreaterThan(0);
+
+    const pulls = (await app.inject({ method: 'GET', url: `/repos/${repo.id}/pulls` })).json();
+    const listed = pulls.find((p: { number: number }) => p.number === pr.number);
+    expect(listed.cost_usd).toBeCloseTo(expectedTotal, 10);
+
+    await app.close();
+
+    // A run that FAILS (fixture doesn't satisfy the Review schema) must persist
+    // a null cost. 0 would render as "$0" — i.e. "this run was free" — which is
+    // a different claim from "we don't know what it cost".
+    const failApp = await appWith({ not: 'a review' });
+    const { repo: repo2, pr: pr2 } = await setupRepoAndPr(pg.handle.db, workspaceId);
+    const agent2 = (
+      await failApp.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: { name: 'Boom', provider: 'openai', model: 'gpt-4.1', system_prompt: 'sec' },
+      })
+    ).json();
+    await failApp.inject({ method: 'POST', url: `/pulls/${pr2.id}/review`, payload: { agentId: agent2.id } });
+    await waitForPrRuns(pg.handle.db, pr2.id, { expected: 1 });
+
+    const failedRuns = (await failApp.inject({ method: 'GET', url: `/pulls/${pr2.id}/runs` })).json();
+    expect(failedRuns[0].status).toBe('failed');
+    expect(failedRuns[0].cost_usd).toBeNull();
+
+    // …and the PR-list roll-up over only-null costs is null, not 0.
+    const pulls2 = (await failApp.inject({ method: 'GET', url: `/repos/${repo2.id}/pulls` })).json();
+    const listed2 = pulls2.find((p: { number: number }) => p.number === pr2.number);
+    expect(listed2.cost_usd).toBeNull();
+
+    await failApp.close();
   });
 
   it('dual-provider structured output: anthropic provider returns the same Review shape', async () => {

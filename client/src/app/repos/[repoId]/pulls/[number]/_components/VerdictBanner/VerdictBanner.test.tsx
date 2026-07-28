@@ -2,13 +2,14 @@ import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../../messages/en/prReview.json";
+import runsMessages from "../../../../../../../../messages/en/runs.json";
 import { VerdictBanner } from "./VerdictBanner";
 
 afterEach(cleanup);
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
-    <NextIntlClientProvider locale="en" messages={{ prReview: messages }}>
+    <NextIntlClientProvider locale="en" messages={{ prReview: messages, runs: runsMessages }}>
       {ui}
     </NextIntlClientProvider>,
   );

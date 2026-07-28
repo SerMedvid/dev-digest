@@ -1,4 +1,4 @@
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
 import type { RunSummary, RunTrace } from '@devdigest/shared';
@@ -59,12 +59,48 @@ export async function listRunsForPull(
     duration_ms: run.durationMs,
     tokens_in: run.tokensIn,
     tokens_out: run.tokensOut,
+    cost_usd: run.costUsd,
     findings_count: run.findingsCount,
     grounding: run.grounding,
     ran_at: run.ranAt ? run.ranAt.toISOString() : null,
     score: run.score,
     blockers: run.blockers,
   }));
+}
+
+/**
+ * Total USD spent per PR = SUM of that PR's runs' costs. ONE grouped aggregate
+ * for the whole list page, not a query per row.
+ *
+ * Postgres `sum()` skips NULL rows and returns NULL when every row is null,
+ * which is exactly what we want: a PR whose runs are all unpriced (or failed)
+ * reports null → the UI shows "—" rather than a misleading $0.00. That is also
+ * why there's no status filter — failed runs carry a null cost and contribute
+ * nothing on their own.
+ */
+export async function sumRunCostByPr(
+  db: Db,
+  workspaceId: string,
+  prIds: string[],
+): Promise<Map<string, number | null>> {
+  const out = new Map<string, number | null>();
+  if (prIds.length === 0) return out;
+  const rows = await db
+    .select({
+      prId: t.agentRuns.prId,
+      cost: sql<number | null>`sum(${t.agentRuns.costUsd})`,
+    })
+    .from(t.agentRuns)
+    .where(and(eq(t.agentRuns.workspaceId, workspaceId), inArray(t.agentRuns.prId, prIds)))
+    .groupBy(t.agentRuns.prId);
+  for (const r of rows) {
+    if (!r.prId) continue;
+    // Drivers don't reliably hand back a JS number for an aggregate — coerce,
+    // and keep a genuine null as null (Number(null) would be 0).
+    const n = r.cost == null ? null : Number(r.cost);
+    out.set(r.prId, n == null || Number.isNaN(n) ? null : n);
+  }
+  return out;
 }
 
 /**
@@ -146,6 +182,11 @@ export async function completeAgentRun(
     durationMs: number;
     tokensIn: number;
     tokensOut: number;
+    /**
+     * USD cost of the run. Pass `null` — NOT 0 — when it is unknown (unpriced
+     * model) or the run failed/cancelled; 0 means the model was genuinely free.
+     */
+    costUsd?: number | null;
     findingsCount: number;
     grounding: string;
     /** Review score (0-100); null on failed/cancelled runs. */
@@ -163,6 +204,7 @@ export async function completeAgentRun(
       durationMs: values.durationMs,
       tokensIn: values.tokensIn,
       tokensOut: values.tokensOut,
+      costUsd: values.costUsd ?? null,
       findingsCount: values.findingsCount,
       grounding: values.grounding,
       score: values.score ?? null,

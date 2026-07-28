@@ -155,6 +155,8 @@ export class ReviewRepository {
       durationMs: number;
       tokensIn: number;
       tokensOut: number;
+      /** USD cost; null (never 0) when unpriced or the run failed/cancelled. */
+      costUsd?: number | null;
       findingsCount: number;
       grounding: string;
       /** Review score (0-100); null on failed/cancelled runs. */
@@ -166,6 +168,12 @@ export class ReviewRepository {
     },
   ): Promise<void> {
     return runRepo.completeAgentRun(this.db, runId, values);
+  }
+
+  /** Total USD spent per PR (one grouped aggregate). Used by the PR-list COST
+   *  column; null for a PR whose runs are all unpriced or failed. */
+  sumRunCostByPr(workspaceId: string, prIds: string[]): Promise<Map<string, number | null>> {
+    return runRepo.sumRunCostByPr(this.db, workspaceId, prIds);
   }
 
   /** Record the head SHA a review ran against (PR-list freshness derivation). */

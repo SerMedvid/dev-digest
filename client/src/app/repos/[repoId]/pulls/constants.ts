@@ -23,8 +23,10 @@ export const SIZE_COLOR: Record<string, string> = {
   L: "var(--crit)",
 };
 
-/** Grid template for both the header row and PR rows. */
-export const GRID = "1fr 132px 92px 60px 118px 78px";
+/** Grid template for both the header row and PR rows.
+ *  Track count MUST equal `COLUMN_KEYS.length` — header and rows share this,
+ *  so a mismatch shifts every cell in the table. */
+export const GRID = "1fr 132px 92px 60px 118px 72px 78px";
 
 /** Line-count thresholds for the S/M/L size bucket. */
 export const SIZE_SMALL_MAX = 100;
@@ -45,6 +47,7 @@ export const COLUMN_KEYS: string[] = [
   "size",
   "score",
   "status",
+  "cost",
   "updated",
 ];
 
