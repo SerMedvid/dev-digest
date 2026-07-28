@@ -1,0 +1,6 @@
+allowBuilds:
+  # esbuild ships its platform binary as an optional dep; the install script only
+  # verifies/links it. Used by vitest.
+  esbuild: true
+  # sharp powers next/image optimization; Next warns but works without it.
+  sharp: true
