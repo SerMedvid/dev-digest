@@ -10,9 +10,20 @@ import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord, PrFindingPreview } from "@devdigest/shared";
-import messages from "../../../messages/en/prReview.json";
-import { FindingsBreakdown, SeverityCounters } from "./FindingsBreakdown";
-import { fromPreview, fromRecords, lineLabel, totalOf } from "./helpers";
+import messages from "../../../../messages/en/prReview.json";
+import { FindingsBreakdown } from "./FindingsBreakdown";
+import { SeverityCounters } from "../SeverityCounters";
+import {
+  cardPlacement,
+  fromPreview,
+  fromRecords,
+  lineLabel,
+  previewTotals,
+  shownSeverities,
+  severityMeta,
+  totalOf,
+} from "../helpers";
+import { CARD_MAX_HEIGHT, CARD_WIDTH } from "../constants";
 
 afterEach(cleanup);
 
@@ -101,6 +112,23 @@ describe("helpers", () => {
     expect(totalOf(null)).toBe(0);
   });
 
+  it("shownSeverities keeps non-zero severities only, most severe first", () => {
+    expect(shownSeverities(COUNTS)).toEqual(["CRITICAL", "WARNING"]);
+    expect(shownSeverities({ CRITICAL: 0, WARNING: 0, SUGGESTION: 0 })).toEqual([]);
+  });
+
+  it("severityMeta degrades an out-of-enum severity to INFO rather than throwing", () => {
+    expect(severityMeta("CRITICAL").icon).toBe("AlertOctagon");
+    expect(severityMeta("NONSENSE")).toBe(severityMeta("INFO"));
+  });
+
+  it("previewTotals reports the remainder only when the list is capped", () => {
+    expect(previewTotals(2)).toEqual({ total: 2, hidden: 0 });
+    expect(previewTotals(2, 9)).toEqual({ total: 9, hidden: 7 });
+    // A total below what's on screen can't mean negative hidden rows.
+    expect(previewTotals(6, 2)).toEqual({ total: 2, hidden: 0 });
+  });
+
   it("fromPreview maps the server's snippet field onto the card row", () => {
     expect(fromPreview(preview()).snippet).toBe("One query per row.");
   });
@@ -116,6 +144,57 @@ describe("helpers", () => {
     ]);
     expect(counts).toEqual({ CRITICAL: 1, WARNING: 2, SUGGESTION: 0 });
     expect(findings.map((f) => f.id)).toEqual(["b", "c", "a"]);
+  });
+});
+
+/** Every surface hosting this widget wraps it in an `overflow: hidden` ancestor
+ *  (the list's table card, the accordion shell) to clip its rounded corners. The
+ *  card therefore can't be laid out inside that box — it's pinned in viewport
+ *  coordinates instead, which is what these cases pin down. */
+describe("cardPlacement", () => {
+  const VIEWPORT = { width: 1200, height: 800 };
+  const trigger = (o: Partial<DOMRect> = {}) =>
+    ({ top: 300, bottom: 320, left: 200, right: 260, ...o }) as DOMRect;
+
+  it("hangs the card under the trigger, left edges aligned, when there's room below", () => {
+    const p = cardPlacement(trigger(), VIEWPORT, "left");
+    expect(p.top).toBe(326); // trigger bottom + the 6px gap
+    expect(p.bottom).toBeUndefined();
+    expect(p.left).toBe(200);
+    expect(p.maxHeight).toBe(CARD_MAX_HEIGHT);
+  });
+
+  it("aligns the card's RIGHT edge to the trigger's when asked", () => {
+    // Far enough right that the card fits without clamping, which is the only
+    // way this assertion says anything about alignment.
+    const p = cardPlacement(trigger({ left: 800, right: 860 }), VIEWPORT, "right");
+    expect(p.left).toBe(860 - CARD_WIDTH);
+  });
+
+  it("flips above the trigger when the space below can't fit the card and above can", () => {
+    // A row near the bottom of the window: 40px below, ~700 above.
+    const p = cardPlacement(trigger({ top: 740, bottom: 760 }), VIEWPORT, "left");
+    expect(p.top).toBeUndefined();
+    expect(p.bottom).toBe(VIEWPORT.height - 740 + 6); // pinned to just above the trigger
+    expect(p.maxHeight).toBe(CARD_MAX_HEIGHT);
+  });
+
+  it("shrinks rather than flipping when neither side can fit the full card", () => {
+    // A short window: ~136 below the trigger, ~116 above ⇒ stay below, cap the
+    // height, and let the card's own overflowY scroll the rest.
+    const p = cardPlacement(trigger({ top: 130, bottom: 150 }), { width: 1200, height: 300 }, "left");
+    expect(p.top).toBe(156);
+    expect(p.maxHeight).toBe(300 - 150 - 6 - 8);
+  });
+
+  it("clamps a card that would run off the right edge back into the viewport", () => {
+    const p = cardPlacement(trigger({ left: 1150, right: 1190 }), VIEWPORT, "left");
+    expect(p.left).toBe(VIEWPORT.width - CARD_WIDTH - 8);
+  });
+
+  it("never pushes the card off the left edge", () => {
+    const p = cardPlacement(trigger({ left: 20, right: 60 }), VIEWPORT, "right");
+    expect(p.left).toBe(8);
   });
 });
 
@@ -149,6 +228,28 @@ describe("FindingsBreakdown", () => {
 
     fireEvent.click(openTrigger());
     expect(openTrigger()).toHaveAttribute("aria-expanded", "false");
+  });
+
+  /* The trigger is the only click target, so the whole badge cluster reacts as
+     one. `SeverityBadge` is vendored and takes no style prop, so the feedback
+     lives on a wrapper per badge — hence the structural query. */
+  it("underlines each badge in its severity colour while the trigger is hovered", () => {
+    renderCard(<FindingsBreakdown counts={COUNTS} findings={FINDINGS} />);
+    // Read the raw inline values: these are CSS vars, which `toHaveStyle` can't
+    // resolve without the stylesheet that defines them.
+    const NONE = "transparent";
+    const underlines = () =>
+      Array.from(openTrigger().firstElementChild!.children).map(
+        (b) => (b as HTMLElement).style.borderBottomColor,
+      );
+
+    expect(underlines()).toEqual([NONE, NONE]); // CRITICAL + WARNING; SUGGESTION is zero
+
+    fireEvent.mouseOver(openTrigger());
+    expect(underlines()).toEqual(["var(--crit)", "var(--warn)"]);
+
+    fireEvent.mouseOut(openTrigger());
+    expect(underlines()).toEqual([NONE, NONE]);
   });
 
   it("lists each finding with its title, file:line, confidence and snippet", () => {
@@ -243,6 +344,37 @@ describe("FindingsBreakdown", () => {
     // …but the rest of the row still works.
     fireEvent.click(screen.getByTestId("rest-of-row"));
     expect(onSurfaceClick).toHaveBeenCalledTimes(1);
+  });
+
+  /* The bug these two cover: the card used to be `position: absolute`, so its
+     containing block was the trigger's wrapper — inside the table card, which
+     sets `overflow: hidden`. The card was clipped at the row's edge. jsdom has
+     no layout to assert the clipping itself, so what's pinned here is the
+     mechanism that removes it: viewport coordinates, recomputed as the surface
+     underneath moves. */
+  it("pins the card in viewport coordinates so no overflow:hidden ancestor can clip it", () => {
+    renderCard(
+      <div style={{ overflow: "hidden" }}>
+        <FindingsBreakdown counts={COUNTS} findings={FINDINGS} />
+      </div>,
+    );
+    fireEvent.click(openTrigger());
+    expect(screen.getByRole("dialog")).toHaveStyle({ position: "fixed" });
+  });
+
+  it("re-pins the card when the surface underneath scrolls", () => {
+    const rect = vi.spyOn(HTMLButtonElement.prototype, "getBoundingClientRect");
+    rect.mockReturnValue({ top: 300, bottom: 320, left: 100, right: 160 } as DOMRect);
+    renderCard(<FindingsBreakdown counts={COUNTS} findings={FINDINGS} />);
+    fireEvent.click(openTrigger());
+    expect(screen.getByRole("dialog")).toHaveStyle({ top: "326px", left: "100px" });
+
+    // The list scrolls inside `<main overflow:auto>`, not the window, so the
+    // listener has to be capture-phase to see it at all.
+    rect.mockReturnValue({ top: 120, bottom: 140, left: 100, right: 160 } as DOMRect);
+    fireEvent.scroll(document);
+    expect(screen.getByRole("dialog")).toHaveStyle({ top: "146px" });
+    rect.mockRestore();
   });
 
   it("renders nothing at all when the counts are empty", () => {

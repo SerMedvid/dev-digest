@@ -1,10 +1,10 @@
 import type { CSSProperties } from "react";
-import { CARD_MAX_HEIGHT, CARD_WIDTH } from "./constants";
+import { CARD_WIDTH } from "./constants";
+import type { CardPlacement } from "./helpers";
 
 /** Co-located styles for FindingsBreakdown. */
 export const s = {
-  /** Positioning context for the absolutely-placed card. */
-  root: { position: "relative", display: "inline-block" } satisfies CSSProperties,
+  root: { display: "inline-block" } satisfies CSSProperties,
   /** Native button so Enter/Space toggle without any key handling of our own. */
   trigger: {
     display: "inline-flex",
@@ -16,13 +16,38 @@ export const s = {
     cursor: "pointer",
     font: "inherit",
   } satisfies CSSProperties,
-  counters: { display: "inline-flex", alignItems: "center", gap: 5 } satisfies CSSProperties,
-  card: (align: "left" | "right"): CSSProperties => ({
-    position: "absolute",
-    top: "calc(100% + 6px)",
-    [align]: 0,
+  counters: (hovered: boolean): CSSProperties => ({
+    display: "inline-flex",
+    alignItems: "center",
+    gap: 5,
+    // Lifts the badges' own colours on hover. `SeverityBadge` is vendored and
+    // takes no style prop, so a filter on the cluster is the only way to reach
+    // them. Safe here even though `filter` creates a containing block for fixed
+    // descendants: the fixed card is a sibling of the trigger, not a child.
+    filter: hovered ? "brightness(1.25)" : "none",
+    transition: "filter .12s",
+  }),
+  /** Underline under one badge, in that badge's severity colour. Always present,
+   *  transparent when idle, so lighting it up never shifts the layout. */
+  badgeWrap: (color: string, hovered: boolean): CSSProperties => ({
+    display: "inline-flex",
+    // All-longhand: mixing `border` shorthand with a longhand makes React warn
+    // when only one of them updates on a rerender.
+    borderBottomWidth: 1,
+    borderBottomStyle: "dashed",
+    borderBottomColor: hovered ? color : "transparent",
+    transition: "border-bottom-color .12s",
+    cursor: hovered ? "help" : "default",
+  }),
+  /** Fixed, not absolute: every host surface sets `overflow: hidden` to clip its
+   *  rounded corners, which would clip an absolutely-placed card too. See
+   *  `cardPlacement`. */
+  card: (p: CardPlacement): CSSProperties => ({
+    position: "fixed",
+    left: p.left,
+    ...(p.top !== undefined ? { top: p.top } : { bottom: p.bottom }),
     width: CARD_WIDTH,
-    maxHeight: CARD_MAX_HEIGHT,
+    maxHeight: p.maxHeight,
     overflowY: "auto",
     background: "var(--bg-elevated)",
     border: "1px solid var(--border-strong)",

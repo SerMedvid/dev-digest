@@ -64,12 +64,23 @@ these surfaces), opening the same card with that run's full non-dismissed list.
 - Click toggles the card. Outside click closes it (which also guarantees at
   most one card open at a time). Escape closes it and returns focus to the
   trigger; outside-click close leaves focus where the user clicked.
+- Hovering the trigger gives the badges feedback: each is underlined in its own
+  severity colour and the cluster brightens. The whole cluster reacts as one,
+  because the whole cluster is one click target. Idle state reserves the
+  underline's space, so nothing shifts on hover.
 - Clicking the trigger or anywhere inside the card never activates the
   underlying surface — no row navigation on the list, no accordion toggle on
   the detail page.
 - Severity is never conveyed by colour alone: badges and card rows always pair
   the severity icon with a count or label (the existing `SeverityBadge`
   convention).
+- The card is never clipped by the surface it opens from. All three surfaces
+  clip their own rounded corners (`overflow: hidden`), so the card is pinned in
+  viewport coordinates rather than laid out inside the row: it hangs below the
+  badges, flips above them when there isn't room below, is clamped to stay
+  inside the viewport horizontally, and caps its height to the space on
+  whichever side it took (scrolling internally beyond that). It stays attached
+  to the badges while the surface underneath scrolls or the window resizes.
 - Nothing is optimistic; all counter changes wait for the server via query
   invalidation.
 

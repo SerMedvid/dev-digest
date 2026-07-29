@@ -26,3 +26,10 @@ export const EMPTY_COUNTS: PrFindingsBySeverity = {
 /** Breakdown card geometry. */
 export const CARD_WIDTH = 380;
 export const CARD_MAX_HEIGHT = 340;
+/** Height the card never shrinks below, even in a cramped viewport — under this
+ *  it stops being readable, and its own `overflowY` scrolls the remainder. */
+export const CARD_MIN_HEIGHT = 120;
+/** Space between the trigger and the card. */
+export const CARD_GAP = 6;
+/** Space the card keeps from every viewport edge. */
+export const VIEWPORT_MARGIN = 8;

@@ -7,63 +7,24 @@
    - The whole widget swallows clicks. Every surface it sits on is itself
      clickable (a row that navigates, a header that toggles), and opening the
      card must never also fire that.
-   - Severity is never colour alone — badges and rows pair the icon with a
-     count, matching the SeverityBadge convention. */
+   - The card is pinned in viewport coordinates, not laid out in the row. Every
+     host surface clips its rounded corners with `overflow: hidden`, which cuts
+     an absolutely-positioned card off at the row's edge. See `cardPlacement`. */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import {
-  Icon,
-  SeverityBadge,
-  CategoryTag,
-  ConfidenceNum,
-  SEV,
-  type Severity,
-  type Category,
-} from "@devdigest/ui";
 import type { PrFindingsBySeverity } from "@devdigest/shared";
-import { SEVERITY_ORDER } from "./constants";
-import { lineLabel, totalOf, type BreakdownFinding } from "./helpers";
-import { s } from "./styles";
-
-/** The badge cluster on its own — presentational, no card, no interaction.
- *  Renders nothing when every severity is zero. */
-export function SeverityCounters({ counts }: { counts: PrFindingsBySeverity }) {
-  const shown = SEVERITY_ORDER.filter((sev) => (counts[sev] ?? 0) > 0);
-  if (shown.length === 0) return null;
-  return (
-    <span style={s.counters}>
-      {shown.map((sev) => (
-        <SeverityBadge key={sev} severity={sev as Severity} count={counts[sev]} compact />
-      ))}
-    </span>
-  );
-}
-
-function FindingRow({ f }: { f: BreakdownFinding }) {
-  const sev = SEV[f.severity as Severity] ?? SEV.INFO;
-  const SevIcon = Icon[sev.icon];
-  return (
-    <div style={s.findingRow}>
-      <SevIcon size={13} style={s.sevIcon(sev.c)} />
-      <div style={s.findingMain}>
-        <div style={s.titleRow}>
-          <span style={s.title}>{f.title}</span>
-          {/* Renders nothing for a category outside the known set. */}
-          <CategoryTag category={f.category as Category} />
-        </div>
-        <div style={s.metaRow}>
-          <span className="mono" style={s.location}>
-            {f.file}:{lineLabel(f)}
-          </span>
-          <ConfidenceNum value={f.confidence} />
-        </div>
-        {f.snippet && <div style={s.snippet}>{f.snippet}</div>}
-      </div>
-    </div>
-  );
-}
+import { FindingRow } from "../FindingRow";
+import { SeverityCounters } from "../SeverityCounters";
+import {
+  cardPlacement,
+  previewTotals,
+  totalOf,
+  type BreakdownFinding,
+  type CardPlacement,
+} from "../helpers";
+import { s } from "../styles";
 
 export function FindingsBreakdown({
   counts,
@@ -80,6 +41,8 @@ export function FindingsBreakdown({
 }) {
   const t = useTranslations("prReview");
   const [open, setOpen] = React.useState(false);
+  const [hovered, setHovered] = React.useState(false);
+  const [placement, setPlacement] = React.useState<CardPlacement | null>(null);
   const rootRef = React.useRef<HTMLDivElement>(null);
   const triggerRef = React.useRef<HTMLButtonElement>(null);
 
@@ -94,8 +57,34 @@ export function FindingsBreakdown({
     return () => document.removeEventListener("mousedown", onMouseDown);
   }, []);
 
-  const total = totalOverride ?? findings.length;
-  const hidden = Math.max(0, total - findings.length);
+  const reposition = React.useCallback(() => {
+    const el = triggerRef.current;
+    if (!el) return;
+    setPlacement(
+      cardPlacement(
+        el.getBoundingClientRect(),
+        { width: window.innerWidth, height: window.innerHeight },
+        align,
+      ),
+    );
+  }, [align]);
+
+  // The card is pinned in viewport coordinates (see `cardPlacement`), so it has
+  // to be re-measured whenever the trigger moves under it. Scroll is captured,
+  // not bubbled: the surfaces scroll inside `<main overflow:auto>`, and a
+  // descendant scroller's scroll event never reaches window on the bubble path.
+  React.useLayoutEffect(() => {
+    if (!open) return;
+    reposition();
+    window.addEventListener("resize", reposition);
+    window.addEventListener("scroll", reposition, true);
+    return () => {
+      window.removeEventListener("resize", reposition);
+      window.removeEventListener("scroll", reposition, true);
+    };
+  }, [open, reposition]);
+
+  const { total, hidden } = previewTotals(findings.length, totalOverride);
 
   if (totalOf(counts) === 0) return null;
 
@@ -126,14 +115,23 @@ export function FindingsBreakdown({
         aria-haspopup="dialog"
         aria-expanded={open}
         aria-label={t("findings.openBreakdown")}
-        onClick={() => setOpen((o) => !o)}
+        // Measured before the open commit, so the card's first paint is already
+        // in the right place.
+        onClick={() => {
+          if (!open) reposition();
+          setOpen(!open);
+        }}
+        // Hover lives here rather than on the cluster: this is the click target,
+        // so its padding has to count as hovering the badges too.
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
         style={s.trigger}
       >
-        <SeverityCounters counts={counts} />
+        <SeverityCounters counts={counts} hovered={hovered} />
       </button>
 
-      {open && (
-        <div role="dialog" aria-label={t("findings.openBreakdown")} style={s.card(align)}>
+      {open && placement && (
+        <div role="dialog" aria-label={t("findings.openBreakdown")} style={s.card(placement)}>
           <div style={s.cardHeader}>{t("findings.header", { count: total })}</div>
           {findings.map((f) => (
             <FindingRow key={f.id} f={f} />
