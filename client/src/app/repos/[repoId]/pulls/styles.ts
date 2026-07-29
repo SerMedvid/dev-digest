@@ -40,6 +40,8 @@ export const s = {
   } satisfies CSSProperties,
   sizeBadgeBorder: (color: string): CSSProperties => ({ border: `1px solid ${color}` }),
   scoreCell: { display: "flex", alignItems: "center" } satisfies CSSProperties,
+  /** Findings counters. Empty when the PR has none — no "0", no placeholder. */
+  findingsCell: { display: "flex", alignItems: "center", minWidth: 0 } satisfies CSSProperties,
   costCell: { display: "flex", alignItems: "center", fontSize: 12 } satisfies CSSProperties,
   updatedCell: {
     fontSize: 12,

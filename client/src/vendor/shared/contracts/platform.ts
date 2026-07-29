@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { Provider } from './knowledge.js';
+import { Severity } from './findings.js';
 
 /**
  * Platform / scaffolding DTOs owned by F1:
@@ -154,6 +155,35 @@ export type Repo = z.infer<typeof Repo>;
 export const PrStatus = z.enum(['needs_review', 'reviewed', 'stale', 'open', 'closed', 'merged']);
 export type PrStatus = z.infer<typeof PrStatus>;
 
+/**
+ * Per-severity roll-up of a PR's NON-DISMISSED findings, across every review of
+ * that PR. Populated by the pulls LIST endpoint only.
+ */
+export const PrFindingsBySeverity = z.object({
+  CRITICAL: z.number().int(),
+  WARNING: z.number().int(),
+  SUGGESTION: z.number().int(),
+});
+export type PrFindingsBySeverity = z.infer<typeof PrFindingsBySeverity>;
+
+/**
+ * A slim finding for the list's breakdown card — a capped SAMPLE, not the full
+ * set (`PrFindingsBySeverity` stays authoritative for totals). `rationale_snippet`
+ * is truncated server-side so full rationales never leave the DB on this route.
+ */
+export const PrFindingPreview = z.object({
+  id: z.string(),
+  severity: Severity,
+  category: z.string(),
+  title: z.string(),
+  file: z.string(),
+  start_line: z.number().int(),
+  end_line: z.number().int(),
+  confidence: z.number(),
+  rationale_snippet: z.string(),
+});
+export type PrFindingPreview = z.infer<typeof PrFindingPreview>;
+
 export const PrMeta = z.object({
   id: z.string().nullish(),
   number: z.number().int(),
@@ -173,6 +203,12 @@ export const PrMeta = z.object({
   // Total USD spent on this PR = SUM of its runs' costs (list endpoint only).
   // Null when the PR has no runs, or none of them could be priced.
   cost_usd: z.number().nullish(),
+  // Per-severity counts of non-dismissed findings (list endpoint only).
+  // Null when the PR has none, or when the roll-up failed — never zeros.
+  findings_by_severity: PrFindingsBySeverity.nullish(),
+  // A capped sample of those findings, most severe first (list endpoint only).
+  // Null alongside `findings_by_severity` — never an empty array.
+  findings_preview: z.array(PrFindingPreview).nullish(),
 });
 export type PrMeta = z.infer<typeof PrMeta>;
 

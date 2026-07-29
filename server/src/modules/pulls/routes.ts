@@ -8,6 +8,9 @@ import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import { deriveReviewStatus } from './status.js';
+// Type-only: the roll-up itself is reached through `container.reviewRepo`,
+// never by importing another module's repository.
+import type { PrFindingsSummary } from '../reviews/repository.js';
 
 /**
  * F1 — pulls module. PR import via Octokit (list + per-PR detail).
@@ -113,8 +116,7 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
 
     // Latest-review SCORE per PR for the list's score ring. Computed on read
     // from reviews (no FK denorm); the list is small, so one IN-query + JS
-    // grouping is cheap. (The per-severity FINDINGS breakdown is intentionally
-    // not surfaced on the list — findings live on the PR detail page.)
+    // grouping is cheap.
     const prIds = rows.map((r) => r.id);
     const latestReviewByPr = new Map<string, { score: number | null }>();
     if (prIds.length > 0) {
@@ -144,6 +146,19 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
       }
     }
 
+    // Per-severity FINDINGS counts + a capped preview per PR, for the list's
+    // FINDINGS column and its breakdown card. Same shape as the cost roll-up
+    // above: one aggregate for the page via the shared reviewRepo, and a
+    // failure degrades to an empty column rather than 500-ing the list.
+    let findingsByPr = new Map<string, PrFindingsSummary>();
+    if (prIds.length > 0) {
+      try {
+        findingsByPr = await container.reviewRepo.findingsSummaryByPr(workspaceId, prIds);
+      } catch (err) {
+        app.log.warn({ err }, 'PR findings roll-up failed; serving list without findings counters');
+      }
+    }
+
     const now = Date.now();
     return rows.map((r) => {
       const review = latestReviewByPr.get(r.id);
@@ -169,6 +184,10 @@ export default async function pullsRoutes(appBase: FastifyInstance) {
         updated_at: r.updatedAt?.toISOString() ?? null,
         score: review ? review.score : null,
         cost_usd: costByPr.get(r.id) ?? null,
+        // Null (never zeros / []) when the PR has no non-dismissed findings —
+        // "nothing to show" and "roll-up failed" are the same empty cell.
+        findings_by_severity: findingsByPr.get(r.id)?.counts ?? null,
+        findings_preview: findingsByPr.get(r.id)?.preview ?? null,
       };
     });
   });

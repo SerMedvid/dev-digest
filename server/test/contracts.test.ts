@@ -14,7 +14,9 @@ import {
   RunTrace,
   Settings,
   Repo,
+  PrMeta,
   PrDetail,
+  PrFindingPreview,
 } from '@devdigest/shared';
 
 /**
@@ -206,5 +208,51 @@ describe('platform DTOs', () => {
         commits: [],
       }),
     ).not.toThrow();
+  });
+
+  it('PrMeta findings counters: present, null, and absent all parse', () => {
+    const base = {
+      number: 482,
+      title: 't',
+      author: 'a',
+      branch: 'b',
+      base: 'main',
+      head_sha: 'sha',
+      additions: 1,
+      deletions: 0,
+      files_count: 1,
+      status: 'open' as const,
+    };
+    const preview = {
+      id: 'f1',
+      severity: 'CRITICAL' as const,
+      category: 'security',
+      title: 'Hardcoded key',
+      file: 'src/config.ts',
+      start_line: 11,
+      end_line: 11,
+      confidence: 0.95,
+      rationale_snippet: 'A live Stripe key is committed in source.',
+    };
+
+    const populated = PrMeta.parse({
+      ...base,
+      findings_by_severity: { CRITICAL: 1, WARNING: 2, SUGGESTION: 0 },
+      findings_preview: [preview],
+    });
+    expect(populated.findings_by_severity?.WARNING).toBe(2);
+    expect(populated.findings_preview).toHaveLength(1);
+
+    // Zero findings / failed roll-up → explicit nulls.
+    expect(() =>
+      PrMeta.parse({ ...base, findings_by_severity: null, findings_preview: null }),
+    ).not.toThrow();
+    // Every other endpoint omits them entirely (list-endpoint-only fields).
+    expect(PrMeta.parse(base).findings_by_severity).toBeUndefined();
+
+    expect(PrFindingPreview.parse(preview).start_line).toBe(11);
+    // Category is a free string (plain text column), severity is not.
+    expect(() => PrFindingPreview.parse({ ...preview, category: 'whatever' })).not.toThrow();
+    expect(() => PrFindingPreview.parse({ ...preview, severity: 'NOPE' })).toThrow();
   });
 });

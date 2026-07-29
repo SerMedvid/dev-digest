@@ -9,6 +9,7 @@ import React from "react";
 import { Icon, Badge } from "@devdigest/ui";
 import type { ReviewRecord, RunSummary, Verdict } from "@devdigest/shared";
 import { RunCostBadge } from "@/components/run-cost-badge";
+import { FindingsBreakdown, fromRecords } from "@/components/findings-breakdown";
 import { FindingsPanel } from "../FindingsPanel";
 import { VerdictBanner } from "../VerdictBanner";
 import { useDeleteReview } from "../../../../../../../lib/hooks/reviews";
@@ -103,6 +104,9 @@ export function ReviewRunAccordion({
           {findings.length} finding{findings.length === 1 ? "" : "s"}
           {blockers > 0 ? ` · ${blockers} blocker${blockers === 1 ? "" : "s"}` : ""}
         </span>
+        {/* Per-severity counters for THIS run. The component stops click and
+            keydown propagation itself, so the header toggle stays unaffected. */}
+        <FindingsBreakdown {...fromRecords(findings)} />
         <span style={{ flex: 1 }} />
         {review.score != null && (
           <Badge mono color="var(--text-secondary)">

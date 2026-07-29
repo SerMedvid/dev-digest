@@ -15,6 +15,17 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-07-29** — `ContainerOverrides` covers *adapters* only. The shared
+  repositories (`container.reviewRepo`, `container.agentsRepo`) are constructed
+  from `this.db` in [`src/platform/container.ts`](src/platform/container.ts) and
+  have no override key, so a test that needs a repository method to *fail* — the
+  usual way to exercise a route's degrade-don't-500 path — can't inject a mock.
+  Spy on the cached instance instead: the getter memoises, so
+  `vi.spyOn(app.container.reviewRepo, 'someAggregate').mockRejectedValue(…)`
+  after `buildApp()` reaches the same object the route uses. It also counts
+  calls, which is how you prove an aggregate runs once per page rather than once
+  per row. (`test/reviews.it.test.ts:399`)
+
 ## Decisions
 
 - **2026-07-28** — Per-run LLM cost is *removed*, not unbuilt. `d45ab0d`

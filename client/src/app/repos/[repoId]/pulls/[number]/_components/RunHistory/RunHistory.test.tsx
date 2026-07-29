@@ -7,7 +7,7 @@
 import { describe, it, expect, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import type { RunSummary } from "@devdigest/shared";
+import type { FindingRecord, RunSummary } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
 import runsMessages from "../../../../../../../../messages/en/runs.json";
 import { RunHistory } from "./RunHistory";
@@ -36,12 +36,30 @@ function run(o: Partial<RunSummary>): RunSummary {
   };
 }
 
-function renderRuns(runs: RunSummary[]) {
+function renderRuns(runs: RunSummary[], findingsByRun?: Map<string, FindingRecord[]>) {
   return render(
     <NextIntlClientProvider locale="en" messages={{ prReview: messages, runs: runsMessages }}>
-      <RunHistory runs={runs} onOpenTrace={() => {}} />
+      <RunHistory runs={runs} onOpenTrace={() => {}} findingsByRun={findingsByRun} />
     </NextIntlClientProvider>,
   );
+}
+
+function finding(o: Partial<FindingRecord>): FindingRecord {
+  return {
+    id: "f1",
+    review_id: "rev-1",
+    severity: "CRITICAL",
+    category: "security",
+    title: "Hardcoded secret",
+    file: "src/config.ts",
+    start_line: 11,
+    end_line: 11,
+    rationale: "A live key is committed.",
+    confidence: 0.9,
+    accepted_at: null,
+    dismissed_at: null,
+    ...o,
+  } as FindingRecord;
 }
 
 describe("RunHistory — outcome badge", () => {
@@ -73,5 +91,42 @@ describe("RunHistory — outcome badge", () => {
   it("a running run reads 'running'", () => {
     renderRuns([run({ status: "running", score: null, blockers: null })]);
     expect(screen.getByText("running")).toBeInTheDocument();
+  });
+});
+
+describe("RunHistory — per-run findings counters", () => {
+  it("shows the severity badges for the run's own findings", () => {
+    renderRuns(
+      [run({ status: "done", findings_count: 2, blockers: 1, score: 40 })],
+      new Map([
+        [
+          "run-1",
+          [
+            finding({ id: "a", severity: "CRITICAL" }),
+            finding({ id: "b", severity: "WARNING" }),
+          ],
+        ],
+      ]),
+    );
+    expect(screen.getByRole("button", { name: /show findings breakdown/i })).toBeInTheDocument();
+  });
+
+  it("shows nothing extra for a run whose review was deleted (no map entry)", () => {
+    renderRuns([run({ status: "done", findings_count: 2, blockers: 1, score: 40 })], new Map());
+    expect(
+      screen.queryByRole("button", { name: /show findings breakdown/i }),
+    ).not.toBeInTheDocument();
+    // The flat findings text stays, as today.
+    expect(screen.getByText(/2 finding/)).toBeInTheDocument();
+  });
+
+  it("shows nothing extra when every finding on the run is dismissed", () => {
+    renderRuns(
+      [run({ status: "done", findings_count: 1, blockers: 0, score: 70 })],
+      new Map([["run-1", [finding({ dismissed_at: "2026-07-29T00:00:00.000Z" })]]]),
+    );
+    expect(
+      screen.queryByRole("button", { name: /show findings breakdown/i }),
+    ).not.toBeInTheDocument();
   });
 });

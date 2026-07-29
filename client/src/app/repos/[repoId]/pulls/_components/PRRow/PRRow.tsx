@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { Icon, Avatar, Badge, CircularScore } from "@devdigest/ui";
 import type { PrMeta } from "@/lib/types";
 import { RunCostBadge } from "@/components/run-cost-badge";
+import { FindingsBreakdown, fromPreview, totalOf } from "@/components/findings-breakdown";
 import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
@@ -18,6 +19,9 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
   const st = STATUS_META[pr.status] ?? STATUS_META.needs_review!;
   const { size, lines } = sizeOf(pr);
   const reviewed = pr.score != null; // null score ⇒ PR has never been reviewed
+  // Null counts mean "nothing to show" — no findings, never reviewed, or the
+  // roll-up failed. All three render the same empty cell, by design.
+  const findingsTotal = totalOf(pr.findings_by_severity);
   return (
     <div
       onMouseEnter={() => setH(true)}
@@ -52,6 +56,15 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
           <CircularScore score={pr.score!} size={34} stroke={3} />
         ) : (
           <span style={s.muted}>—</span>
+        )}
+      </div>
+      <div style={s.findingsCell}>
+        {findingsTotal > 0 && (
+          <FindingsBreakdown
+            counts={pr.findings_by_severity!}
+            findings={(pr.findings_preview ?? []).map(fromPreview)}
+            totalOverride={findingsTotal}
+          />
         )}
       </div>
       <div>
