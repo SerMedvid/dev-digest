@@ -15,6 +15,16 @@ import type {
   RunSummary,
 } from "@devdigest/shared";
 
+/**
+ * The PR list's findings counters are computed server-side, so anything that
+ * changes a PR's non-dismissed findings must invalidate the list too. These
+ * mutations know the `prId` but not the `repoId` the list is keyed by, so we
+ * invalidate the ARRAY PREFIX — TanStack's partial matching reaches every
+ * `["pulls", repoId]`. Broader than one repo, but the endpoint is cheap and
+ * already polled.
+ */
+const PULLS_KEY_PREFIX = ["pulls"] as const;
+
 // ---- Active (in-flight) runs — server-side source of truth ----
 export interface ActiveRun {
   run_id: string;
@@ -66,6 +76,7 @@ export function useDeleteRun(prId: string | null | undefined) {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["pr-runs", prId] });
       qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      qc.invalidateQueries({ queryKey: PULLS_KEY_PREFIX });
     },
   });
 }
@@ -82,7 +93,10 @@ export function useDeleteReview(prId: string | null | undefined) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (reviewId: string) => api.del<{ ok: boolean }>(`/reviews/${reviewId}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["reviews", prId] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      qc.invalidateQueries({ queryKey: PULLS_KEY_PREFIX });
+    },
   });
 }
 
@@ -156,6 +170,8 @@ export function useFindingAction() {
       ),
     onSuccess: (_d, { prId }) => {
       if (prId) qc.invalidateQueries({ queryKey: ["reviews", prId] });
+      // A dismiss/accept changes the PR-list counters too.
+      qc.invalidateQueries({ queryKey: PULLS_KEY_PREFIX });
     },
   });
 }

@@ -30,3 +30,7 @@ Conventions:
   a review run cost: PR list column, agent-runs timeline, trace drawer, review-run
   header + verdict banner. Server half:
   [`server/specs/run-cost.md`](../../server/specs/run-cost.md).
+- [`findings-counters-display.md`](findings-counters-display.md) — per-severity
+  findings badges on the PR list column, run timeline, and review accordions,
+  each opening a click-to-open breakdown card. Server half:
+  [`server/specs/pr-findings-counters.md`](../../server/specs/pr-findings-counters.md).

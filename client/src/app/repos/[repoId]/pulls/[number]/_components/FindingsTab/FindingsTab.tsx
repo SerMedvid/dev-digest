@@ -49,6 +49,21 @@ export function FindingsTab({
     [prRuns],
   );
 
+  // Findings per RUN for the timeline's severity counters. Derived from the
+  // reviews already on the page — no server call — via the same review.run_id
+  // join, so a dismiss updates the timeline as soon as reviews are invalidated.
+  // A run whose review was deleted simply has no entry.
+  const findingsByRun = React.useMemo(() => {
+    const map = new Map<string, FindingRecord[]>();
+    for (const review of runs) {
+      if (!review.run_id) continue;
+      const live = review.findings.filter((f) => !f.dismissed_at);
+      if (live.length === 0) continue;
+      map.set(review.run_id, [...(map.get(review.run_id) ?? []), ...live]);
+    }
+    return map;
+  }, [runs]);
+
   const handleCancelAll = useCallback(() => {
     liveRunIds.forEach((id) => cancelMutation.mutate(id));
   }, [liveRunIds, cancelMutation]);
@@ -139,6 +154,7 @@ export function FindingsTab({
           <RunHistory
             runs={prRuns ?? []}
             commits={prCommits}
+            findingsByRun={findingsByRun}
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
             onDelete={handleDelete}

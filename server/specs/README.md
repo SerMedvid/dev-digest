@@ -31,3 +31,7 @@ Conventions:
 - [`run-cost.md`](run-cost.md) — persisting per-run LLM cost on `agent_runs`,
   exposing it on `RunSummary` / `RunTrace.stats`, and the per-PR roll-up on the
   pulls list. Client half: [`client/specs/run-cost-display.md`](../../client/specs/run-cost-display.md).
+- [`pr-findings-counters.md`](pr-findings-counters.md) — per-severity findings
+  roll-up + top-6 preview embedded in the pulls list endpoint (non-dismissed
+  only, one query per page, null-not-zeros degradation). Client half:
+  [`client/specs/findings-counters-display.md`](../../client/specs/findings-counters-display.md).

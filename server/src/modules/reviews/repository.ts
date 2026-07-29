@@ -22,6 +22,8 @@ import * as reviewRepo from './repository/review.repo.js';
 import * as runRepo from './repository/run.repo.js';
 import * as pullRepo from './repository/pull.repo.js';
 
+export type { PrFindingsSummary } from './repository/review.repo.js';
+
 export class ReviewRepository {
   constructor(private db: Db) {}
 
@@ -174,6 +176,16 @@ export class ReviewRepository {
    *  column; null for a PR whose runs are all unpriced or failed. */
   sumRunCostByPr(workspaceId: string, prIds: string[]): Promise<Map<string, number | null>> {
     return runRepo.sumRunCostByPr(this.db, workspaceId, prIds);
+  }
+
+  /** Per-severity counts + a capped preview of each PR's non-dismissed findings
+   *  (one query for the page). Used by the PR-list FINDINGS column; a PR with
+   *  none is simply absent from the Map. */
+  findingsSummaryByPr(
+    workspaceId: string,
+    prIds: string[],
+  ): Promise<Map<string, reviewRepo.PrFindingsSummary>> {
+    return reviewRepo.findingsSummaryByPr(this.db, workspaceId, prIds);
   }
 
   /** Record the head SHA a review ran against (PR-list freshness derivation). */

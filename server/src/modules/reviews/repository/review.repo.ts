@@ -1,7 +1,8 @@
-import { and, desc, eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { Finding } from '@devdigest/shared';
+import type { Finding, PrFindingPreview } from '@devdigest/shared';
+import { Severity } from '@devdigest/shared';
 import type { FindingRow, PullRow } from '../../../db/rows.js';
 
 export type ReviewRow = typeof t.reviews.$inferSelect;
@@ -71,6 +72,98 @@ export async function reviewsForPull(
     review,
     findings: findings.filter((f) => f.reviewId === review.id),
   }));
+}
+
+// ---- PR-list findings roll-up ---------------------------------------------
+
+/** How many findings the list's breakdown card samples per PR. */
+const PREVIEW_LIMIT = 6;
+/** Rationales are truncated in SQL — full ones never leave the DB on the list. */
+const RATIONALE_SNIPPET_LEN = 280;
+
+export interface PrFindingsSummary {
+  counts: { CRITICAL: number; WARNING: number; SUGGESTION: number };
+  preview: PrFindingPreview[];
+}
+
+const KNOWN_SEVERITIES = new Set<string>(Severity.options);
+
+/**
+ * Per-severity counts + a capped preview of every NON-DISMISSED finding on each
+ * of `prIds`, in ONE query for the whole page (never one per PR). Counts and
+ * preview come from the same rows: the query pre-orders by severity rank then
+ * confidence, so "the first 6 per PR" is a plain JS truncation — no window
+ * function. PRs with no non-dismissed findings are absent from the Map, which
+ * is how the route renders `null` rather than zeros.
+ *
+ * `findings.severity` is a plain text column (the enum lives only at the
+ * contract layer), so a row with an unrecognised severity is folded out of BOTH
+ * the counts and the preview rather than miscounted or failing zod downstream.
+ */
+export async function findingsSummaryByPr(
+  db: Db,
+  workspaceId: string,
+  prIds: string[],
+): Promise<Map<string, PrFindingsSummary>> {
+  const out = new Map<string, PrFindingsSummary>();
+  if (prIds.length === 0) return out;
+
+  const severityRank = sql`case ${t.findings.severity}
+      when 'CRITICAL' then 0
+      when 'WARNING' then 1
+      when 'SUGGESTION' then 2
+      else 3
+    end`;
+
+  const rows = await db
+    .select({
+      prId: t.reviews.prId,
+      id: t.findings.id,
+      severity: t.findings.severity,
+      category: t.findings.category,
+      title: t.findings.title,
+      file: t.findings.file,
+      startLine: t.findings.startLine,
+      endLine: t.findings.endLine,
+      confidence: t.findings.confidence,
+      snippet: sql<string>`left(${t.findings.rationale}, ${RATIONALE_SNIPPET_LEN})`,
+    })
+    .from(t.findings)
+    .innerJoin(t.reviews, eq(t.reviews.id, t.findings.reviewId))
+    .where(
+      and(
+        // Workspace scoping is load-bearing, not decoration.
+        eq(t.reviews.workspaceId, workspaceId),
+        inArray(t.reviews.prId, prIds),
+        isNull(t.findings.dismissedAt),
+      ),
+    )
+    .orderBy(asc(t.reviews.prId), severityRank, desc(t.findings.confidence));
+
+  for (const row of rows) {
+    if (!KNOWN_SEVERITIES.has(row.severity)) continue;
+    const severity = row.severity as PrFindingPreview['severity'];
+    let summary = out.get(row.prId);
+    if (!summary) {
+      summary = { counts: { CRITICAL: 0, WARNING: 0, SUGGESTION: 0 }, preview: [] };
+      out.set(row.prId, summary);
+    }
+    summary.counts[severity] += 1;
+    if (summary.preview.length < PREVIEW_LIMIT) {
+      summary.preview.push({
+        id: row.id,
+        severity,
+        category: row.category,
+        title: row.title,
+        file: row.file,
+        start_line: row.startLine,
+        end_line: row.endLine,
+        confidence: Number(row.confidence),
+        rationale_snippet: row.snippet ?? '',
+      });
+    }
+  }
+  return out;
 }
 
 export async function getReview(db: Db, reviewId: string): Promise<ReviewRow | undefined> {
