@@ -51,7 +51,7 @@ Scope: `server/` only. `reviewer-core/`, `client/`, and `e2e/` are out.
 | `fastify-type-provider-zod` | driving adapter | Endpoint schemas sit next to the route; they describe the HTTP contract, not the domain. → `rules/zod-contracts.md` |
 | Drizzle, `postgres.js` | driven adapter | `repository.ts` and `db/` only. Transactions stay inside the repository; a `tx` handle never enters a service. → `rules/drizzle.md` |
 | Zod 3 | boundary only | Edge validation and LLM structured-output contracts. Domain types are plain TS. → `rules/zod-contracts.md` |
-| `@anthropic-ai/sdk`, `openai`, OpenRouter | driven adapter | `adapters/llm/*` only; the core knows `LLMProvider`. → `rules/llm-adapters.md` |
+| `@anthropic-ai/sdk`, `openai`, OpenRouter | driven adapter | `@anthropic-ai/sdk` and `openai` stay in `adapters/llm/*`; `OpenRouterProvider` lives in `reviewer-core/src/llm/openrouter.ts` (shared with the CI runner) and is imported into `platform/container.ts`. Either way, the core knows only `LLMProvider`. → `rules/llm-adapters.md` |
 | `octokit`, `simple-git`, ripgrep, ast-grep, `js-tiktoken` | driven adapters | Behind `GitHubClient`, `GitClient`, `CodeIndex`, `DepGraph`, `Tokenizer`. An SDK type never appears in a service signature. |
 | `p-queue` / `jobs` / SSE `runBus` | platform | The core sees narrow interfaces (`Logger`, a publisher), as `modules/reviews/run-executor.ts` already does. Background work goes through `container.jobs`, never a bare floating promise. |
 | vitest, testcontainers | test | The core is testable with no Docker and no HTTP. Anything needing `*.it.test.ts` is by definition an adapter. → `rules/testing.md` |
