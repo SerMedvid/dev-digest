@@ -58,6 +58,15 @@
     "saveFailed": "Could not save this skill.",
     "enabled": "Enabled"
   },
+  "stats": {
+    "usedBy": "Used by",
+    "agentsUnit": "agents",
+    "agentsHeading": "Agents using this skill",
+    "disabled": "disabled",
+    "empty": "Not used by any agent yet",
+    "emptyHint": "Attach it from an agent's Skills tab.",
+    "loadError": "Could not load usage for this skill."
+  },
   "versions": {
     "heading": "Version history",
     "count": "{count, plural, one {# version} other {# versions}}",
