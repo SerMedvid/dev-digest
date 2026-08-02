@@ -13,7 +13,29 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-02** — `constructor(private container: Container)` is not just a
+  wide dependency, it is a **real import cycle**. `Container` imports
+  `modules/repo-intel/service.ts`, `modules/reviews/repository.ts`, and
+  `modules/agents/repository.ts`, so a service importing `Container` closes the
+  loop. A dependency-cruiser run over `src` finds four such cycles, e.g.
+  `repo-intel/service.ts → platform/container.ts → repo-intel/service.ts`
+  (`incremental.ts` and `full.ts` add two more through the same edge). All four
+  services do this — `agents`, `repos`, `reviews`, `repo-intel`. The fix is a
+  narrow per-module deps object built by a container getter, not a wider
+  `ContainerOverrides`. (`src/modules/repo-intel/service.ts:104`)
+
 ## Codebase patterns & tool notes
+
+- **2026-08-02** — Any static-analysis tool pointed at `src` must be configured
+  to see **type-only imports**, or it will silently miss the DI boundary. The
+  couplings that matter most here are written `import type { Container } from
+  '../../platform/container.js'`, which vanishes at compile time. For
+  dependency-cruiser that means `tsPreCompilationDeps: true` plus
+  `tsConfig: { fileName: 'tsconfig.json' }` (the latter for the
+  `@devdigest/shared` path alias); without the first flag a rule forbidding
+  service→container passes on code that violates it. Measured baseline for a
+  correctly configured run: 149 modules, 467 dependencies.
+  (`src/modules/agents/service.ts:1`)
 
 - **2026-07-29** — `ContainerOverrides` covers *adapters* only. The shared
   repositories (`container.reviewRepo`, `container.agentsRepo`) are constructed

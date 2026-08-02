@@ -27,6 +27,17 @@ Nothing enforces it, and the core already depends outward in four concrete ways:
    but only as a *product feature* (the repo-intel dep-graph adapter). It is
    never pointed at our own source.
 
+A probe run of the proposed rules over `src` (149 modules, 467 dependencies)
+found **24 violations**, including four genuine import cycles that gap 1 causes
+directly:
+
+```
+src/modules/repo-intel/service.ts → src/platform/container.ts → src/modules/repo-intel/service.ts
+```
+
+A service taking `Container` is not a style preference — it closes a loop
+through the composition root.
+
 The result is a layering that is documented but drifts, and drift is only ever
 caught by whoever happens to read `CLAUDE.md`.
 
@@ -96,13 +107,35 @@ Four rules, each mechanically checkable:
 
 - `server/.dependency-cruiser.cjs` — `forbidden` rules covering the four laws
   above, plus `no-circular` and `no-orphans`.
-- `server/.dependency-cruiser-known-violations.json` — the frozen baseline: the
-  four direct-DB route files, the four `Container`-taking services, and the
-  known-dead files `no-orphans` will flag (`platform/trace-builder.ts`,
-  `platform/model-router.ts`, `modules/settings/feature-models.ts`, listed as
-  cruft in `server/CLAUDE.md`).
+- `server/.dependency-cruiser-known-violations.json` — the frozen baseline,
+  measured at **24 entries**:
+
+  | Rule | Count | Files |
+  |---|---|---|
+  | `routes-no-persistence` | 8 | `polling`, `pulls`, `settings`, `workspace` routes (each imports both `db/schema.ts` and `drizzle-orm`) |
+  | `core-no-container` | 4 | `agents`, `repos`, `reviews`, `repo-intel` services |
+  | `no-circular` | 5 | four cycles through `container.ts`, plus `agents/helpers.ts ↔ agents/repository.ts` |
+  | `core-no-persistence` | 2 | `reviews/service.ts → db/rows.ts`, `repos/helpers.ts → db/schema.ts` |
+  | `adapters-no-modules` | 2 | `adapters/depgraph`, `adapters/astgrep` → `modules/repo-intel/constants.ts` |
+  | `no-cross-module-internals` | 2 | `pulls/routes.ts → reviews/repository.ts`, `repos/service.ts → repo-intel/constants.ts` |
+  | `no-orphans` | 1 | `platform/model-router.ts` |
+
+  Note on `no-orphans`: it flags only `model-router.ts`, not the other two dead
+  files `server/CLAUDE.md` lists. A depcruise orphan has neither importers nor
+  imports; `trace-builder.ts` and `feature-models.ts` still import things, so
+  the rule cannot see them. `no-orphans` is a weak dead-code detector and is
+  included for cycle hygiene only.
 - `pnpm arch:check` → `depcruise src --config --ignore-known`; exits non-zero on
-  a **new** violation only.
+  a **new** violation only. Verified end to end during design: 24 known
+  violations ignored, exit 0.
+- **`tsPreCompilationDeps: true` is mandatory** in the config. Without it
+  dependency-cruiser sees only post-compilation imports, and every
+  `import type { Container }` — the exact shape of gap 1 — is invisible.
+- Baseline entries record *resolved* paths, and pnpm resolves
+  `drizzle-orm` to a version-hashed path
+  (`node_modules/.pnpm/drizzle-orm@0.38.4_postgres@3.4.9/…`). A Drizzle version
+  bump therefore invalidates those baseline entries and they resurface as new
+  violations. Fix by regenerating the baseline as part of the bump.
 - `pnpm arch:baseline` → regenerates the baseline. The skill states that
   regenerating to silence a failure is forbidden; the baseline may only shrink.
 
@@ -151,9 +184,12 @@ without a database.
 
 ## Behaviour and degradation
 
-- **Missing baseline file** — `arch:check` still runs; every existing violation
-  reports as an error. The skill instructs generating the baseline once, at
-  install time, and committing it.
+- **Missing baseline file** — `arch:check` does **not** degrade to a plain run.
+  `--ignore-known` with no baseline present exits 1 with
+  `ERROR: Can't open '.dependency-cruiser-known-violations.json' for reading`,
+  which reads like a config error but is not. The baseline is therefore
+  committed, and the skill tells anyone seeing that message to run
+  `pnpm arch:baseline` rather than to debug the config.
 - **`arch:check` fails on pre-existing code the session did not touch** — the
   skill says to report it, not to widen the baseline.
 - **A rule proves wrong** (a legitimate import it forbids) — change the rule in
@@ -170,11 +206,12 @@ without a database.
 - [ ] `examples/before-after.md` shows the `agents` module in both forms, with
       the `Deps` interface written out.
 - [ ] `references.md` carries every link from the design's reference list.
-- [ ] `server/.dependency-cruiser.cjs` encodes the four laws; running
-      `pnpm arch:check` on a deliberately bad import exits non-zero.
-- [ ] `server/.dependency-cruiser-known-violations.json` is committed and covers
-      the known-violating files listed above (the file records one entry per
-      offending dependency edge, so the entry count exceeds the file count).
+- [ ] `server/.dependency-cruiser.cjs` encodes the four laws, sets
+      `tsPreCompilationDeps: true` and `tsConfig.fileName`, and excludes
+      `*.test.ts`; running `pnpm arch:check` on a deliberately bad import exits
+      non-zero.
+- [ ] `server/.dependency-cruiser-known-violations.json` is committed with 24
+      entries matching the table above.
 - [ ] `pnpm arch:check` on unmodified `main` exits zero.
 - [ ] `server/package.json` has `arch:check` and `arch:baseline` scripts.
 - [ ] `.claude/skills/README.md` catalog has a row for the skill.
