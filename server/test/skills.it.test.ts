@@ -113,3 +113,97 @@ d('/skills CRUD', () => {
     await app.close();
   });
 });
+
+/** Version history: what creates a version, what doesn't, and restore. */
+d('/skills versioning', () => {
+  let pg: PgFixture;
+
+  beforeAll(async () => {
+    pg = await startPg();
+    await seed(pg.handle.db);
+  });
+  afterAll(async () => {
+    await pg?.stop();
+  });
+
+  function makeApp() {
+    const config = loadConfig({ ...process.env, NODE_ENV: 'test' } as NodeJS.ProcessEnv);
+    return buildApp({
+      config,
+      db: pg.handle.db,
+      overrides: { git: new MockGitClient(), github: new MockGitHubClient() },
+    });
+  }
+
+  const body = (over: Record<string, unknown> = {}) => ({
+    name: `rubric-${Math.random().toString(36).slice(2, 8)}`,
+    description: 'Rubric for overall PR quality',
+    type: 'rubric',
+    body: '# PR Quality Rubric\nBe specific.',
+    ...over,
+  });
+
+  it('a body change appends a version carrying the summary; list is newest-first', async () => {
+    const app = await makeApp();
+    const id = (await app.inject({ method: 'POST', url: '/skills', payload: body() })).json().id;
+
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/skills/${id}`,
+      payload: { body: '# v2 body', summary: 'Added Tests dimension' },
+    });
+    expect(res.json().version).toBe(2);
+
+    const versions = (await app.inject({ method: 'GET', url: `/skills/${id}/versions` })).json();
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([2, 1]);
+    expect(versions[0]).toMatchObject({ summary: 'Added Tests dimension', body: '# v2 body' });
+    expect(versions[1].summary).toBeNull();
+    await app.close();
+  });
+
+  it('a rename does not create a version', async () => {
+    const app = await makeApp();
+    const id = (await app.inject({ method: 'POST', url: '/skills', payload: body() })).json().id;
+    await app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { name: 'renamed-rule' } });
+    const versions = (await app.inject({ method: 'GET', url: `/skills/${id}/versions` })).json();
+    expect(versions).toHaveLength(1);
+    await app.close();
+  });
+
+  it('saving an identical body does not create a version', async () => {
+    const app = await makeApp();
+    const payload = body();
+    const id = (await app.inject({ method: 'POST', url: '/skills', payload })).json().id;
+    await app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { body: payload.body } });
+    const versions = (await app.inject({ method: 'GET', url: `/skills/${id}/versions` })).json();
+    expect(versions).toHaveLength(1);
+    await app.close();
+  });
+
+  it('restore appends a new version with the old body instead of rewinding', async () => {
+    const app = await makeApp();
+    const payload = body();
+    const id = (await app.inject({ method: 'POST', url: '/skills', payload })).json().id;
+    await app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { body: '# v2' } });
+
+    const restored = await app.inject({
+      method: 'POST',
+      url: `/skills/${id}/versions/1/restore`,
+    });
+    expect(restored.statusCode).toBe(200);
+    expect(restored.json()).toMatchObject({ version: 3, body: payload.body });
+
+    const versions = (await app.inject({ method: 'GET', url: `/skills/${id}/versions` })).json();
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([3, 2, 1]);
+    expect(versions[0].summary).toBe('Restored from v1');
+    await app.close();
+  });
+
+  it('404s restoring a version that was never recorded', async () => {
+    const app = await makeApp();
+    const id = (await app.inject({ method: 'POST', url: '/skills', payload: body() })).json().id;
+    const res = await app.inject({ method: 'POST', url: `/skills/${id}/versions/99/restore` });
+    expect(res.statusCode).toBe(404);
+    await app.close();
+  });
+});

@@ -1,4 +1,4 @@
-import { and, asc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { SkillType } from '@devdigest/shared';
@@ -133,6 +133,24 @@ export class SkillsRepository {
       .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
       .returning({ id: t.skills.id });
     return rows.length > 0;
+  }
+
+  /** All snapshots for a skill, newest version first. */
+  async listVersions(skillId: string): Promise<SkillVersionRow[]> {
+    return this.db
+      .select()
+      .from(t.skillVersions)
+      .where(eq(t.skillVersions.skillId, skillId))
+      .orderBy(desc(t.skillVersions.version));
+  }
+
+  /** One snapshot, or undefined when that version was never recorded. */
+  async getVersion(skillId: string, version: number): Promise<SkillVersionRow | undefined> {
+    const [row] = await this.db
+      .select()
+      .from(t.skillVersions)
+      .where(and(eq(t.skillVersions.skillId, skillId), eq(t.skillVersions.version, version)));
+    return row;
   }
 
   private async snapshotVersion(

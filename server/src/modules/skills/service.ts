@@ -1,7 +1,7 @@
-import type { Skill, SkillType, SkillWithUsage } from '@devdigest/shared';
+import type { Skill, SkillType, SkillVersion, SkillWithUsage } from '@devdigest/shared';
 import { ValidationError } from '../../platform/errors.js';
 import type { SkillsRepository } from './repository.js';
-import { toSkillDto } from './helpers.js';
+import { toSkillDto, toSkillVersionDto } from './helpers.js';
 
 /**
  * Skills business logic. A skill is reusable prompt text: many agents can link
@@ -78,6 +78,32 @@ export class SkillsService {
 
   async delete(workspaceId: string, id: string): Promise<boolean> {
     return this.repo.deleteById(workspaceId, id);
+  }
+
+  /** Version history, newest first. undefined when the skill isn't in this workspace. */
+  async listVersions(workspaceId: string, id: string): Promise<SkillVersion[] | undefined> {
+    const skill = await this.repo.getById(workspaceId, id);
+    if (!skill) return undefined;
+    const rows = await this.repo.listVersions(id);
+    return rows.map(toSkillVersionDto);
+  }
+
+  /**
+   * Restore an old body by APPENDING it as a new version. History is
+   * append-only: nothing is rewritten, and the restore itself is auditable.
+   */
+  async restore(workspaceId: string, id: string, version: number): Promise<Skill | undefined> {
+    const skill = await this.repo.getById(workspaceId, id);
+    if (!skill) return undefined;
+    const snapshot = await this.repo.getVersion(id, version);
+    if (!snapshot) return undefined;
+    const row = await this.repo.update(
+      workspaceId,
+      id,
+      { body: snapshot.body },
+      `Restored from v${version}`,
+    );
+    return row ? toSkillDto(row) : undefined;
   }
 
   /** Names are how a user identifies a skill in the agent editor — keep them unique. */
