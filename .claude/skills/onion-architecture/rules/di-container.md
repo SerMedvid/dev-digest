@@ -73,7 +73,7 @@ The port lives in the module, next to the code that needs it. In
 treat both as the target shape rather than something you can open:
 
 ```ts
-import type { LLMProvider, Provider, Agent, AgentVersion } from '@devdigest/shared';
+import type { LLMProvider, Provider } from '@devdigest/shared';
 import type { AgentRow, AgentVersionRow, InsertAgent, UpdateAgent } from './domain.js';
 
 /** What the agents core needs from persistence. Implemented by AgentsRepository. */

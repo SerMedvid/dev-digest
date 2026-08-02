@@ -73,11 +73,17 @@ Each row above is enforced by at least one named rule. The `comment` field on
 each rule in `server/.dependency-cruiser.cjs` is the authority on what it
 forbids and why — read it there when a failure surprises you.
 
+The three `core-*` rules do not divide the core between them. All three share a
+single `from.path` — the `CORE` constant quoted above — so each one applies
+identically to `service.ts`, `helpers.ts`, `domain.ts`, and `ports.ts`. A
+`ports.ts` that imports `Container` fails `core-no-container` exactly as a
+`service.ts` would; a `domain.ts` that imports `octokit` fails `core-no-sdk`.
+
 | Rule | Enforces | Fails when |
 |---|---|---|
-| `core-no-container` | `service.ts` row | a core file imports `src/platform/container.ts`, even as `import type` |
-| `core-no-persistence` | `service.ts`, `domain.ts`/`helpers.ts` rows | a core file imports anything under `src/db/` other than `db/client.ts` |
-| `core-no-sdk` | `service.ts` row | a core file reaches `drizzle-orm`, `postgres`, `fastify`, `octokit`, `simple-git`, `@anthropic-ai/*`, or `openai` |
+| `core-no-container` | the `service.ts`, `helpers.ts`, `domain.ts` and `ports.ts` rows | a core file imports `src/platform/container.ts`, even as `import type` |
+| `core-no-persistence` | the `service.ts`, `helpers.ts`, `domain.ts` and `ports.ts` rows | a core file imports anything under `src/db/` other than `db/client.ts` |
+| `core-no-sdk` | the `service.ts`, `helpers.ts`, `domain.ts` and `ports.ts` rows | a core file reaches `drizzle-orm`, `postgres`, `fastify`, `octokit`, `simple-git`, `@anthropic-ai/*`, or `openai` |
 | `routes-no-persistence` | `routes.ts` row | a route imports `src/db/*` or `drizzle-orm` |
 | `no-cross-module-internals` | the "another module" column on every module row | `modules/a/*` imports `modules/b/*`, where `b` is neither `a` nor `_shared` |
 | `adapters-no-modules` | `adapters/<x>/` row | anything under `src/adapters/` imports anything under `src/modules/` |
