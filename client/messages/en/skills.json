@@ -34,7 +34,34 @@
     "notFound": {
       "title": "Skill not found",
       "body": "It may have been deleted."
+    },
+    "tabs": {
+      "config": "Config",
+      "preview": "Preview",
+      "stats": "Stats",
+      "versions": "Versions"
     }
+  },
+  "config": {
+    "heading": "Configuration",
+    "nameLabel": "Name",
+    "descriptionLabel": "Description",
+    "typeLabel": "Type",
+    "bodyLabel": "Skill body",
+    "bodyHint": "Markdown. Sent to the reviewing agent exactly as written.",
+    "summaryLabel": "Change note",
+    "summaryHint": "Optional — shown in the version history.",
+    "unsaved": "unsaved",
+    "chars": "{count} / {max} characters",
+    "save": "Save",
+    "saving": "Saving…",
+    "saveFailed": "Could not save this skill.",
+    "enabled": "Enabled"
+  },
+  "previewTab": {
+    "heading": "Preview",
+    "subtitle": "Rendered as the reviewing agent receives it.",
+    "empty": "This skill has no body yet."
   },
   "drawer": {
     "title": "Add a skill",
