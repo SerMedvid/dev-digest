@@ -13,6 +13,18 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-02** — Supersedes the 2026-08-02 entry below on cycle counts: taking
+  `Container` does **not** by itself close a cycle. The frozen baseline holds
+  five `no-circular` entries; four run through `platform/container.ts`, and all
+  four are `repo-intel`'s — because `container.ts` is the only place that
+  constructs a service it also imports (`new RepoIntelService(this)`). `agents`,
+  `repos`, and `reviews` take `Container` and close **no** cycle at all. Keep the
+  two consequences apart: taking `Container` always breaks the dependency rule
+  (the entire outer ring lands in the core's type graph), and it *additionally*
+  closes a cycle only where the container constructs you. The fifth cycle is
+  `agents/helpers.ts` ⇄ `agents/repository.ts` and involves no container.
+  (`src/platform/container.ts:116`)
+
 - **2026-08-02** — `constructor(private container: Container)` is not just a
   wide dependency, it is a **real import cycle**. `Container` imports
   `modules/repo-intel/service.ts`, `modules/reviews/repository.ts`, and
@@ -25,6 +37,31 @@ an entry can age — verify before relying on one.
   `ContainerOverrides`. (`src/modules/repo-intel/service.ts:104`)
 
 ## Codebase patterns & tool notes
+
+- **2026-08-02** — `pnpm arch:check` does **not** keep the database out of the
+  core. `core-no-persistence` exempts [`src/db/client.ts`](src/db/client.ts) by
+  path (`pathNot: '^src/db/client\.ts$'`) on the rationale that it is "the `Db`
+  type a repository constructor takes" — but that file also exports
+  `createDb(databaseUrl, opts)`, a runtime factory that opens a live
+  `postgres()` pool. A `service.ts` can `import { createDb } from
+  '../../db/client.js'`, connect to the database, and the gate stays green. This
+  is a hole in the gate, not a limitation of type-level analysis — don't read the
+  rule's comment as a guarantee. Proper fix is to move `export type Db` into its
+  own type-only file and repoint the `pathNot` there, leaving `createDb` under
+  the general `^src/db/` ban. (`src/db/client.ts:17`)
+
+- **2026-08-02** — Because `tsPreCompilationDeps: true` is set (entry below),
+  `no-circular` also fires on cycles that are **type-only** and cannot exist at
+  runtime — including on new code written the way the architecture docs
+  prescribe. The frozen example: `agents/helpers.ts` type-imports `AgentRow` from
+  `agents/repository.ts`, while `repository.ts` value-imports `isConfigChange`
+  back. Do **not** silence it with `dependencyTypesNot: ['type-only']`; that
+  would also blind the rule to the four genuine `repo-intel` runtime cycles. Fix
+  it structurally instead — declare the module's shared row/domain types in a
+  `domain.ts` so both files import downward. `agents` is one step away already:
+  `repository.ts` merely re-exports `AgentRow` from `db/rows.ts`, so `helpers.ts`
+  is reaching for the alias through the wrong file.
+  (`src/modules/agents/helpers.ts:3`)
 
 - **2026-08-02** — Any static-analysis tool pointed at `src` must be configured
   to see **type-only imports**, or it will silently miss the DI boundary. The
