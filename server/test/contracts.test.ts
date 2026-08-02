@@ -17,6 +17,9 @@ import {
   PrMeta,
   PrDetail,
   PrFindingPreview,
+  SkillVersion,
+  SkillStats,
+  SkillWithUsage,
 } from '@devdigest/shared';
 
 /**
@@ -254,5 +257,38 @@ describe('platform DTOs', () => {
     // Category is a free string (plain text column), severity is not.
     expect(() => PrFindingPreview.parse({ ...preview, category: 'whatever' })).not.toThrow();
     expect(() => PrFindingPreview.parse({ ...preview, severity: 'NOPE' })).toThrow();
+  });
+});
+
+describe('Skill contracts', () => {
+  it('SkillWithUsage carries the link count', () => {
+    const row = SkillWithUsage.parse({
+      id: 's1',
+      name: 'pr-quality-rubric',
+      description: 'Rubric for overall PR quality',
+      type: 'rubric',
+      source: 'manual',
+      body: '# PR Quality Rubric',
+      enabled: true,
+      version: 5,
+      agent_count: 3,
+    });
+    expect(row.agent_count).toBe(3);
+  });
+
+  it('SkillVersion allows a null summary', () => {
+    const v = SkillVersion.parse({
+      skill_id: 's1',
+      version: 1,
+      summary: null,
+      body: '# initial',
+      created_at: '2026-08-02T10:00:00.000Z',
+    });
+    expect(v.summary).toBeNull();
+  });
+
+  it('SkillStats defaults to an empty agent list', () => {
+    const stats = SkillStats.parse({ agent_count: 0, agents: [] });
+    expect(stats.agents).toEqual([]);
   });
 });
