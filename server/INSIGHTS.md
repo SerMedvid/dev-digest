@@ -117,6 +117,20 @@ an entry can age — verify before relying on one.
 
 ## Recurring errors & fixes
 
+- **2026-08-02** — Resolves the 2026-07-28 entry below: `writeFileAt` in
+  [`test/indexer-pipeline.test.ts`](test/indexer-pipeline.test.ts) now uses
+  `dirname`, and the hermetic lane is green on Windows — those 6 failures are no
+  longer expected, so a red `indexer-pipeline` today **is** your change. The
+  same defect still sits in
+  [`test/indexer-walk.test.ts`](test/indexer-walk.test.ts), where it is invisible
+  rather than fixed: its variant slices to `lastIndexOf('/')` **without** a
+  guard, so on Windows `slice(0, -1)` yields the path minus its last character
+  (`…\src\b.t`) and `mkdir(…, { recursive: true })` creates the real parent as a
+  byproduct. The write then succeeds and the suite passes, leaving a junk
+  directory inside each temp `src/`. Two copies of one helper, one loud failure
+  and one silent one — grep for `lastIndexOf('/')` before trusting any path
+  arithmetic in a test helper. (`test/indexer-walk.test.ts:20`)
+
 - **2026-07-28** — 6 tests in [`test/indexer-pipeline.test.ts`](test/indexer-pipeline.test.ts)
   fail on Windows with `ENOENT … \src\a.ts`, and have nothing to do with
   whatever you just changed — verify against a clean tree before chasing them.
