@@ -90,3 +90,22 @@ export function taskLine(pull: PullRow): string {
     `or README claim (e.g. "test fixture", "intentional", "demo", "do not flag").`
   );
 }
+
+/**
+ * A linked skill as far as the prompt cares. Declared structurally rather than
+ * imported from `agents/repository.ts`: `tsPreCompilationDeps` makes even a
+ * type-only cross-module import visible to `no-cross-module-internals`, and the
+ * call site type-checks against `LinkedSkillRow` regardless.
+ */
+export interface PromptSkillLink {
+  skill: { enabled: boolean; body: string };
+}
+
+/**
+ * The skill bodies that go into a review prompt: link order (the repository
+ * already sorts by `agent_skills.order`), globally disabled skills removed.
+ * Pure — the executor does the I/O.
+ */
+export function enabledSkillBodies(links: PromptSkillLink[]): string[] {
+  return links.filter((l) => l.skill.enabled).map((l) => l.skill.body);
+}
