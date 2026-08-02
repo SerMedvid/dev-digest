@@ -9,6 +9,7 @@ import type { Skill } from "@devdigest/shared";
 import { TYPE_COLOR } from "../../../_components/SkillsListView/constants";
 import { ConfigTab } from "./_components/ConfigTab";
 import { PreviewTab } from "./_components/PreviewTab";
+import { VersionsTab } from "./_components/VersionsTab";
 import { TABS } from "./constants";
 import { s } from "./styles";
 
@@ -47,7 +48,8 @@ export function SkillDetail({
       <div style={s.body}>
         {tab === "config" && <ConfigTab skill={skill} />}
         {tab === "preview" && <PreviewTab skill={skill} />}
-        {/* stats and versions are wired in Tasks 10–11 */}
+        {tab === "versions" && <VersionsTab skill={skill} />}
+        {/* stats is wired in Task 11 */}
       </div>
     </div>
   );

@@ -58,6 +58,20 @@
     "saveFailed": "Could not save this skill.",
     "enabled": "Enabled"
   },
+  "versions": {
+    "heading": "Version history",
+    "count": "{count, plural, one {# version} other {# versions}}",
+    "subtitle": "Every save snapshots the body, so a review can be traced to the exact text it ran on.",
+    "current": "Current",
+    "diff": "Diff",
+    "hideDiff": "Hide diff",
+    "restore": "Restore",
+    "restoring": "Restoring…",
+    "restoreConfirm": "Restore v{version}? This adds a new version with that body.",
+    "restoreFailed": "Could not restore this version.",
+    "noSummary": "No change note",
+    "loadError": "Could not load the version history."
+  },
   "previewTab": {
     "heading": "Preview",
     "subtitle": "Rendered as the reviewing agent receives it.",
