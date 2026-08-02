@@ -115,8 +115,12 @@ describe("PRRow — findings column", () => {
     expect(screen.getByText("7 findings")).toBeInTheDocument();
     expect(screen.getByText("+6 more")).toBeInTheDocument();
 
+    // The title is its own navigation — to that finding, not to the PR — so
+    // the row's plain destination must not be what fires here.
     fireEvent.click(screen.getByText("Hardcoded Stripe secret key"));
-    expect(push).not.toHaveBeenCalled();
+    expect(push).toHaveBeenCalledTimes(1);
+    expect(push).toHaveBeenCalledWith("/repos/repo-1/pulls/482?tab=findings&finding=f1");
+    push.mockClear();
 
     fireEvent.click(screen.getByText("Add rate limiting"));
     expect(push).toHaveBeenCalledWith("/repos/repo-1/pulls/482");

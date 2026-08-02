@@ -31,6 +31,8 @@ export function FindingCard({
   pending,
   repoFullName,
   headSha,
+  targeted,
+  targetNonce = 0,
 }: {
   f: FindingRecord;
   focused?: boolean;
@@ -39,9 +41,20 @@ export function FindingCard({
   pending?: boolean;
   repoFullName?: string | null;
   headSha?: string | null;
+  /** This is the finding a deep link or a breakdown card pointed at: reveal it. */
+  targeted?: boolean;
+  /** Bumped per jump, so being sent to the same finding twice scrolls twice. */
+  targetNonce?: number;
 }) {
   const t = useTranslations("prReview");
   const [expanded, setExpanded] = React.useState(defaultExpanded ?? false);
+  const rootRef = React.useRef<HTMLDivElement | null>(null);
+  React.useEffect(() => {
+    if (!targeted) return;
+    setExpanded(true);
+    rootRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targeted, targetNonce]);
   const sevColor = SEV_COLOR[f.severity] ?? SEV_COLOR_FALLBACK;
   const fileHref =
     repoFullName && headSha
@@ -52,7 +65,14 @@ export function FindingCard({
   const muted = accepted || dismissed;
 
   return (
-    <div data-finding-id={f.id} style={s.card(!!focused, sevColor, muted)}>
+    // Both anchors on purpose: `data-finding-id` is what tests and scripts
+    // query by, `id` is what makes a `#finding-<id>` fragment work for free.
+    <div
+      ref={rootRef}
+      id={`finding-${f.id}`}
+      data-finding-id={f.id}
+      style={s.card(!!focused, sevColor, muted)}
+    >
       <div onClick={() => setExpanded((e) => !e)} style={s.header}>
         <div style={s.badgeWrap}>
           <SeverityBadge severity={f.severity as Severity} compact />

@@ -32,8 +32,12 @@ export function ReviewRunAccordion({
   defaultOpen = false,
   repoFullName,
   headSha,
+  prNumber,
   targetRunId = null,
   targetNonce = 0,
+  targetFindingId = null,
+  targetFindingNonce = 0,
+  onGoToFinding,
 }: {
   review: ReviewRecord;
   /** The agent_run that produced this review, matched on `review.run_id`.
@@ -44,10 +48,18 @@ export function ReviewRunAccordion({
   defaultOpen?: boolean;
   repoFullName?: string | null;
   headSha?: string | null;
+  prNumber?: number;
   /** When this matches review.run_id, the accordion opens and scrolls into view
    *  (driven from the Timeline: clicking an agent name navigates here). */
   targetRunId?: string | null;
   targetNonce?: number;
+  /** When one of this run's findings matches, the accordion opens so the card
+   *  below can mount. Deliberately no scroll here — the finding card scrolls
+   *  itself, and two scrollIntoView calls fight over the viewport. */
+  targetFindingId?: string | null;
+  targetFindingNonce?: number;
+  /** Jump to a finding from this header's breakdown card. */
+  onGoToFinding?: (findingId: string) => void;
 }) {
   const [open, setOpen] = React.useState(defaultOpen);
   const rootRef = React.useRef<HTMLDivElement | null>(null);
@@ -58,6 +70,13 @@ export function ReviewRunAccordion({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetRunId, targetNonce, review.run_id]);
+
+  const ownsTarget =
+    !!targetFindingId && review.findings.some((f) => f.id === targetFindingId);
+  React.useEffect(() => {
+    if (ownsTarget) setOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ownsTarget, targetFindingNonce]);
   const del = useDeleteReview(prId);
   const findings = review.findings;
   const blockers = findings.filter((f) => f.severity === "CRITICAL" && !f.dismissed_at).length;
@@ -106,7 +125,13 @@ export function ReviewRunAccordion({
         </span>
         {/* Per-severity counters for THIS run. The component stops click and
             keydown propagation itself, so the header toggle stays unaffected. */}
-        <FindingsBreakdown {...fromRecords(findings)} />
+        <FindingsBreakdown
+          {...fromRecords(findings)}
+          link={
+            repoFullName && prNumber != null ? { repoFullName, prNumber } : undefined
+          }
+          onOpenFinding={onGoToFinding}
+        />
         <span style={{ flex: 1 }} />
         {review.score != null && (
           <Badge mono color="var(--text-secondary)">
@@ -168,6 +193,8 @@ export function ReviewRunAccordion({
             prId={prId}
             repoFullName={repoFullName}
             headSha={headSha}
+            targetFindingId={ownsTarget ? targetFindingId : null}
+            targetFindingNonce={targetFindingNonce}
           />
         </div>
       )}

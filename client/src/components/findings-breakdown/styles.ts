@@ -2,6 +2,28 @@ import type { CSSProperties } from "react";
 import { CARD_WIDTH } from "./constants";
 import type { CardPlacement } from "./helpers";
 
+/* Both row texts exist in a static and an interactive variant — a surface may
+   wire the jump, the file link, both, or neither. The metrics live here once so
+   the two variants are pixel-identical and the row never reflows on wiring. */
+const titleText: CSSProperties = {
+  fontSize: 13,
+  fontWeight: 600,
+  color: "var(--text-primary)",
+  whiteSpace: "nowrap",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  minWidth: 0,
+};
+
+const locationText: CSSProperties = {
+  fontSize: 12,
+  color: "var(--text-muted)",
+  overflow: "hidden",
+  textOverflow: "ellipsis",
+  whiteSpace: "nowrap",
+  minWidth: 0,
+};
+
 /** Co-located styles for FindingsBreakdown. */
 export const s = {
   root: { display: "inline-block" } satisfies CSSProperties,
@@ -87,30 +109,42 @@ export const s = {
     gap: 8,
     minWidth: 0,
   } satisfies CSSProperties,
-  title: {
-    fontSize: 13,
-    fontWeight: 600,
-    color: "var(--text-primary)",
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    minWidth: 0,
-  } satisfies CSSProperties,
+  title: titleText,
+  /** The title as a jump target, on surfaces that wire one. Dotted underline
+   *  rather than solid: it navigates within the app, unlike the file link. */
+  titleButton: (hovered: boolean): CSSProperties => ({
+    ...titleText,
+    display: "block",
+    width: "100%",
+    textAlign: "left",
+    background: "none",
+    border: "none",
+    padding: 0,
+    cursor: "pointer",
+    color: hovered ? "var(--accent-text)" : "var(--text-primary)",
+    textDecoration: "underline",
+    textDecorationStyle: "dotted",
+    textUnderlineOffset: 3,
+  }),
   metaRow: {
     display: "flex",
     alignItems: "center",
     gap: 10,
     flexWrap: "wrap",
   } satisfies CSSProperties,
-  /** file:line as plain mono text — there's no navigation target on the list. */
-  location: {
-    fontSize: 12,
-    color: "var(--text-muted)",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-    whiteSpace: "nowrap",
-    minWidth: 0,
-  } satisfies CSSProperties,
+  /** file:line as plain mono text, on surfaces that can't build a GitHub URL. */
+  location: locationText,
+  /** file:line as a link into the PR's diff. Deliberately not the vendored
+   *  `MonoLink`: it hardcodes `fontSize: 13` inline, which no wrapper can
+   *  override, and 13 next to this card's 12px meta row reads as a different
+   *  typeface. Same target semantics — new tab, noopener. */
+  locationLink: (hovered: boolean): CSSProperties => ({
+    ...locationText,
+    cursor: "pointer",
+    color: hovered ? "var(--accent-text)" : "var(--text-muted)",
+    textDecoration: hovered ? "underline" : "none",
+    textUnderlineOffset: 2,
+  }),
   snippet: {
     fontSize: 12,
     lineHeight: 1.45,

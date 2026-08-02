@@ -12,7 +12,17 @@ import { SIZE_COLOR, STATUS_META } from "../../constants";
 import { relativeTime, sizeOf } from "../../helpers";
 import { s } from "../../styles";
 
-export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
+export function PRRow({
+  pr,
+  repoId,
+  repoFullName,
+}: {
+  pr: PrMeta;
+  repoId: string;
+  /** "owner/repo", for the breakdown card's GitHub file links. Null until the
+   *  repo loads — the card then renders file:line as plain text. */
+  repoFullName?: string | null;
+}) {
   const t = useTranslations("prReview");
   const router = useRouter();
   const [h, setH] = React.useState(false);
@@ -64,6 +74,10 @@ export function PRRow({ pr, repoId }: { pr: PrMeta; repoId: string }) {
             counts={pr.findings_by_severity!}
             findings={(pr.findings_preview ?? []).map(fromPreview)}
             totalOverride={findingsTotal}
+            link={repoFullName ? { repoFullName, prNumber: pr.number } : undefined}
+            onOpenFinding={(id) =>
+              router.push(`/repos/${repoId}/pulls/${pr.number}?tab=findings&finding=${id}`)
+            }
           />
         )}
       </div>

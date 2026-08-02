@@ -91,18 +91,25 @@ export function RunHistory({
   commits = [],
   onOpenTrace,
   onGoToReview,
+  onGoToFinding,
   onDelete,
   findingsByRun,
+  prLink,
 }: {
   runs: RunSummary[];
   commits?: PrCommit[];
   /** That run's NON-DISMISSED findings, for the per-run severity counters.
    *  A run whose review has been deleted is simply absent. */
   findingsByRun?: Map<string, FindingRecord[]>;
+  /** owner/repo + PR number, so a breakdown row's file:line can link into the
+   *  PR's diff on GitHub. Undefined until the repo loads. */
+  prLink?: { repoFullName: string; prNumber: number };
   /** Open the trace + log drawer for a run (the logs icon). */
   onOpenTrace: (runId: string) => void;
   /** Jump to this run's inline review accordion below (clicking the agent name). */
   onGoToReview?: (runId: string) => void;
+  /** Jump to one finding inside that accordion (clicking a breakdown row). */
+  onGoToFinding?: (findingId: string) => void;
   onDelete?: (runId: string) => void;
 }) {
   const t = useTranslations("prReview");
@@ -202,7 +209,12 @@ export function RunHistory({
                     {(r.blockers ?? 0) > 0 ? t("runStatus.blockers", { count: r.blockers ?? 0 }) : ""}
                   </span>
                   {runFindings.length > 0 && (
-                    <FindingsBreakdown {...fromRecords(runFindings)} align="right" />
+                    <FindingsBreakdown
+                      {...fromRecords(runFindings)}
+                      align="right"
+                      link={prLink}
+                      onOpenFinding={onGoToFinding}
+                    />
                   )}
                 </div>
               )}

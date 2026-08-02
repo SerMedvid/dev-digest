@@ -1,5 +1,5 @@
-import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup } from "@testing-library/react";
+import { describe, it, expect, afterEach, beforeEach, vi } from "vitest";
+import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/prReview.json";
@@ -51,5 +51,44 @@ describe("FindingsPanel (smoke)", () => {
   it("shows the empty state when nothing matches", () => {
     renderWithIntl(<FindingsPanel findings={[]} prId="pr1" />);
     expect(screen.getByText("No findings match")).toBeInTheDocument();
+  });
+});
+
+/** A deep link that lands on a filtered-out finding would otherwise do nothing
+ *  at all — the worst outcome, because it looks like a broken link. */
+describe("FindingsPanel — jump target vs the confidence filter", () => {
+  beforeEach(() => {
+    Element.prototype.scrollIntoView = vi.fn();
+  });
+
+  const LOW: FindingRecord = {
+    ...FINDINGS[0]!,
+    id: "f2",
+    title: "Low confidence finding",
+    confidence: 0.2,
+  };
+
+  it("the filter hides a low-confidence finding when nothing points at it", () => {
+    renderWithIntl(<FindingsPanel findings={[FINDINGS[0]!, LOW]} prId="pr1" />);
+    fireEvent.click(screen.getByRole("switch"));
+    expect(screen.queryByText("Low confidence finding")).not.toBeInTheDocument();
+  });
+
+  it("turns the filter off rather than hiding the finding it was sent to", () => {
+    renderWithIntl(
+      <FindingsPanel findings={[FINDINGS[0]!, LOW]} prId="pr1" targetFindingId="f2" />,
+    );
+    fireEvent.click(screen.getByRole("switch"));
+    expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "false");
+    expect(screen.getByText("Low confidence finding")).toBeInTheDocument();
+  });
+
+  it("leaves the filter alone for a target it isn't hiding", () => {
+    renderWithIntl(
+      <FindingsPanel findings={[FINDINGS[0]!, LOW]} prId="pr1" targetFindingId="f1" />,
+    );
+    fireEvent.click(screen.getByRole("switch"));
+    expect(screen.queryByText("Low confidence finding")).not.toBeInTheDocument();
+    expect(screen.getByText("Hardcoded secret")).toBeInTheDocument();
   });
 });

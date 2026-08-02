@@ -16,6 +16,9 @@ export const s = {
     opacity: muted ? 0.6 : 1,
     transition: "opacity .2s, border-color .12s, box-shadow .12s",
     boxShadow: focused ? "0 0 0 1px " + sevColor : "none",
+    // Breathing room when a deep link scrolls this card to the top of the
+    // scroller instead of centring it.
+    scrollMarginTop: 16,
   }),
   header: {
     display: "flex",
