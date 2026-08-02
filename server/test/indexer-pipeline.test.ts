@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { mkdtemp, mkdir, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import { runFullIndex } from '../src/modules/repo-intel/pipeline/full.js';
 import { runIncremental } from '../src/modules/repo-intel/pipeline/incremental.js';
 import type { RepoIntelRepository } from '../src/modules/repo-intel/repository.js';
@@ -137,10 +137,17 @@ function makeContainer(git: MiniGit): Container {
   } as unknown as Container;
 }
 
+/**
+ * Write `rel` under `root`, creating parent directories first.
+ *
+ * `dirname`, not a hand-rolled search for '/': `join` emits the platform
+ * separator, so on Windows the path holds no '/' at all and any index-of-slash
+ * arithmetic silently mis-locates the parent. `recursive: true` makes the call
+ * a no-op when the parent is `root` itself.
+ */
 async function writeFileAt(root: string, rel: string, contents: string): Promise<void> {
   const full = join(root, rel);
-  const slash = full.lastIndexOf('/');
-  if (slash > 0) await mkdir(full.slice(0, slash), { recursive: true });
+  await mkdir(dirname(full), { recursive: true });
   await writeFile(full, contents);
 }
 
