@@ -34,3 +34,6 @@ Conventions:
   findings badges on the PR list column, run timeline, and review accordions,
   each opening a click-to-open breakdown card. Server half:
   [`server/specs/pr-findings-counters.md`](../../server/specs/pr-findings-counters.md).
+- [`finding-deep-links.md`](finding-deep-links.md) — the two ways out of that
+  breakdown card: `file:line` to the PR's Files-changed view on GitHub, title to
+  the finding itself on the PR detail page. Client-only; no server half.

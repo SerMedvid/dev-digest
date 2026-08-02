@@ -17,11 +17,16 @@ export function FindingsPanel({
   prId,
   repoFullName,
   headSha,
+  targetFindingId = null,
+  targetFindingNonce = 0,
 }: {
   findings: FindingRecord[];
   prId: string;
   repoFullName?: string | null;
   headSha?: string | null;
+  /** A finding to reveal and scroll to; null when the target is in another run. */
+  targetFindingId?: string | null;
+  targetFindingNonce?: number;
 }) {
   const t = useTranslations("prReview");
   const action = useFindingAction();
@@ -29,6 +34,22 @@ export function FindingsPanel({
   const [focusIdx, setFocusIdx] = React.useState(0);
 
   const shown = React.useMemo(() => visibleFindings(findings, hideLow), [findings, hideLow]);
+
+  // A jump must never silently do nothing. If the filter is hiding the very
+  // finding we were sent to, the filter loses.
+  React.useEffect(() => {
+    if (!targetFindingId || !hideLow) return;
+    if (shown.some((f) => f.id === targetFindingId)) return;
+    if (findings.some((f) => f.id === targetFindingId)) setHideLow(false);
+  }, [targetFindingId, targetFindingNonce, hideLow, shown, findings]);
+
+  // Keyboard focus follows the jump, so j/k continue from the finding the user
+  // was sent to rather than from the top of the list.
+  React.useEffect(() => {
+    if (!targetFindingId) return;
+    const i = shown.findIndex((f) => f.id === targetFindingId);
+    if (i >= 0) setFocusIdx(i);
+  }, [targetFindingId, targetFindingNonce, shown]);
 
   // j/k navigation + a/d shortcuts on the focused finding (keyboard).
   React.useEffect(() => {
@@ -64,6 +85,8 @@ export function FindingsPanel({
               f={f}
               focused={i === focusIdx}
               defaultExpanded={i === 0}
+              targeted={f.id === targetFindingId}
+              targetNonce={targetFindingNonce}
               pending={action.isPending}
               repoFullName={repoFullName}
               headSha={headSha}

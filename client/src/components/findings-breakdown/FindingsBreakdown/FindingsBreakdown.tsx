@@ -15,8 +15,10 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import type { PrFindingsBySeverity } from "@devdigest/shared";
+import { githubPrFilesUrl } from "@/lib/github-urls";
 import { FindingRow } from "../FindingRow";
 import { SeverityCounters } from "../SeverityCounters";
+import { useDiffAnchors } from "../hooks";
 import {
   cardPlacement,
   previewTotals,
@@ -31,6 +33,8 @@ export function FindingsBreakdown({
   findings,
   align = "left",
   totalOverride,
+  link,
+  onOpenFinding,
 }: {
   counts: PrFindingsBySeverity;
   findings: BreakdownFinding[];
@@ -38,6 +42,12 @@ export function FindingsBreakdown({
   align?: "left" | "right";
   /** Header total when `findings` is a capped preview rather than the full set. */
   totalOverride?: number;
+  /** Enables the rows' file links. Omitted (or before the repo has loaded) the
+   *  file:line stays plain text — every surface must survive not knowing this. */
+  link?: { repoFullName: string; prNumber: number };
+  /** Enables the rows' title jump. The surface decides what "go there" means:
+   *  a route push from the list, an in-page scroll on the PR detail page. */
+  onOpenFinding?: (findingId: string) => void;
 }) {
   const t = useTranslations("prReview");
   const [open, setOpen] = React.useState(false);
@@ -85,6 +95,22 @@ export function FindingsBreakdown({
   }, [open, reposition]);
 
   const { total, hidden } = previewTotals(findings.length, totalOverride);
+
+  // Digests are only worth computing for a card the user actually opened, and
+  // only when there's a repo to build a URL against.
+  const anchors = useDiffAnchors(
+    findings.map((f) => f.file),
+    open && !!link,
+  );
+
+  // Closing first keeps the card from hanging over whatever we just jumped to —
+  // on the PR detail surfaces the destination is right underneath it.
+  const openFinding = onOpenFinding
+    ? (id: string) => {
+        setOpen(false);
+        onOpenFinding(id);
+      }
+    : undefined;
 
   if (totalOf(counts) === 0) return null;
 
@@ -134,7 +160,24 @@ export function FindingsBreakdown({
         <div role="dialog" aria-label={t("findings.openBreakdown")} style={s.card(placement)}>
           <div style={s.cardHeader}>{t("findings.header", { count: total })}</div>
           {findings.map((f) => (
-            <FindingRow key={f.id} f={f} />
+            <FindingRow
+              key={f.id}
+              f={f}
+              // Un-anchored until the digest lands (and permanently without
+              // SubtleCrypto) — still the right diff, just not scrolled.
+              href={
+                link
+                  ? githubPrFilesUrl(
+                      link.repoFullName,
+                      link.prNumber,
+                      anchors[f.file],
+                      f.start_line,
+                      f.end_line,
+                    )
+                  : undefined
+              }
+              onOpen={openFinding}
+            />
           ))}
           {hidden > 0 && <div style={s.footer}>{t("findings.more", { count: hidden })}</div>}
         </div>

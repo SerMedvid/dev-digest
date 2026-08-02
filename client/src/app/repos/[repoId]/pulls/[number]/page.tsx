@@ -59,6 +59,10 @@ export default function PRDetailPage() {
 
   const tab = search.get("tab") ?? "overview";
   const traceRunId = search.get("trace");
+  // Deep link from a findings breakdown card elsewhere in the app: open the
+  // run that produced this finding and scroll to it. Kept in the URL after it
+  // lands, like ?trace=, so the link stays shareable and survives a reload.
+  const targetFindingId = search.get("finding");
   const setParam = (key: string, val: string | null) => {
     const sp = new URLSearchParams(search.toString());
     if (val == null) sp.delete(key);
@@ -146,7 +150,9 @@ export default function PRDetailPage() {
             prRuns={prRuns}
             prCommits={pr.commits}
             repoFullName={repoFullName}
+            prNumber={pr.number}
             headSha={pr.head_sha}
+            targetFindingId={targetFindingId}
             cancelMutation={cancel}
             onOpenTrace={(id) => setParam("trace", id)}
             onDelete={(id) => {

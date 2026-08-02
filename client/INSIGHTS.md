@@ -11,6 +11,18 @@ an entry can age — verify before relying on one.
 
 ## What works
 
+- **2026-08-02** — A URL param that triggers a *one-shot* effect (scroll to,
+  expand, focus) must be latched in a ref, not just guarded by its own value.
+  `usePrReviews`' data gets a **new array identity on every refetch** — a
+  dismiss, a finished run, a window focus — so any effect that also depends on
+  the reviews re-fires and replays the jump, yanking the page back to whatever
+  the URL says long after the user moved on. Compare `consumedFindingId.current`
+  before acting and set it after, so the param fires at most once per distinct
+  value while still being allowed to wait for the data to arrive. The param
+  itself stays in the URL (shareable, survives reload) — it's the *effect* that
+  is one-shot, not the link.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/FindingsTab/FindingsTab.tsx:119`)
+
 ## What doesn't work
 
 - **2026-07-29** — A `position: absolute` popover **cannot** work on the list,
@@ -29,6 +41,29 @@ an entry can age — verify before relying on one.
   (`src/components/findings-breakdown/helpers.ts:96`)
 
 ## Codebase patterns & tool notes
+
+- **2026-08-02** — jsdom ships **no `SubtleCrypto`**, so `crypto.subtle` is
+  `undefined` under vitest even though `crypto` exists. Any browser-crypto code
+  needs `vi.stubGlobal("crypto", { ...globalThis.crypto, subtle: { digest } })`
+  to be testable at all, and must itself treat a missing `subtle` as a normal
+  degraded path (it's also genuinely absent in any non-secure context, i.e.
+  plain http on a non-localhost host) rather than throwing. Second trap in the
+  same place: a function that memoizes its digests at module scope keeps that
+  cache **across tests in a file**, so every case has to use a distinct input
+  key or a stubbed result leaks into the next one.
+  (`src/lib/github-urls.test.ts:16`)
+
+- **2026-08-02** — `MonoLink` ([`src/vendor/ui/primitives/MonoLink.tsx`](src/vendor/ui/primitives/MonoLink.tsx))
+  hardcodes `fontSize: 13` in an **inline style on the element itself**, which
+  no wrapper can override — inline wins over any inherited or ancestor rule. In
+  a denser surface (the findings breakdown card's meta row is 12px) composing it
+  produces a link that reads as a different typeface from the text beside it.
+  Write a plain `<a>` with the surface's own style there, keeping the primitive's
+  semantics (`target="_blank"`, `rel="noopener noreferrer"`, `stopPropagation`);
+  that is not forking a primitive, it's declining to use one. Same family as the
+  badge-primitive entry below: these components fix their own appearance, and the
+  feature has to work around it rather than through it.
+  (`src/components/findings-breakdown/styles.ts:141`)
 
 - **2026-07-29** — The vendored badge primitives
   ([`Badge.tsx`](src/vendor/ui/primitives/Badge.tsx)) take **no `style` or

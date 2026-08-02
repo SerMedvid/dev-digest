@@ -21,6 +21,10 @@ interface FindingsTabProps {
   /** owner/repo + head sha — used to deep-link a finding's file:line to GitHub. */
   repoFullName?: string | null;
   headSha?: string | null;
+  /** For the breakdown cards' file links, which point into the PR's own diff. */
+  prNumber?: number;
+  /** `?finding=` from the URL — a finding to open and scroll to on arrival. */
+  targetFindingId?: string | null;
   onOpenTrace: (id: string) => void;
   onDelete: (id: string) => void;
   onRunDone: () => void;
@@ -37,6 +41,8 @@ export function FindingsTab({
   cancelMutation,
   repoFullName,
   headSha,
+  prNumber,
+  targetFindingId,
   onOpenTrace,
   onDelete,
   onRunDone,
@@ -93,6 +99,31 @@ export function FindingsTab({
   const handleGoToReview = useCallback((runId: string) => {
     setTarget((p) => ({ runId, n: (p?.n ?? 0) + 1 }));
   }, []);
+
+  // The same navigation one level down: a finding, not a run. Same nonce, for
+  // the same reason — clicking the same finding twice must scroll twice.
+  const [findingTarget, setFindingTarget] = React.useState<{ id: string; n: number } | null>(
+    null,
+  );
+  const handleGoToFinding = useCallback((id: string) => {
+    setFindingTarget((p) => ({ id, n: (p?.n ?? 0) + 1 }));
+  }, []);
+
+  // A `?finding=` deep link usually arrives before the reviews it points into,
+  // so this waits on `runs` as well as the param. An id no surviving review
+  // contains — deleted run, purged finding, stale link — is left alone.
+  //
+  // Consumed at most once per id: `runs` gets a new identity on every reviews
+  // refetch (a dismiss, a finished run), and without this the URL would yank
+  // the page back to its finding each time.
+  const consumedFindingId = React.useRef<string | null>(null);
+  React.useEffect(() => {
+    if (!targetFindingId || consumedFindingId.current === targetFindingId) return;
+    const known = runs.some((r) => r.findings.some((f) => f.id === targetFindingId));
+    if (!known) return; // reviews not loaded yet, or the finding is gone
+    consumedFindingId.current = targetFindingId;
+    handleGoToFinding(targetFindingId);
+  }, [targetFindingId, runs, handleGoToFinding]);
 
   return (
     <section>
@@ -155,8 +186,14 @@ export function FindingsTab({
             runs={prRuns ?? []}
             commits={prCommits}
             findingsByRun={findingsByRun}
+            prLink={
+              repoFullName && prNumber != null
+                ? { repoFullName, prNumber }
+                : undefined
+            }
             onOpenTrace={handleOpenTrace}
             onGoToReview={handleGoToReview}
+            onGoToFinding={handleGoToFinding}
             onDelete={handleDelete}
           />
         </div>
@@ -187,8 +224,12 @@ export function FindingsTab({
             defaultOpen={i === 0}
             repoFullName={repoFullName}
             headSha={headSha}
+            prNumber={prNumber}
             targetRunId={target?.runId ?? null}
             targetNonce={target?.n ?? 0}
+            targetFindingId={findingTarget?.id ?? null}
+            targetFindingNonce={findingTarget?.n ?? 0}
+            onGoToFinding={handleGoToFinding}
           />
         ))
       )}

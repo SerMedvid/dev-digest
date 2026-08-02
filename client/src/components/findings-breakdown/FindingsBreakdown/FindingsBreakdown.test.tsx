@@ -7,7 +7,7 @@
  * toggles). Opening or reading the card must never activate what's underneath.
  */
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { FindingRecord, PrFindingPreview } from "@devdigest/shared";
 import messages from "../../../../messages/en/prReview.json";
@@ -382,5 +382,98 @@ describe("FindingsBreakdown", () => {
       <FindingsBreakdown counts={{ CRITICAL: 0, WARNING: 0, SUGGESTION: 0 }} findings={[]} />,
     );
     expect(container).toBeEmptyDOMElement();
+  });
+});
+
+/**
+ * The two ways out of the card — `client/specs/finding-deep-links.md` §5.
+ *
+ * Both are optional and independent: a surface may know where the PR detail
+ * page is, or the repo's owner/repo, or neither. "Neither" is the original
+ * read-only row and has to keep working, because the component is shared.
+ */
+describe("FindingsBreakdown — deep links", () => {
+  const LINK = { repoFullName: "acme/api", prNumber: 128 };
+  const title = () => screen.getByText("Hardcoded Stripe secret key");
+
+  /** jsdom has no SubtleCrypto; digest of the path is stubbed to a fixed hash. */
+  function stubSubtle() {
+    vi.stubGlobal("crypto", {
+      ...globalThis.crypto,
+      subtle: { digest: async () => new Uint8Array([0xab, 0xcd]).buffer },
+    });
+  }
+
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("leaves the row read-only when the surface wires neither exit", () => {
+    renderCard(<FindingsBreakdown counts={COUNTS} findings={FINDINGS} />);
+    fireEvent.click(openTrigger());
+    expect(title().tagName).toBe("SPAN");
+    expect(screen.getByText("src/config.ts:11").tagName).toBe("SPAN");
+  });
+
+  it("makes the title a button that reports the finding id and closes the card", () => {
+    const onOpenFinding = vi.fn();
+    renderCard(
+      <FindingsBreakdown counts={COUNTS} findings={FINDINGS} onOpenFinding={onOpenFinding} />,
+    );
+    fireEvent.click(openTrigger());
+    expect(title().tagName).toBe("BUTTON");
+
+    fireEvent.click(title());
+    expect(onOpenFinding).toHaveBeenCalledTimes(1);
+    expect(onOpenFinding).toHaveBeenCalledWith("f1");
+    // Closed, so the card isn't left hanging over what we jumped to.
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("jumping never activates the surface underneath", () => {
+    const onSurfaceClick = vi.fn();
+    renderCard(
+      <div onClick={onSurfaceClick}>
+        <FindingsBreakdown counts={COUNTS} findings={FINDINGS} onOpenFinding={vi.fn()} />
+      </div>,
+    );
+    fireEvent.click(openTrigger());
+    fireEvent.click(title());
+    expect(onSurfaceClick).not.toHaveBeenCalled();
+  });
+
+  it("links file:line into the PR's diff, un-anchored first and anchored once the hash lands", async () => {
+    stubSubtle();
+    renderCard(<FindingsBreakdown counts={COUNTS} findings={FINDINGS} link={LINK} />);
+    fireEvent.click(openTrigger());
+
+    const link = screen.getByText("src/config.ts:11") as HTMLAnchorElement;
+    expect(link.tagName).toBe("A");
+    expect(link.target).toBe("_blank");
+    expect(link.rel).toBe("noopener noreferrer");
+    // Never a dead or missing link while the digest is in flight.
+    expect(link.getAttribute("href")).toBe("https://github.com/acme/api/pull/128/files");
+
+    await waitFor(() =>
+      expect(screen.getByText("src/config.ts:11").getAttribute("href")).toBe(
+        "https://github.com/acme/api/pull/128/files#diff-abcdR11",
+      ),
+    );
+    // A multi-line finding keeps both ends of the range.
+    expect(screen.getByText("src/worker.ts:40-52").getAttribute("href")).toBe(
+      "https://github.com/acme/api/pull/128/files#diff-abcdR40-R52",
+    );
+  });
+
+  it("keeps the un-anchored link when SubtleCrypto is unavailable", async () => {
+    vi.stubGlobal("crypto", { ...globalThis.crypto, subtle: undefined });
+    // A file no other case hashes — `diffAnchorHash` memoizes at module scope.
+    const findings = [{ ...FINDINGS[0]!, file: "src/insecure-context.ts" }];
+    renderCard(<FindingsBreakdown counts={COUNTS} findings={findings} link={LINK} />);
+    fireEvent.click(openTrigger());
+
+    const href = () => screen.getByText(/insecure-context/).getAttribute("href");
+    expect(href()).toBe("https://github.com/acme/api/pull/128/files");
+    // Give the (resolved-null) promise a turn; nothing should change or throw.
+    await Promise.resolve();
+    expect(href()).toBe("https://github.com/acme/api/pull/128/files");
   });
 });

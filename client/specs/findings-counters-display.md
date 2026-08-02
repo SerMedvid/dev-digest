@@ -4,6 +4,9 @@
 **Owner:** client · **Producer:** server ([`server/specs/pr-findings-counters.md`](../../server/specs/pr-findings-counters.md))
 **Plan:** [`docs/plans/pr-findings-counters-plan.md`](../../docs/plans/pr-findings-counters-plan.md)
 **Related:** [`run-cost-display.md`](run-cost-display.md) (the precedent this follows)
+**Superseded in part:** [`finding-deep-links.md`](finding-deep-links.md) (2026-08-02)
+makes the card's rows actionable — §1 and §4 below still describe the card's
+`file:line` and title as plain text with no navigation target; they are links now.
 
 Three surfaces gain per-severity findings counters, each opening the same
 click-to-open breakdown card:

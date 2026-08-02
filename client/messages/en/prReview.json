@@ -111,6 +111,8 @@
   "findings": {
     "header": "{count} findings",
     "more": "+{count} more",
-    "openBreakdown": "Show findings breakdown"
+    "openBreakdown": "Show findings breakdown",
+    "goToFinding": "Go to this finding in its agent run",
+    "openInPr": "Open this file in the pull request on GitHub"
   }
 }
