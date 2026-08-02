@@ -42,6 +42,30 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-02** — The vendored form controls split on whether they forward
+  props, which decides how a test can reach them.
+  [`TextInput`](src/vendor/ui/kit/TextInput.tsx) spreads `...rest` onto its
+  `<input>`, so `aria-label` works and `getByLabelText` finds it;
+  [`Textarea`](src/vendor/ui/kit/Textarea.tsx) accepts only
+  `value/onChange/placeholder/rows/mono` and forwards nothing, and
+  [`FormField`](src/vendor/ui/kit/FormField.tsx) renders a bare `<label>` with
+  no `htmlFor`. A textarea inside a FormField therefore has **no accessible
+  name at all** — `getByLabelText(/…/)` and `getByRole("textbox", {name})` both
+  fail, however the label reads on screen. Query it via
+  `container.querySelector("textarea")` (or a placeholder) rather than adding a
+  second `<label>` or forking the primitive. Same family as the `MonoLink` and
+  badge entries below. (`src/app/skills/[id]/_components/SkillDetail/_components/ConfigTab/ConfigTab.test.tsx:52`)
+
+- **2026-08-02** — jsdom 25 implements `File` **without `Blob.prototype.text()`**,
+  so `await file.text()` in a file-picker handler throws
+  `file.text is not a function` — and it surfaces as an *unhandled rejection*
+  inside a React event handler, not as a clean test failure, so the assertion
+  error you see names the missing DOM node rather than the cause. Read picked
+  files with `FileReader` + `readAsText`, which jsdom does implement and every
+  target browser supports. Companion to the `SubtleCrypto` entry below: assume
+  nothing about which Blob/File methods this jsdom has.
+  (`src/app/skills/_components/SkillsListView/_components/CreateSkillModal/CreateSkillModal.tsx:16`)
+
 - **2026-08-02** — jsdom ships **no `SubtleCrypto`**, so `crypto.subtle` is
   `undefined` under vitest even though `crypto` exists. Any browser-crypto code
   needs `vi.stubGlobal("crypto", { ...globalThis.crypto, subtle: { digest } })`
