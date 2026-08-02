@@ -199,6 +199,46 @@ d('/skills versioning', () => {
     await app.close();
   });
 
+  it('stats report the agents that link the skill', async () => {
+    const app = await makeApp();
+    const skillId = (
+      await app.inject({ method: 'POST', url: '/skills', payload: body() })
+    ).json().id;
+
+    const empty = await app.inject({ method: 'GET', url: `/skills/${skillId}/stats` });
+    expect(empty.json()).toEqual({ agent_count: 0, agents: [] });
+
+    const agentId = (
+      await app.inject({
+        method: 'POST',
+        url: '/agents',
+        payload: {
+          name: 'Security Reviewer',
+          provider: 'openai',
+          model: 'gpt-4o-mini',
+          system_prompt: 'Review the diff.',
+        },
+      })
+    ).json().id;
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agentId}/skills`,
+      payload: { skill_ids: [skillId] },
+    });
+
+    const stats = (await app.inject({ method: 'GET', url: `/skills/${skillId}/stats` })).json();
+    expect(stats.agent_count).toBe(1);
+    expect(stats.agents[0]).toMatchObject({
+      id: agentId,
+      name: 'Security Reviewer',
+      enabled: true,
+    });
+
+    const list = (await app.inject({ method: 'GET', url: '/skills' })).json();
+    expect(list.find((s: { id: string }) => s.id === skillId).agent_count).toBe(1);
+    await app.close();
+  });
+
   it('404s restoring a version that was never recorded', async () => {
     const app = await makeApp();
     const id = (await app.inject({ method: 'POST', url: '/skills', payload: body() })).json().id;

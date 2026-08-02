@@ -135,6 +135,16 @@ export class SkillsRepository {
     return rows.length > 0;
   }
 
+  /** Agents that link this skill, alphabetical. The skill side of agent_skills. */
+  async usage(skillId: string): Promise<{ id: string; name: string; enabled: boolean }[]> {
+    return this.db
+      .select({ id: t.agents.id, name: t.agents.name, enabled: t.agents.enabled })
+      .from(t.agentSkills)
+      .innerJoin(t.agents, eq(t.agentSkills.agentId, t.agents.id))
+      .where(eq(t.agentSkills.skillId, skillId))
+      .orderBy(asc(t.agents.name));
+  }
+
   /** All snapshots for a skill, newest version first. */
   async listVersions(skillId: string): Promise<SkillVersionRow[]> {
     return this.db

@@ -20,6 +20,7 @@ import {
  *   POST   /skills        → create (source is always 'manual')
  *   PUT    /skills/:id    → patch; a changed body versions the skill
  *   DELETE /skills/:id    → delete (agent links cascade)
+ *   GET    /skills/:id/stats                      → which agents use it
  *   GET    /skills/:id/versions                   → history, newest first
  *   POST   /skills/:id/versions/:version/restore  → append that body as a new version
  */
@@ -94,6 +95,13 @@ export default async function skillsRoutes(appBase: FastifyInstance) {
     const ok = await service.delete(workspaceId, req.params.id);
     if (!ok) throw new NotFoundError('Skill not found');
     return { ok: true };
+  });
+
+  app.get('/skills/:id/stats', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(app.container, req);
+    const stats = await service.stats(workspaceId, req.params.id);
+    if (!stats) throw new NotFoundError('Skill not found');
+    return stats;
   });
 
   app.get('/skills/:id/versions', { schema: { params: IdParams } }, async (req) => {

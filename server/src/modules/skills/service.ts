@@ -1,4 +1,10 @@
-import type { Skill, SkillType, SkillVersion, SkillWithUsage } from '@devdigest/shared';
+import type {
+  Skill,
+  SkillStats,
+  SkillType,
+  SkillVersion,
+  SkillWithUsage,
+} from '@devdigest/shared';
 import { ValidationError } from '../../platform/errors.js';
 import type { SkillsRepository } from './repository.js';
 import { toSkillDto, toSkillVersionDto } from './helpers.js';
@@ -78,6 +84,18 @@ export class SkillsService {
 
   async delete(workspaceId: string, id: string): Promise<boolean> {
     return this.repo.deleteById(workspaceId, id);
+  }
+
+  /**
+   * Everything the Stats tab can honestly report. Accuracy metrics (pull rate,
+   * accept rate) would need per-skill attribution on findings, which does not
+   * exist — do not invent them here.
+   */
+  async stats(workspaceId: string, id: string): Promise<SkillStats | undefined> {
+    const skill = await this.repo.getById(workspaceId, id);
+    if (!skill) return undefined;
+    const agents = await this.repo.usage(id);
+    return { agent_count: agents.length, agents };
   }
 
   /** Version history, newest first. undefined when the skill isn't in this workspace. */
