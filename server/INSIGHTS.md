@@ -38,6 +38,19 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-02** — Corrects the "reaching for the alias through the wrong file"
+  advice in the `no-circular` entry below: a module's `helpers.ts` cannot import
+  its row types from [`src/db/rows.ts`](src/db/rows.ts) either. `core-no-persistence`
+  scopes the core ring to `src/modules/*/(service|helpers|domain|ports).ts` and
+  bans every `^src/db/` import but `db/client.ts`, so that route trades a
+  `no-circular` failure for a `core-no-persistence` one — the two rules close off
+  both files a row type could come from. What works is declaring the row shape
+  **structurally** in `helpers.ts` (a plain interface of the columns the
+  transforms read): the Drizzle `$inferSelect` row satisfies it, so the
+  repository and service call sites type-check with no cast and no re-export. A
+  module-local `domain.ts` would also satisfy both rules, but only if nothing in
+  it imports `src/db/`. (`src/modules/skills/helpers.ts:15`)
+
 - **2026-08-02** — `pnpm arch:check` does **not** keep the database out of the
   core. `core-no-persistence` exempts [`src/db/client.ts`](src/db/client.ts) by
   path (`pathNot: '^src/db/client\.ts$'`) on the rationale that it is "the `Db`
