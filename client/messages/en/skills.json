@@ -7,9 +7,8 @@
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
     "menu": {
-      "fromFile": "Import from file",
-      "fromUrl": "Import from URL",
-      "community": "Search community skills…"
+      "manual": "Create manually",
+      "fromFile": "Import from file"
     },
     "empty": {
       "title": "No skills yet",
@@ -20,6 +19,13 @@
       "title": "Select a skill",
       "body": "Pick a skill on the left to preview its body."
     }
+  },
+  "card": {
+    "agentCount": "{count, plural, one {# agent} other {# agents}}",
+    "unused": "Not used yet",
+    "noDescription": "No description",
+    "deleteConfirm": "Delete skill \"{name}\"? Agents using it lose the rule.",
+    "deleteTitle": "Delete skill"
   },
   "detail": {
     "crumbSkill": "Skill",
@@ -49,7 +55,14 @@
     "bodyPlaceholder": "# Rule\nDescribe the rule…",
     "importing": "Importing…",
     "import": "Import skill",
-    "success": "Imported \"{name}\" (stored as untrusted data)."
+    "success": "Imported \"{name}\" (stored as untrusted data).",
+    "descriptionLabel": "Description",
+    "descriptionHint": "Optional — one line, shown on the card.",
+    "typeLabel": "Type",
+    "pickFile": "Import from file",
+    "pickFileHint": "Read in your browser — the file is never uploaded.",
+    "chars": "{count} / {max} characters",
+    "cancel": "Cancel"
   },
   "url": {
     "label": "Skill URL",
