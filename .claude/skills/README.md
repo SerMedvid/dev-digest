@@ -6,6 +6,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 
 | Skill | Scope | Description |
 |-------|-------|-------------|
+| [onion-architecture](onion-architecture/SKILL.md) | Backend | Onion dependency rule for `server/`: rings, ports, the composition root, and the `arch:check` gate |
 | [fastify-best-practices](fastify-best-practices/SKILL.md) | Backend | Fastify routes, plugins, JSON-schema validation, error handling |
 | [drizzle-orm-patterns](drizzle-orm-patterns/SKILL.md) | Backend | Drizzle schema, queries, relations, transactions, migrations |
 | [postgresql-table-design](postgresql-table-design/SKILL.md) | Backend | Postgres schema design, data types, indexing, constraints |
@@ -18,6 +19,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [security](security/SKILL.md) | Full-stack | OWASP Top 10:2025, auth, injection, uploads, secrets |
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 | [engineering-insights](engineering-insights/SKILL.md) | Shared | Capture durable session knowledge into a module's `INSIGHTS.md` |
+| [pr-self-review](pr-self-review/SKILL.md) | Shared | Pre-PR gate — routes the branch diff to the skills that govern it, blocks `gh pr create` on a critical finding |
 
 ## What Are Skills?
 

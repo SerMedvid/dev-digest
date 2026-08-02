@@ -37,6 +37,13 @@ platform/                      cross-cutting: config, container, jobs, sse, erro
 - A module never imports another module's `repository.ts`. Shared aggregates
   (`agentsRepo`, `reviewRepo`) are constructed in the container; use those.
 
+This layering is the Onion dependency rule, and it is now enforced:
+`pnpm arch:check` (config in [`.dependency-cruiser.cjs`](.dependency-cruiser.cjs))
+fails on new violations. The 24 that predate the gate are frozen in
+`.dependency-cruiser-known-violations.json` — do not regenerate it to silence a
+failure. The full rules, the tool-to-ring map, and the `Deps`-instead-of-
+`Container` pattern live in the `onion-architecture` skill.
+
 ## Adding a module
 
 1. `modules/<name>/routes.ts` exporting a default Fastify plugin.
