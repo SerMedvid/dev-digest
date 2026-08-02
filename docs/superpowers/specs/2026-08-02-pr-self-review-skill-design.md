@@ -142,10 +142,20 @@ is not dispatched.
 `@devdigest/shared` is two physical copies, that a query without `workspaceId`
 is a bug, or that `reviewer-core` accepts prompt slots nothing feeds yet.
 
-**Unrouted files** — changed, not excluded, matched by no glob — are listed in
-the report under `unrouted`. This is the manifest's rot detector: a new
-directory shows up there instead of being silently unreviewed. Unrouted files
-do not get a general-purpose review pass and never produce findings.
+A changed file that reaches no lane lands in exactly one of three buckets, named
+separately in the report:
+
+- **Excluded** — generated or opaque: lock files, `**/migrations/*.sql`,
+  `*.snap`, `agent-runner/dist/**`.
+- **Not routed by design** — real files this skill has no opinion on:
+  `**/*.md`, `docs/**`, `.claude/**`, `.github/**`, `scripts/**`.
+- **Unrouted** — everything else. This is the manifest's rot detector, so it
+  must normally be empty: a `.ts` file appearing here means a new directory
+  exists and `routing.md` needs a row. Without the middle bucket, every doc-only
+  PR would fill this list and the signal would be gone.
+
+None of the three gets a general-purpose review pass, and none produces
+findings.
 
 ### Phase 3 — Parallel review lanes
 
@@ -324,7 +334,7 @@ A finding is `CRITICAL` only if it matches one of these. Everything else is
 | Situation | Behaviour |
 |---|---|
 | Only excluded files changed (lock files, generated SQL) | `PASS` with a note. No lanes dispatched. |
-| Diff touches no routed glob | `PASS`; every file listed under `unrouted`. |
+| Diff touches no routed glob | `PASS`; every file listed under its not-reviewed bucket. |
 | A lane crashes or times out | `CRITICAL` `lane-failed` for that lane; other lanes still report. Overridable. |
 | `arch:check` baseline file missing | Reported as "run `pnpm arch:baseline`", not as an architecture violation. |
 | Docker not running | Irrelevant — the hermetic lane excludes `*.it.test.ts`, which self-skip anyway. |
@@ -350,7 +360,8 @@ The work is done when all of these hold:
    draft.
 7. `--override` on a Phase 1 finding is refused.
 8. `--reason wip` is refused.
-9. A file under a directory in no glob appears under `unrouted`.
+9. A `.ts` file under a directory in no glob appears under `unrouted`, while a
+   changed `docs/**` file appears under "not routed by design".
 10. A finding citing a line absent from the diff is dropped by the grounding
     gate and appears nowhere in the report.
 11. The gate script runs on Windows and Linux with no shell-specific syntax.
