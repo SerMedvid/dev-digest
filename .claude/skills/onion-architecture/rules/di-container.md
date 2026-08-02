@@ -25,8 +25,12 @@ rings declare, outer rings implement — expressed as a constructor signature.
 
 ## Why, concretely
 
-`pnpm arch:check` found four import cycles. Every one of them runs through the
-composition root. The shortest:
+`pnpm arch:check` froze five import cycles. Four of them run through the
+composition root — and all four are `repo-intel`'s, because `container.ts` is
+the only place that constructs a service it also imports (`new
+RepoIntelService(this)`). The fifth is `agents/helpers.ts` ⇄
+`agents/repository.ts` and has nothing to do with the container; see
+[`rules/layers.md`](layers.md) for it. The shortest of the four:
 
 ```
 src/modules/repo-intel/service.ts → src/platform/container.ts → src/modules/repo-intel/service.ts
@@ -41,15 +45,20 @@ can build — `OctokitGitHubClient`, `SimpleGitClient`, `RipgrepCodeIndex`,
 module repositories (`AgentsRepository`, `ReviewRepository`) and
 `RepoIntelService` itself. That last import is what closes the loop.
 
-So `constructor(private container: Container)` does two bad things at once. It
-drags the entire outer ring into the core: the type graph of a "pure" service
-now transitively includes Octokit, the Anthropic SDK, and Drizzle. And where the
-container also constructs the service, it makes the cycle literal.
+So `constructor(private container: Container)` does one bad thing always and a
+second one sometimes. Always: it drags the entire outer ring into the core, so
+the type graph of a "pure" service now transitively includes Octokit, the
+Anthropic SDK, and Drizzle. Sometimes: where the container *also constructs* the
+service, it makes the cycle literal.
 
-All four services do this today — `agents`, `repos`, `reviews`, and
-`repo-intel` each declare `constructor(private container: Container)`. They are
-frozen in the baseline as the four `core-no-container` entries and most of the
-five `no-circular` entries. Do not copy them.
+Keep those two apart, because the second is the rarer case. All four services
+take `Container` today — `agents`, `repos`, `reviews`, and `repo-intel` each
+declare `constructor(private container: Container)` — and that is the whole
+`core-no-container` count of 4. But only `repo-intel` is constructed by the
+container, so `agents`, `repos`, and `reviews` close **no** cycle. Every
+container-borne cycle in the baseline is `repo-intel`'s. Do not copy any of the
+four regardless: the dependency-rule breach is the reason, and the cycle is only
+the case the gate happens to catch twice.
 
 The knock-on effect is worse than the cycle.
 [`server/src/modules/agents/service.ts`](../../../../server/src/modules/agents/service.ts)
@@ -79,7 +88,6 @@ import type { AgentRow, AgentVersionRow, InsertAgent, UpdateAgent } from './doma
 /** What the agents core needs from persistence. Implemented by AgentsRepository. */
 export interface AgentsRepositoryPort {
   list(workspaceId: string): Promise<AgentRow[]>;
-  listEnabled(workspaceId: string): Promise<AgentRow[]>;
   getById(workspaceId: string, id: string): Promise<AgentRow | undefined>;
   deleteById(workspaceId: string, id: string): Promise<boolean>;
   insert(input: InsertAgent): Promise<AgentRow>;
@@ -103,9 +111,18 @@ Three things to copy from this, beyond the names:
 - **`AgentsRepositoryPort` is a subset, not a mirror.** The concrete
   `AgentsRepository` in
   [`server/src/modules/agents/repository.ts`](../../../../server/src/modules/agents/repository.ts)
-  has more methods than this — `unlinkSkill`, `skillIdsForAgent`,
-  `snapshotVersion`. The port lists what the *core* calls. Widening it to match
+  has public methods this port does not list — `unlinkSkill` and
+  `skillIdsForAgent`. The port lists what the *core* calls. Widening it to match
   the implementation is how a port stops being a boundary.
+  (`snapshotVersion` is not an example of this: it is `private` on the
+  repository, so it could never have been in a port in the first place.)
+- **`listEnabled` is deliberately absent.** `AgentsRepository.listEnabled`
+  exists, but `AgentsService` never calls it — its only caller is
+  [`modules/reviews/service.ts`](../../../../server/src/modules/reviews/service.ts),
+  which reaches it through `container.agentsRepo`, not through this port. Adding
+  it here "for completeness" is the exact widening the bullet above warns about.
+  If `reviews` should have a port too, that port belongs in
+  `modules/reviews/ports.ts` and lists `listEnabled`.
 - **The LLM dependency is a function, not a provider.** `llm(provider: Provider)`
   mirrors the container's own async, cached resolution — the core asks for a
   provider by id and gets one, without knowing that resolving it involves a

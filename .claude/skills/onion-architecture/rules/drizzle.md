@@ -19,7 +19,10 @@ place that can get the `workspaceId` scoping wrong.
 ## Rows do not leak
 
 The `$inferSelect` row aliases —
-[`AgentRow`, `FindingRow`, `PullRow`, `AgentRunRow`](../../../../server/src/db/rows.ts) —
+[`AgentRow`, `AgentVersionRow`, `FindingRow`, `PullRow`, `AgentRunRow`](../../../../server/src/db/rows.ts)
+in `db/rows.ts`, plus `ReviewRow`, which is declared in
+[`modules/reviews/repository.ts`](../../../../server/src/modules/reviews/repository.ts)
+rather than `db/rows.ts` —
 may appear inside the module that owns them: a repository method can return
 one, and a service can hold one on its way to being mapped. What they must not
 do is appear in a signature a route consumes, or cross into another module.
@@ -64,16 +67,41 @@ repository outgrows one file; don't flatten it back to a single file, and
 don't take the split as license to let a second module import
 `repository/*.repo.ts` directly instead of the facade.
 
-## `db/client.ts` is exempt
+## `db/client.ts` is exempt, and the exemption has a hole
 
 `core-no-persistence` forbids a core file importing anything under
 `src/db/` except
-[`db/client.ts`](../../../../server/src/db/client.ts), which exports only the
-`Db` type (`PostgresJsDatabase<typeof schema>`) — the type a repository
-constructor takes, not a live query surface. The exemption covers the type,
-not a connection; holding an actual `Db` handle in a core file is still the
-violation the rule exists to catch, even though the gate cannot see it
-happen at the type level. See `rules/layers.md` for the full explanation.
+[`db/client.ts`](../../../../server/src/db/client.ts). The exemption exists for
+the `Db` type (`PostgresJsDatabase<typeof schema>`) — the type a repository
+constructor takes, not a live query surface.
+
+But `db/client.ts` does not export only that type. It exports three things:
+
+```ts
+export type Db = PostgresJsDatabase<typeof schema>;
+export interface DbHandle { db: Db; sql: postgres.Sql; close: () => Promise<void> }
+export function createDb(databaseUrl: string, opts?: { max?: number }): DbHandle
+```
+
+`createDb` is a runtime factory that calls `postgres(databaseUrl, …)` and opens
+a real connection pool. Because the rule exempts the file by path
+(`pathNot: '^src/db/client\\.ts$'`), a `service.ts` can write
+`import { createDb } from '../../db/client.js'`, connect to the database from
+inside the core, and `pnpm arch:check` stays green. **This is a gap in the gate,
+not a limitation of type-level analysis** — describing it as "the gate cannot see
+a type" is wrong, and would leave a reader thinking the hole is narrower than it
+is.
+
+So the exemption's real cost: `core-no-persistence` protects you from
+`db/schema.ts` and `db/rows.ts`, and protects you from nothing in
+`db/client.ts`. Treat "no database access from the core" as a rule you keep
+yourself there, and check it in review.
+
+The proper fix is to move `export type Db` into its own type-only file and point
+the `pathNot` at that instead, leaving `createDb` behind the general
+`^src/db/` ban. That means editing `server/src`, so it is a follow-up rather than
+something this skill does; until it happens, the hole is real and worth knowing
+about. See `rules/layers.md` for the exemption's rationale.
 
 ## Related
 

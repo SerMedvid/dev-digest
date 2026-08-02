@@ -83,7 +83,7 @@ identically to `service.ts`, `helpers.ts`, `domain.ts`, and `ports.ts`. A
 |---|---|---|
 | `core-no-container` | the `service.ts`, `helpers.ts`, `domain.ts` and `ports.ts` rows | a core file imports `src/platform/container.ts`, even as `import type` |
 | `core-no-persistence` | the `service.ts`, `helpers.ts`, `domain.ts` and `ports.ts` rows | a core file imports anything under `src/db/` other than `db/client.ts` |
-| `core-no-sdk` | the `service.ts`, `helpers.ts`, `domain.ts` and `ports.ts` rows | a core file reaches `drizzle-orm`, `postgres`, `fastify`, `octokit`, `simple-git`, `@anthropic-ai/*`, or `openai` |
+| `core-no-sdk` | the `service.ts`, `helpers.ts`, `domain.ts` and `ports.ts` rows | a core file reaches `drizzle-orm`, `postgres`, `fastify` / `@fastify/*` / `fastify-*`, `octokit` / `@octokit/*`, `simple-git`, `@anthropic-ai/*`, `openai`, `@ast-grep/*`, or `js-tiktoken` |
 | `routes-no-persistence` | `routes.ts` row | a route imports `src/db/*` or `drizzle-orm` |
 | `no-cross-module-internals` | the "another module" column on every module row | `modules/a/*` imports `modules/b/*`, where `b` is neither `a` nor `_shared` |
 | `adapters-no-modules` | `adapters/<x>/` row | anything under `src/adapters/` imports anything under `src/modules/` |
@@ -126,8 +126,18 @@ Concretely, the ones you are most likely to open and mistake for the house
 pattern:
 
 - All four services — `agents`, `repos`, `reviews`, `repo-intel` — declare
-  `constructor(private container: Container)`. That single line is the
-  `core-no-container` count of 4 and most of the `no-circular` count of 5.
+  `constructor(private container: Container)`. That single line is the whole
+  `core-no-container` count of 4. It is **not** where the cycles come from: of
+  the five `no-circular` entries, four run through `platform/container.ts` and
+  every one of those four is `repo-intel`, because `container.ts` is the only
+  place that constructs a service it also imports (`new RepoIntelService(this)`).
+  `agents`, `repos`, and `reviews` take `Container` and close no cycle at all.
+  Taking `Container` always breaks the dependency rule; it only *also* closes a
+  cycle when the container constructs you.
+- The fifth `no-circular` entry has nothing to do with the container:
+  `modules/agents/helpers.ts` ⇄ `modules/agents/repository.ts`. See "A type-only
+  cycle is still a cycle" below — it is the one you are most likely to reproduce
+  in new code.
 - Four route files query Drizzle directly:
   [`polling/routes.ts`](../../../../server/src/modules/polling/routes.ts),
   [`pulls/routes.ts`](../../../../server/src/modules/pulls/routes.ts),
@@ -154,6 +164,41 @@ touch, report it rather than widening the baseline. If a rule is genuinely
 wrong, change the rule in `server/.dependency-cruiser.cjs` with a comment
 explaining why.
 
+## A type-only cycle is still a cycle
+
+The `agents` entry above is the trap, because a module built exactly to the
+matrix at the top of this file reproduces it. `helpers.ts` type-imports the row
+alias from `repository.ts`:
+
+```ts
+// modules/agents/helpers.ts
+import type { AgentRow, AgentVersionRow } from './repository.js';
+```
+
+and `repository.ts` value-imports a helper back:
+
+```ts
+// modules/agents/repository.ts
+import { isConfigChange } from './helpers.js';
+```
+
+Nothing cycles at runtime — one direction is erased at compile time — but
+`tsPreCompilationDeps: true` is exactly the option that makes the gate see the
+erased edge, so `no-circular` fires anyway.
+
+**Do not baseline it, and do not relax the rule.** Adding
+`dependencyTypesNot: ['type-only']` to `no-circular` would also blind the gate to
+the four real `repo-intel` cycles, which are genuine runtime cycles through the
+composition root.
+
+The cycle exists because the shared type is declared in the adapter. Move it:
+declare the module's row and domain types in `domain.ts`, and the graph becomes
+`helpers.ts → domain.ts ← repository.ts` — acyclic, and `repository.ts` may
+still import `helpers.ts`. That is law 3's `domain.ts` doing exactly the job
+it was asked for. `agents` is one step away already: `repository.ts` gets
+`AgentRow` from `db/rows.ts` and merely re-exports it, so `helpers.ts` is
+reaching for the alias through the wrong file.
+
 ## `db/client.ts` is deliberately exempt
 
 `core-no-persistence` forbids `^src/db/` *except* `^src/db/client\.ts$`. That
@@ -174,11 +219,15 @@ that needed to mention a repository's construction signature would be unable to
 name its argument type, and the module would be forced to invent a duplicate
 alias.
 
-The exemption is for the **type**, not the handle. Importing `Db` into a core
-file to hold onto a live connection is the violation the rule exists to catch
-even though the gate will not flag the import itself. Everything else under
-`src/db/` — `schema.ts`, `rows.ts`, the migrations — stays out of the core with
-no exceptions.
+The exemption is for the **type**, not the handle — but be clear that it is a
+*hole in the gate*, not a type-level guarantee. `db/client.ts` also exports
+`DbHandle` and the `createDb(databaseUrl, opts): DbHandle` factory, which opens a
+live `postgres()` connection, and the `pathNot` exempts the whole file. A
+`service.ts` can `import { createDb } from '../../db/client.js'` and connect to
+the database with `arch:check` green. See
+[`rules/drizzle.md`](drizzle.md#dbclientts-is-exempt-and-the-exemption-has-a-hole)
+for the cost and the proper fix. Everything else under `src/db/` — `schema.ts`,
+`rows.ts`, the migrations — stays out of the core with no exceptions.
 
 ## Related
 

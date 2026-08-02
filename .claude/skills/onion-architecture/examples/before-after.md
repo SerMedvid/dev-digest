@@ -16,7 +16,7 @@ about the current state of the baseline.
 ## Step 1 — the "before", quoted from the real file
 
 This is [`server/src/modules/agents/service.ts`](../../../../server/src/modules/agents/service.ts)
-as it stands today, not a paraphrase. The full class has ten methods (`list`,
+as it stands today, not a paraphrase. The full class has eleven methods (`list`,
 `get`, `delete`, `create`, `update`, `listVersions`, `getVersion`, `skillLinks`,
 `setSkills`, `linkSkill`, `listModels`); the excerpt below keeps the
 constructor and the two methods (`list`, `listModels`) that Steps 2 and 4

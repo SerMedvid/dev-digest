@@ -38,12 +38,17 @@ module.exports = {
       name: 'core-no-sdk',
       comment:
         'Third-party SDKs belong in adapters, behind a port from ' +
-        '@devdigest/shared. The core never sees an SDK type.',
+        '@devdigest/shared. The core never sees an SDK type. Scoped and ' +
+        'prefixed packages need their own alternatives: `octokit` does not ' +
+        'match `@octokit/rest`, and `fastify` does not match `@fastify/cors` ' +
+        'or `fastify-type-provider-zod`.',
       severity: 'error',
       from: { path: CORE },
       to: {
         path:
-          'node_modules/(drizzle-orm|postgres|fastify|octokit|simple-git|@anthropic-ai|openai)/',
+          'node_modules/(drizzle-orm|postgres|fastify[^/]*|@fastify|' +
+          'octokit|@octokit|simple-git|@anthropic-ai|openai|' +
+          '@ast-grep|js-tiktoken)/',
       },
     },
     {
@@ -58,7 +63,7 @@ module.exports = {
     {
       name: 'no-cross-module-internals',
       comment:
-        'A module never imports another module s internals. Shared aggregates ' +
+        "A module never imports another module's internals. Shared aggregates " +
         'are constructed in the container; _shared is the only common ground.',
       severity: 'error',
       from: { path: '^src/modules/([^/]+)/' },
@@ -87,7 +92,10 @@ module.exports = {
       name: 'no-orphans',
       comment:
         'Weak dead-code signal: only catches files with neither importers nor ' +
-        'imports. Kept for hygiene, not relied on.',
+        'imports. Kept for hygiene, not relied on. The pathNot is defensive ' +
+        'only and fires on nothing today: both server.ts and app.ts have ' +
+        'outgoing imports, so neither can ever be an orphan. Keep it so a ' +
+        'future entrypoint with no imports is not reported.',
       severity: 'error',
       from: { orphan: true, pathNot: '^src/(server|app)\\.ts$' },
       to: {},
@@ -99,7 +107,10 @@ module.exports = {
     tsPreCompilationDeps: true,
     tsConfig: { fileName: 'tsconfig.json' },
     doNotFollow: { path: 'node_modules' },
-    // Tests legitimately reach across every boundary to wire fakes.
+    // Tests legitimately reach across every boundary to wire fakes. Defensive
+    // only, and it excludes nothing today: the cruise is scoped to src/, which
+    // holds no *.test.ts — the suite lives in server/test/. Keep it so a test
+    // colocated next to its subject later does not start failing the gate.
     exclude: { path: '\\.test\\.ts$' },
   },
 };

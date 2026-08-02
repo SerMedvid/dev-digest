@@ -31,8 +31,9 @@ const service = new AgentsService(deps);
 `AgentsServiceDeps` and `AgentsRepositoryPort` are the exact interfaces defined
 in `rules/di-container.md`'s proposed `modules/agents/ports.ts` —
 `AgentsRepositoryPort` lists the handful of methods the core calls (`list`,
-`listEnabled`, `getById`, `deleteById`, `insert`, `update`, `listVersions`,
-`getVersion`, `linkedSkills`, `linkSkill`, `setSkills`), and
+`getById`, `deleteById`, `insert`, `update`, `listVersions`, `getVersion`,
+`linkedSkills`, `linkSkill`, `setSkills` — not `listEnabled`, which only
+`reviews` calls, via `container.agentsRepo`), and
 `AgentsServiceDeps` bundles it with `llm(provider: Provider): Promise<LLMProvider>`.
 Satisfying that with an object literal costs nothing: no database, no
 constructed adapters, no `ContainerOverrides`.

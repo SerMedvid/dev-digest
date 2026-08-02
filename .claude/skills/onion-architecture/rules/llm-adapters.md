@@ -53,8 +53,10 @@ is still the only place that constructs it — the physical file is just outside
 - **Cost estimation** is two layers.
   [`adapters/llm/pricing.ts`](../../../../server/src/adapters/llm/pricing.ts)
   exports `estimateCost(model, tokensIn, tokensOut)`, a static USD-per-1M-token
-  table for OpenAI and Anthropic models (an unknown model returns `null`, not a
-  guess).
+  table for OpenAI, Anthropic, and a handful of OpenRouter models (an unknown
+  model returns `null`, not a guess). Its five OpenRouter entries are approximate
+  CI-runner fallbacks, and the file says so — the live pricing path is
+  `PriceBook`, below.
   [`platform/price-book.ts`](../../../../server/src/platform/price-book.ts)'s
   `PriceBook` class sits in front of it: it caches OpenRouter's live `/models`
   pricing for six hours and prefers that when available, falling back to the
@@ -69,8 +71,8 @@ is still the only place that constructs it — the physical file is just outside
 Prompt assembly and the grounding gate are business rules, not adapter
 concerns, and both must be testable against a fake `LLMProvider` with no
 network. Per `server/CLAUDE.md`'s "Known cruft" note,
-`platform/{prompt,grounding,structured}.ts` in `server/src` are 3-line
-re-export shims to `reviewer-core` — the real implementation (e.g.
+`platform/{prompt,grounding,structured}.ts` in `server/src` are thin re-export
+shims to `reviewer-core` — the real implementation (e.g.
 `reviewer-core/src/grounding.ts`) lives in that package. Import from
 `@devdigest/reviewer-core` directly in new code rather than through the shim.
 What to do with a finding that fails the grounding gate — drop it, flag it,
