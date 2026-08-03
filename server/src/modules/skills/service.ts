@@ -1,5 +1,6 @@
 import type {
   Skill,
+  SkillSource,
   SkillStats,
   SkillType,
   SkillVersion,
@@ -23,6 +24,9 @@ export interface CreateSkillInput {
   type: SkillType;
   body: string;
   enabled?: boolean;
+  /** Omitted by POST /skills, which is still always 'manual'. */
+  source?: SkillSource;
+  evidenceFiles?: string[];
 }
 
 export interface UpdateSkillInput {
@@ -57,6 +61,8 @@ export class SkillsService {
       type: input.type,
       body: input.body,
       ...(input.enabled !== undefined ? { enabled: input.enabled } : {}),
+      ...(input.source !== undefined ? { source: input.source } : {}),
+      ...(input.evidenceFiles !== undefined ? { evidenceFiles: input.evidenceFiles } : {}),
     });
     return toSkillDto(row);
   }

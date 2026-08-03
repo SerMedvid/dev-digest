@@ -78,6 +78,9 @@ flowchart TB
   subgraph Intel["Repo intelligence"]
     repoIntel["repo-intel<br/>/repos/:id/index-state · /resync"]
   end
+  subgraph Conventions["Conventions"]
+    conventions["conventions<br/>/repos/:id/conventions(/extract|/skill-draft|/skill)<br/>/conventions/:id"]
+  end
   subgraph Platform["Platform"]
     settings["settings<br/>/settings · /providers"]
     workspace["workspace<br/>/workspace"]

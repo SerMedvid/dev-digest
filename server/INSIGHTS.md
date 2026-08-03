@@ -13,6 +13,36 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-03** — A feature that resolves its model with
+  `getFeatureModelOverride(...) ?? SOME_LOCAL_CONSTANT` **silently diverges from
+  the Settings screen**. That screen renders
+  `chosen[id]?.model ?? f.defaultModel` straight off the `FEATURE_MODELS`
+  registry, so with nothing chosen it advertises the *registry* default while
+  the feature runs the *module's* constant — no error, no warning, and the only
+  symptom is a provider/model string in the UI that never matches what ran.
+  Conventions shipped this way for exactly one session: Settings said
+  `openai / gpt-5.4`, every scan used `openrouter / deepseek-v4-flash`. The fix
+  is to take the fallback from the registry itself
+  (`FEATURE_MODELS.find((f) => f.id === '<feature>')`) and change the registry
+  when you want a different default — never to restate it locally. Note the
+  registry is mirrored in `client/src/lib/feature-models.ts`, so a default
+  change is a two-file edit like any other shared contract.
+  (`src/modules/conventions/routes.ts:28`)
+
+- **2026-08-03** — [`src/modules/settings/feature-models.ts`](src/modules/settings/feature-models.ts)
+  is unreachable from any other module, and both ways around it are also closed.
+  Importing it directly is a `no-cross-module-internals` violation; wrapping it
+  in a `Container` getter instead closes a **cycle**, because the helper itself
+  type-imports `Container` (`container.ts → settings/feature-models.ts →
+  container.ts`), which `no-circular` rejects. So a new module that wants the
+  workspace's per-feature model has three options, and only the last two pass the
+  gate: give up, read the `settings` row in its own `repository.ts` (a cross-table
+  read inside one repository is allowed — this is what `conventions` does), or
+  move the helper to `platform/` and retype it to take `Db` instead of
+  `Container`. Its `FEATURE_MODELS` registry has had a `conventions` entry and a
+  Settings UI since long before any reader existed, so this bites the first module
+  that tries to use it. (`src/modules/conventions/repository.ts:38`)
+
 - **2026-08-03** — Extends the entry below: bumping the version in SQL fixed the
   *collision*, not the whole class, because `isBodyChange` still compared against
   an unlocked read. Two concurrent `PUT /skills/:id` calls where one re-sends the
@@ -89,6 +119,18 @@ an entry can age — verify before relying on one.
   `ContainerOverrides`. (`src/modules/repo-intel/service.ts:104`)
 
 ## Codebase patterns & tool notes
+
+- **2026-08-03** — The seeded demo repo has `clone_path: null`
+  ([`src/db/seed.ts`](src/db/seed.ts)), so any `*.it.test.ts` for a feature that
+  reads the clone takes the "no clone on disk" degradation branch and never
+  reaches the real code — the test goes green having exercised an early return.
+  It is easy to miss because the assertion that survives (`status` is terminal,
+  not `running`) still looks meaningful. To cover the real path, `mkdtemp` a
+  directory, write the files the feature expects into it, and
+  `db.update(t.repos).set({ clonePath: dir })` in a `beforeAll`. Put that block
+  **last** in the file if the feature replaces rows, and reset any state earlier
+  cases left behind (a scan parked at `queued` will 409 the next request).
+  (`test/conventions.it.test.ts:213`)
 
 - **2026-08-02** — Corrects the "reaching for the alias through the wrong file"
   advice in the `no-circular` entry below: a module's `helpers.ts` cannot import
@@ -168,6 +210,19 @@ an entry can age — verify before relying on one.
   (`src/modules/reviews/run-executor.ts:213`)
 
 ## Recurring errors & fixes
+
+- **2026-08-03** — `pnpm db:generate` **blocks on an interactive prompt** when
+  one migration both drops a column and adds columns to the same table: drizzle-kit
+  asks "created or renamed from another column?" once per added column. It reads
+  raw keypresses, so piping newlines into it does nothing and the command hangs —
+  which makes it unrunnable from any non-interactive shell, including an agent's.
+  Don't hand-write the SQL to get around it. Split the schema edit in two and
+  generate twice: first the deletion alone, then the additions (with no pending
+  dropped column, there is nothing to disambiguate and no prompt). That is why
+  `conventions` landed as `0013_drop_convention_accepted` plus
+  `0014_conventions_extractor` rather than one file. Adding a table alongside
+  column changes is fine — the prompt only fires on drop-plus-add in one table.
+  (`src/db/migrations/0013_drop_convention_accepted.sql`)
 
 - **2026-08-02** — Resolves the 2026-07-28 entry below: `writeFileAt` in
   [`test/indexer-pipeline.test.ts`](test/indexer-pipeline.test.ts) now uses
