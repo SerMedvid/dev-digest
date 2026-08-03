@@ -1,11 +1,14 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { render, screen, cleanup, fireEvent } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import messages from "../../../../../../../messages/en/skills.json";
 import { CreateSkillModal } from "./CreateSkillModal";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+});
 
 function renderWithIntl(ui: React.ReactElement) {
   const qc = new QueryClient();
@@ -40,10 +43,33 @@ describe("CreateSkillModal", () => {
     expect(submit).toBeEnabled();
   });
 
-  it("opens on the requested tab", () => {
+  it("opens on the requested tab, with no body field until a file is picked", () => {
     openModal("file");
     expect(screen.getByLabelText(/import from file/i)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Import skill" })).toBeInTheDocument();
+    // An empty textarea before a file is chosen reads as "type here" — it isn't.
+    expect(screen.queryByPlaceholderText(/describe the rule/i)).not.toBeInTheDocument();
+  });
+
+  it("shows the reason a creation failed", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        statusText: "Unprocessable Entity",
+        json: async () => ({ error: { message: 'A skill named "dupe" already exists' } }),
+      })),
+    );
+
+    openModal();
+    fireEvent.change(screen.getByLabelText("Skill name"), { target: { value: "dupe" } });
+    fireEvent.change(bodyBox(), { target: { value: "# Rule" } });
+    fireEvent.click(screen.getByRole("button", { name: "Create skill" }));
+
+    expect(await screen.findByText(/Could not create this skill/)).toHaveTextContent(
+      'A skill named "dupe" already exists',
+    );
   });
 
   it("fills the body from a picked markdown file and derives the name from its heading", async () => {

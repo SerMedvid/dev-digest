@@ -214,7 +214,7 @@ export function CreateSkillModal({
 
         {create.isError && (
           <div style={s.error}>
-            {t("drawer.importFailed")}
+            {onFileTab ? t("drawer.importFailed") : t("drawer.createFailed")}
             {create.error instanceof ApiError ? ` — ${create.error.message}` : ""}
           </div>
         )}

@@ -97,6 +97,7 @@
     },
     "create": "Create skill",
     "creating": "Creating…",
+    "createFailed": "Could not create this skill.",
     "importFailed": "Import failed"
   },
   "file": {

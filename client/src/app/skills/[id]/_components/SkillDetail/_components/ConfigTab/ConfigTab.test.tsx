@@ -4,6 +4,7 @@ import { NextIntlClientProvider } from "next-intl";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { Skill } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/skills.json";
+import { MAX_SKILL_BODY_CHARS } from "../../constants";
 import { ConfigTab } from "./ConfigTab";
 
 afterEach(() => {
@@ -71,5 +72,42 @@ describe("ConfigTab", () => {
 
     await waitFor(() => expect(put).toHaveBeenCalled());
     expect(put.mock.calls[0]?.[1]).toMatchObject({ body: "# changed", summary: "Tightened" });
+  });
+
+  it("shows the reason the save failed", async () => {
+    // Mutations default to retry: 0, so no QueryClient tuning is needed here.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: false,
+        status: 422,
+        statusText: "Unprocessable Entity",
+        json: async () => ({ error: { message: "Body exceeds 20000 characters" } }),
+      })),
+    );
+
+    const { container } = renderWithIntl(<ConfigTab skill={SKILL} />);
+    fireEvent.change(bodyField(container), { target: { value: "# changed" } });
+    fireEvent.click(screen.getByRole("button", { name: /save/i }));
+
+    // The message and the ApiError detail are two text nodes in one element.
+    expect(await screen.findByText(/Could not save this skill/)).toHaveTextContent(
+      "Body exceeds 20000 characters",
+    );
+    // Still dirty, so the user can retry rather than being stuck.
+    expect(screen.getByRole("button", { name: /save/i })).toBeEnabled();
+  });
+
+  it("blocks the save one character past the body limit", () => {
+    const { container } = renderWithIntl(<ConfigTab skill={SKILL} />);
+    const save = () => screen.getByRole("button", { name: /save/i });
+
+    fireEvent.change(bodyField(container), { target: { value: "x".repeat(MAX_SKILL_BODY_CHARS) } });
+    expect(save()).toBeEnabled();
+
+    fireEvent.change(bodyField(container), {
+      target: { value: "x".repeat(MAX_SKILL_BODY_CHARS + 1) },
+    });
+    expect(save()).toBeDisabled();
   });
 });

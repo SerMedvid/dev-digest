@@ -23,8 +23,23 @@ function stubStats(stats: SkillStats) {
   );
 }
 
+/** A failing load. `retry: false` below is what makes the error state reachable. */
+function stubFailure(status = 500) {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: false,
+      status,
+      statusText: "Internal Server Error",
+      json: async () => ({ error: { message: "boom" } }),
+    })),
+  );
+}
+
 function renderWithIntl(ui: React.ReactElement) {
-  const qc = new QueryClient();
+  // Without this the query retries 3× with backoff and the error state never
+  // arrives inside waitFor's window.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
@@ -56,5 +71,12 @@ describe("StatsTab", () => {
     stubStats({ agent_count: 0, agents: [] });
     renderWithIntl(<StatsTab skillId="sk1" />);
     expect(await screen.findByText("Not used by any agent yet")).toBeInTheDocument();
+  });
+
+  it("offers a retry when the usage load fails", async () => {
+    stubFailure();
+    renderWithIntl(<StatsTab skillId="sk1" />);
+    expect(await screen.findByText("Could not load usage for this skill.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
 });

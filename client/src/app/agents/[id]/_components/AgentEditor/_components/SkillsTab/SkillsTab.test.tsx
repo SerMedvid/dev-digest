@@ -122,8 +122,31 @@ function stubDeferredPosts(): DeferredPost[] {
   return posts;
 }
 
+/** Every GET fails. Reaching the error branch needs `retry: false` below. */
+function stubFailure() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({ error: { message: "boom" } }),
+    })),
+  );
+}
+
+/** A workspace with no skills at all, and no links. */
+function stubEmpty() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ok([])),
+  );
+}
+
 function renderWithIntl(ui: React.ReactElement) {
-  const qc = new QueryClient();
+  // Without this a failing query retries 3× with backoff and the error state
+  // never arrives inside waitFor's window.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={{ agents: messages, skills: skillMessages }}>
@@ -155,6 +178,36 @@ describe("SkillsTab", () => {
     fireEvent.click(await screen.findByRole("checkbox", { name: /pr-quality-rubric/ }));
     await waitFor(() => expect(post).toHaveBeenCalled());
     expect(post.mock.calls[0]?.[1]).toEqual({ skill_ids: [] });
+  });
+
+  it("offers a retry when the skills library fails to load", async () => {
+    stubFailure();
+    renderWithIntl(<SkillsTab agent={AGENT} />);
+    expect(await screen.findByText("Could not load skills.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
+  });
+
+  it("points at the Skills library when the workspace has no skills", async () => {
+    stubEmpty();
+    renderWithIntl(<SkillsTab agent={AGENT} />);
+    expect(await screen.findByText("No skills in this workspace yet")).toBeInTheDocument();
+    expect(screen.getByText("Create one in the Skills library")).toBeInTheDocument();
+    // Nothing to attach, so no rows and no counter row to mislead.
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+  });
+
+  it("filters rows case-insensitively and restores them when cleared", async () => {
+    stubSkillsAndLinks();
+    renderWithIntl(<SkillsTab agent={AGENT} />);
+    const filter = await screen.findByLabelText("Filter skills…");
+
+    fireEvent.change(filter, { target: { value: "  SECRET  " } });
+    expect(screen.getByRole("checkbox", { name: /secret-leakage-gate/ })).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /pr-quality-rubric/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: /no-then-chains/ })).not.toBeInTheDocument();
+
+    fireEvent.change(filter, { target: { value: "" } });
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
   });
 
   /* Characterisation: rapid toggles converge on the last one. It holds because a

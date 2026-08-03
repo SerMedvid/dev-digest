@@ -41,7 +41,27 @@ function renderWithVersions(versions: SkillVersion[]) {
       json: async () => versions,
     })),
   );
-  const qc = new QueryClient();
+  return renderTab();
+}
+
+/** A failing history load. `retry: false` is what makes the error state reachable. */
+function renderWithFailure() {
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () => ({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: async () => ({ error: { message: "boom" } }),
+    })),
+  );
+  return renderTab();
+}
+
+function renderTab() {
+  // Without this the query retries 3× with backoff and the error state never
+  // arrives inside waitFor's window.
+  const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={qc}>
       <NextIntlClientProvider locale="en" messages={{ skills: messages }}>
@@ -62,5 +82,11 @@ describe("VersionsTab", () => {
     renderWithVersions([v(2, "Tightened"), v(1, null)]);
     fireEvent.click(await screen.findByRole("button", { name: /^diff$/i }));
     expect(screen.getByTestId("diff-view")).toBeInTheDocument();
+  });
+
+  it("offers a retry when the history load fails", async () => {
+    renderWithFailure();
+    expect(await screen.findByText("Could not load the version history.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /retry/i })).toBeInTheDocument();
   });
 });

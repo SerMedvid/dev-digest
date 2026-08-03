@@ -42,6 +42,19 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-03** — A test that asserts a query's **error** state must build its
+  QueryClient with `defaultOptions: { queries: { retry: false } }`. The test
+  helpers here all do a bare `new QueryClient()`, which inherits react-query's
+  default `retry: 3` with exponential backoff — the stubbed failure retries for
+  ~7s, `ErrorState` never renders inside `waitFor`'s 1s window, and the test
+  reads as "the error branch is broken" when it is only slow. Mutation-error
+  tests need no such change (mutations default to `retry: 0`), which is why a
+  failed *save* asserts fine with the plain helper. Also: stub the failure as
+  `{ ok: false, status, json: async () => ({ error: { message } }) }` —
+  `apiFetch` reads `body.error.message` for the `ApiError` text, and without it
+  the inline detail is just `"500 Internal Server Error"`.
+  (`src/app/skills/[id]/_components/SkillDetail/_components/StatsTab/StatsTab.test.tsx:26`)
+
 - **2026-08-03** — With `@tanstack/react-query` 5.62, calling `mutate` again on
   the same `useMutation` instance **discards the previous call's mutate-level
   callbacks**: `mutate` re-points the single mutation observer, so when the
