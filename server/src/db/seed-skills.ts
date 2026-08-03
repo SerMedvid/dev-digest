@@ -21,9 +21,17 @@ export interface SeedSkill {
 }
 
 /**
- * The test-quality trio. They are linked to the General Reviewer by the seed:
- * it is the generalist whose remit already covers correctness and
- * maintainability, while Security and Performance stay narrow on purpose.
+ * The Test Quality Reviewer's checks.
+ *
+ * That agent ships as a thin shell — role, severity, verdict, findings
+ * discipline — and gets ALL of its subject matter from these skills, in link
+ * order. They are the reason it finds anything, so editing one here (or in the
+ * Skills library) changes the next review with no deploy. See
+ * `docs/superpowers/specs/2026-08-02-test-quality-reviewer-design.md`.
+ *
+ * They are deliberately NOT linked to General/Security/Performance: those keep
+ * their own remits, and a security review that also comments on over-mocking is
+ * a diluted security review.
  */
 export const SEED_SKILLS: SeedSkill[] = [
   {
@@ -98,9 +106,49 @@ Prefer the real thing where it is cheap and deterministic — a real object, an
 in-memory implementation, a fixture. Mock the outside world (network, clock,
 randomness, paid APIs), not your own code.`,
   },
+  {
+    name: 'flaky-test-gate',
+    description: 'Flags constructs that make a test pass or fail by luck.',
+    type: 'custom',
+    body: `# Flaky test gate
+
+A test that fails once a fortnight is worse than a missing test: it trains the
+team to re-run CI instead of reading it. Flag these constructs when the diff
+introduces them:
+
+- **Real time.** \`Date.now()\`, \`new Date()\`, timers, or an assertion on
+  elapsed duration. Inject a clock or freeze time.
+- **Real randomness.** \`Math.random\`, uuid generation, or hash ordering used
+  in an assertion. Seed it or assert on a property instead of a value.
+- **Real network or filesystem contention.** Live HTTP, a fixed port, a fixed
+  temp path two tests can share.
+- **\`sleep\` as synchronisation.** Waiting a fixed number of milliseconds for
+  something to finish. Wait for the condition, not the clock.
+- **Order dependence.** State left in a module, a shared client, a database row,
+  or a global that another test relies on — or is broken by. Symptom: the test
+  passes alone and fails in the suite, or vice versa.
+- **Unawaited promises.** Work that continues after the test returns and lands
+  during the next one.
+- **Environment assumptions.** Locale, timezone, path separator, line endings,
+  CPU count, or ordering guarantees the platform does not make.
+
+Report the construct and the interleaving or environment that makes it fail —
+"this is flaky" without a mechanism is not a finding.`,
+  },
 ];
 
-/** Skills linked to a seeded agent, by agent name → ordered skill names. */
+/**
+ * Skills linked to a seeded agent, by agent name → ordered skill names. Order
+ * is the injection order in the assembled prompt.
+ *
+ * The link pass resolves the agent by name and skips silently when it is
+ * absent, so this stays inert until the Test Quality Reviewer is seeded.
+ */
 export const SEED_AGENT_SKILLS: Record<string, string[]> = {
-  'General Reviewer': ['uncovered-branches', 'edge-case-coverage', 'mock-overuse-gate'],
+  'Test Quality Reviewer': [
+    'uncovered-branches',
+    'edge-case-coverage',
+    'mock-overuse-gate',
+    'flaky-test-gate',
+  ],
 };

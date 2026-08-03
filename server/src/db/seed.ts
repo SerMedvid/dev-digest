@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
-import { eq, and } from 'drizzle-orm';
+import { eq, and, inArray } from 'drizzle-orm';
 import { pathToFileURL } from 'node:url';
 import {
   GENERAL_REVIEWER_PROMPT,
@@ -258,6 +258,7 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
   // would bump the agent to v2 and write an agent_versions snapshot, while the
   // other seeded agents sit at v1 with no snapshots at all — this seed does not
   // do agent versioning.
+  const wantedLinks = new Set<string>();
   for (const [agentName, skillNames] of Object.entries(SEED_AGENT_SKILLS)) {
     const [agent] = await db
       .select({ id: t.agents.id })
@@ -271,10 +272,74 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         .from(t.skills)
         .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, skillName)));
       if (!skill) continue;
+      wantedLinks.add(`${agent.id}:${skill.id}`);
       await db
         .insert(t.agentSkills)
         .values({ agentId: agent.id, skillId: skill.id, order })
         .onConflictDoNothing();
+    }
+  }
+
+  // Drop built-in links this seed no longer wants, so retargeting
+  // SEED_AGENT_SKILLS takes effect on an existing database instead of leaving
+  // the previous wiring in place beside the new one.
+  //
+  // Scoped to built-in agent × built-in skill pairs: a link involving a skill
+  // or an agent the user created is never considered, so hand-made wiring
+  // survives a re-seed. The one thing this does claim is that the seed owns
+  // the links BETWEEN its own agents and its own skills — attaching a built-in
+  // skill to a built-in agent by hand will not survive `pnpm db:seed`.
+  const builtinAgents = await db
+    .select({ id: t.agents.id })
+    .from(t.agents)
+    .where(
+      and(
+        eq(t.agents.workspaceId, workspaceId),
+        inArray(
+          t.agents.name,
+          seedAgents.map((a) => a.name),
+        ),
+      ),
+    );
+  const builtinSkills = await db
+    .select({ id: t.skills.id })
+    .from(t.skills)
+    .where(
+      and(
+        eq(t.skills.workspaceId, workspaceId),
+        inArray(
+          t.skills.name,
+          SEED_SKILLS.map((s) => s.name),
+        ),
+      ),
+    );
+
+  if (builtinAgents.length > 0 && builtinSkills.length > 0) {
+    const existing = await db
+      .select({ agentId: t.agentSkills.agentId, skillId: t.agentSkills.skillId })
+      .from(t.agentSkills)
+      .where(
+        and(
+          inArray(
+            t.agentSkills.agentId,
+            builtinAgents.map((a) => a.id),
+          ),
+          inArray(
+            t.agentSkills.skillId,
+            builtinSkills.map((s) => s.id),
+          ),
+        ),
+      );
+    for (const link of existing) {
+      if (wantedLinks.has(`${link.agentId}:${link.skillId}`)) continue;
+      await db
+        .delete(t.agentSkills)
+        .where(
+          and(
+            eq(t.agentSkills.agentId, link.agentId),
+            eq(t.agentSkills.skillId, link.skillId),
+          ),
+        );
     }
   }
 

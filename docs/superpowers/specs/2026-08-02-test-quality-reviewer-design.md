@@ -1,6 +1,7 @@
 # Design — Test Quality Reviewer (a fourth built-in agent)
 
 Date: 2026-08-02
+Revised: 2026-08-03 — the domain rules are **pluggable skills**, not prompt text.
 Status: approved, not yet implemented
 
 ## Problem
@@ -28,15 +29,23 @@ test dimension of a PR diff at the same precision bar as the existing three, and
 blocks a merge only for tests that create false confidence or quietly shrink what
 CI runs.
 
+**What it looks for is not baked into its prompt.** The agent ships as a thin
+shell — how to reason, how to rate, how to report — and the subject-matter rules
+arrive as **linked skills**, editable in the Skills library without touching a
+prompt constant, a migration, or a deploy.
+
 ## Decisions
 
 | Question | Decision |
 |---|---|
-| Form | A **built-in agent**, not a skill. Follows General/Security/Performance exactly: a canonical `.md`, a prompt constant, a seeded row. It gets its own model call, its own findings and its own verdict. |
-| Coverage philosophy | **Risk-based.** Flag an untested branch only when skipping it leaves a regression class that matters. Never report a coverage percentage, and never flag an untested trivial mapper, getter or constant. Aligns with `TESTING.md` ("typological, not exhaustive"). |
-| What blocks a merge | **False confidence and silenced CI only** — see the severity table below. Missed corner cases, over-mocking and risk-based gaps are WARNING at most. Consistent with `pr-self-review`'s `blockers.md`, which already lists "a missing test" as an explicit non-blocker. |
-| Stack specificity | **Agnostic core + a hedged `Stack context` section**, mirroring `performance-reviewer.md`'s "assume this unless the diff shows otherwise". The agent reviews *imported* repos, which may be any stack, so the universal rules carry the weight and the stack section only sharpens the vocabulary. |
+| Form | A **built-in agent**. Follows General/Security/Performance exactly: a canonical `.md`, a prompt constant, a seeded row. It gets its own model call, its own findings and its own verdict. |
+| Where the rules live | **Pluggable skills, not prompt text.** The four subject areas (coverage gaps, edge cases, mocking, flakiness) are seeded `skills` rows linked to the agent, injected at review time under `## Skills / rules`. Editing a rule is a Skills-library edit; adding a fifth area is a new skill, not a prompt rewrite. |
+| What stays native | **Role, How to analyze, Quality bar, the severity table, Verdict, Findings discipline.** Severity maps to the output schema and decides `request_changes`, so it cannot be delegated to text a user may unlink. The five concrete `CRITICAL` items stay with it. |
+| Coverage philosophy | **Risk-based.** Flag an untested branch only when skipping it leaves a regression class that matters. Never report a coverage percentage, and never flag an untested trivial mapper, getter or constant. Aligns with `TESTING.md` ("typological, not exhaustive"). Enforced inside the `uncovered-branches` skill. |
+| What blocks a merge | **False confidence and silenced CI only.** Missed corner cases, over-mocking and risk-based gaps are WARNING at most. Consistent with `pr-self-review`'s `blockers.md`, which already lists "a missing test" as an explicit non-blocker. |
+| Stack specificity | **Agnostic core + a hedged `Stack context` section**, mirroring `performance-reviewer.md`'s "assume this unless the diff shows otherwise". The agent reviews *imported* repos, which may be any stack. |
 | Enabled by default | **Yes**, like the other three. Accepted consequence: "Review all" fans out to every enabled agent, so this adds a 4th model call per PR — roughly 33% more cost and wall-clock. One toggle on the agent card disables it. |
+| Who gets the skills | **The Test Quality Reviewer only.** General/Security/Performance stay on their own remits; a security review that also comments on over-mocking is a diluted security review. |
 | Prompt/doc drift | Add a hermetic test asserting each of the four `docs/agent-prompts/*.md` files equals its `seed-prompts.ts` constant. Today the mirror is enforced only by a comment. |
 
 ## Out of scope
@@ -44,7 +53,8 @@ CI runs.
 Coverage tooling or instrumentation of any kind — the agent reads the diff, it
 never runs tests, and it must never claim a coverage number. No change to
 `reviewer-core`, the output schema, the grounding gate, or the severity enum. No
-skill-library entry, and no mutation-testing or test-generation behaviour.
+mutation testing and no test generation. No UI work: the Skills library and the
+agent editor's Skills tab already render everything this needs.
 
 ---
 
@@ -52,26 +62,26 @@ skill-library entry, and no mutation-testing or test-generation behaviour.
 
 ### 1. Files
 
-No schema change, no new module, no client work — the agents list is DB-driven,
-so the new reviewer appears in `/agents` on its own.
+No schema change and no new module — the agents list and the skills library are
+both DB-driven, so the new reviewer and its rules appear on their own.
 
 | File | Change |
 |---|---|
-| [`docs/agent-prompts/test-quality-reviewer.md`](../../agent-prompts/test-quality-reviewer.md) | **new** — the canonical, reviewable prose |
-| [`server/src/db/seed-prompts.ts`](../../../server/src/db/seed-prompts.ts) | `+ TEST_QUALITY_REVIEWER_PROMPT` (mirror of the `.md`) |
+| [`docs/agent-prompts/test-quality-reviewer.md`](../../agent-prompts/test-quality-reviewer.md) | **new** — the canonical, reviewable prose (the shell only) |
+| [`server/src/db/seed-prompts.ts`](../../../server/src/db/seed-prompts.ts) | `+ TEST_QUALITY_REVIEWER_PROMPT` |
+| [`server/src/db/seed-skills.ts`](../../../server/src/db/seed-skills.ts) | `+ flaky-test-gate`; links retarget to the new agent |
 | [`server/src/db/seed.ts`](../../../server/src/db/seed.ts) | `+ 1` entry in `seedAgents` |
-| [`docs/agent-prompts/README.md`](../../agent-prompts/README.md) | `+ 1` link in the list of canonical prompts |
+| [`docs/agent-prompts/README.md`](../../agent-prompts/README.md) | `+ 1` link, and a note that this agent's checks are skills |
 | `server/test/seed-prompts.test.ts` | **new** — the mirror guard |
 
-### 2. Prompt structure
+### 2. The prompt shell
 
-Section-for-section the same shape as `performance-reviewer.md`, so the four
-reviewers stay legible as a set:
+Section-for-section the same shape as `performance-reviewer.md`, minus the
+subject-matter body:
 
 ```
 # Role
 # Stack context (assume this unless the diff shows otherwise)
-# What to look for (priority order)
 # How to analyze
 # Quality bar
 # Severity — use exactly these three levels
@@ -79,50 +89,56 @@ reviewers stay legible as a set:
 # Findings discipline
 ```
 
-**`What to look for`**, in priority order:
+There is deliberately **no `What to look for`** section. In its place the `Role`
+states that the specific checks arrive as rules under `## Skills / rules` in the
+user message, that they are to be applied as written, and that their order is the
+author's priority order.
 
-1. **False confidence — a test that cannot fail.** No assertion reached; the
-   assertion targets the mock rather than the subject; a missing `await` on an
-   async expectation; `expect` inside a callback that is never invoked; a
-   snapshot accepted without being read.
-2. **Corner cases and risk-based gaps.** Error and rejection paths, boundaries
-   (`0`, `1`, limit, limit+1), empty and null, duplicate and out-of-order input,
-   concurrency, and tenant/workspace scoping. Only where the missing case is a
-   regression class that matters — never a coverage complaint.
-3. **Mocking.** Mocking the unit under test; asserting call counts where
-   behaviour is observable; stubs deep enough that the test would pass after the
-   subject was rewritten; a mock encoding a contract the real dependency does not
-   have (the test then pins the mock, not reality).
-4. **Flakiness.** Real clocks, `Date.now`, `Math.random`, real network, `sleep`
-   as synchronisation, dependence on test execution order, shared mutable module
-   state, unawaited promises, fixed ports or paths, locale/timezone assumptions.
+`How to analyze` keeps the reasoning that is true of any test review regardless
+of which rules are attached: read the test and the code it covers together; ask
+what the test would still pass with if the subject were wrong; only flag what
+this diff introduced or worsened.
 
-**`Stack context`** names the JS/TS signals concretely — vitest/jest, React
-Testing Library, testcontainers, Playwright — hedged with "unless the diff shows
-otherwise" so it degrades gracefully on an imported repo in another language.
+### 3. The skills
 
-### 3. Severity
+Four seeded skills, linked to the agent in this order:
 
-The `CRITICAL` list is closed. Anything not on it is at most WARNING, however
-serious it reads.
+| Order | Skill | Type | Carries |
+|---|---|---|---|
+| 0 | `uncovered-branches` | `rubric` | Untested branches that matter — error paths, boundaries, degradation, scoping predicates. Bans coverage percentages outright. |
+| 1 | `edge-case-coverage` | `rubric` | Numeric, collection, absence, text, time, concurrency and tenancy cases; reports the missing *case*, not a missing file. |
+| 2 | `mock-overuse-gate` | `custom` | Subject mocked, call-count assertions where behaviour is observable, stubs that survive a rewrite, mocks encoding a contract reality lacks. |
+| 3 | `flaky-test-gate` | `custom` | Real clocks/`Date.now`/`Math.random`, real network, `sleep` as synchronisation, order dependence, shared mutable module state, unawaited promises, fixed ports or paths, locale and timezone assumptions. |
+
+The first three already exist in `seed-skills.ts`. This work adds
+`flaky-test-gate` — without it the flakiness dimension is lost, because it is no
+longer carried by the prompt — and moves the links from General Reviewer to the
+Test Quality Reviewer.
+
+### 4. Severity
+
+The `CRITICAL` list stays in the prompt and stays closed. Anything not on it is
+at most WARNING, however serious it reads, and a linked skill **cannot introduce
+a new CRITICAL category** — the prompt says so explicitly, because skill bodies
+are trusted instructions rendered verbatim.
 
 | Level | Earns it |
 |---|---|
 | **CRITICAL** (the only level that blocks merge) | `.only` left in the diff; a test that cannot fail; an assertion on the mock instead of the subject; a previously passing test deleted or `.skip`ped in a way that hides the change's effect; a missing `await` on an async assertion |
-| **WARNING** | An untested risky path, a missed boundary, over-mocking, or a flaky construct |
+| **WARNING** | Anything a linked skill reports: an untested risky path, a missed boundary, over-mocking, a flaky construct |
 | **SUGGESTION** | Test naming, structure, duplication |
 
-The prompt repeats the house rules verbatim in shape: the verdict is a pure
-function of the findings, zero findings is a good answer and means `approve`,
-every finding cites a file and line range present in the diff, and `kind` is
-`"finding"` with `trifecta_components` / `evidence` left null.
+The house rules are repeated verbatim in shape: the verdict is a pure function of
+the findings, zero findings is a good answer and means `approve`, every finding
+cites a file and line range present in the diff, and `kind` is `"finding"` with
+`trifecta_components` / `evidence` left null.
 
-### 4. Seeding
+### 5. Seeding
 
 ```ts
 {
   name: 'Test Quality Reviewer',
-  description: 'Judges the tests in a diff: false confidence, missed corner cases, over-mocking, flakiness.',
+  description: 'Judges the tests in a diff. Its checks are linked skills — edit them in the Skills library.',
   provider: DEFAULT_PROVIDER,
   model: DEFAULT_MODEL,
   systemPrompt: TEST_QUALITY_REVIEWER_PROMPT,
@@ -131,53 +147,73 @@ every finding cites a file and line range present in the diff, and `kind` is
 }
 ```
 
-`seedAgents` inserts only when no agent of that name exists in the workspace, so
-an existing database picks the reviewer up on the next `pnpm db:seed` and a
-re-run changes nothing. No migration.
+`seedAgents` inserts only when no agent of that name exists, so an existing
+database picks the reviewer up on the next `pnpm db:seed` and a re-run changes
+nothing. No migration.
 
-### 5. The mirror guard
+Two invariants the existing seed already establishes and this work preserves:
+every seeded skill writes its `skill_versions` v1 row, and links are inserted as
+plain `agent_skills` rows rather than through `setSkills`, which would bump the
+agent to v2 while its siblings sit at v1 with no snapshots.
 
-`docs/agent-prompts/*.md` and the constants in `seed-prompts.ts` are duplicated
-by design — the `.md` is the reviewable original, the constant is what seeds the
-DB — and the only thing keeping them equal today is a comment saying "keep the
-two in sync".
+**The seed reconciles its own links.** Inserting the wanted links is not enough:
+retargeting `SEED_AGENT_SKILLS` on an already-seeded database would otherwise
+leave the previous wiring in place beside the new one — exactly what happened
+when these skills moved off the General Reviewer. After the insert pass the seed
+deletes every link it no longer wants, **scoped to built-in agent × built-in
+skill pairs**. A link involving an agent or a skill the user created is never
+considered, so hand-made wiring survives `pnpm db:seed`. The one thing this does
+claim is that the seed owns the links *between its own agents and its own
+skills*: attaching a built-in skill to a built-in agent by hand will not survive
+a re-seed. Verified both directions on 2026-08-03 — stale built-in links are
+removed, a custom agent's link to a built-in skill is not.
 
-The test compares each pair after normalising the two escapes a TS template
-literal requires: `` \` `` → `` ` `` and `\${` → `${`. Verified on 2026-08-02:
-all three existing pairs are byte-identical under that normalisation
-(4317 / 5274 / 5999 chars), so the guard passes the moment it is written.
+**Ordering constraint:** the link loop resolves the agent by name, so the Test
+Quality Reviewer must be inserted before the skill-link pass runs. It already is
+— `seedAgents` precedes the skills block.
 
-It is a hermetic test — plain file reads, no DB, no `.it.` suffix.
+### 6. The trade-off this design accepts
+
+A shell agent is only as good as its links. Unlink or disable every skill and the
+reviewer keeps its `CRITICAL` rules — `.only`, cannot-fail tests — but loses all
+four advisory dimensions and will approve far more than it should. That is the
+deliberate cost of making the rules editable without a deploy, and it is why the
+blocking rules were kept native rather than pushed into a fifth skill.
 
 ## States and degradation
 
 | Situation | Behaviour |
 |---|---|
-| A diff with no test files and no risky production change | No findings, `approve`, and the summary says what was checked. |
-| A diff with no test files but a risky production change | WARNING for the untested risk path. Never CRITICAL — test absence does not block. |
-| Test-only diff | Reviewed normally; the production-code gap rules simply find nothing to say. |
-| Imported repo in an unfamiliar language | The `Stack context` hedge applies; the universal rules (cannot-fail, over-mocking, flakiness) still hold. |
-| Agent disabled | Excluded from "Review all" like any disabled agent; no cost. |
+| All four skills linked and enabled (the seeded state) | Full review: blocking rules from the prompt, advisory breadth from the skills, in link order. |
+| A skill disabled globally | Drops out of this agent's prompt — and every other agent's. The remaining rules still apply. |
+| Every skill unlinked | The agent still catches the five `CRITICAL` shapes and still returns a valid verdict; it reports nothing advisory. Degraded, not broken. |
+| A skill deleted | Its link cascades away; the agent keeps working with one fewer rule. |
+| A diff with no test files but a risky production change | WARNING for the untested risk path, from `uncovered-branches`. Never CRITICAL — test absence does not block. |
+| Imported repo in an unfamiliar language | The `Stack context` hedge applies; the universal rules still hold. |
+| Agent disabled | Excluded from "Review all"; no cost. |
 | Prompt edited in only one of the two places | `server/test/seed-prompts.test.ts` fails, naming the file and the constant. |
 
 ## Testing
 
 - `server/test/seed-prompts.test.ts` (hermetic) — the four `.md` ⇄ constant
-  pairs match after escape normalisation.
-- No test asserts an agent count anywhere, and `e2e/specs/03-agents.flow.json`
-  waits on the text `"Security Reviewer"` specifically, so a fourth seeded agent
-  breaks no existing test. Verified 2026-08-02.
-- The prompt's *content* is not unit-testable and deliberately has no test: it is
-  reviewed as prose, in `docs/agent-prompts/`.
+  pairs match after normalising template-literal escapes.
+- No test asserts an agent count, and `e2e/specs/03-agents.flow.json` waits on
+  the text `"Security Reviewer"` specifically, so a fourth seeded agent breaks
+  nothing. Verified 2026-08-02.
+- The existing DB-backed lane already covers the seed path (45 tests green with
+  the three-skill seed on 2026-08-03); re-run it after the link retarget.
+- Prompt and skill *content* is not unit-testable and deliberately has no test:
+  it is reviewed as prose, in `docs/agent-prompts/` and the Skills library.
 
-**Gates:** `cd server && pnpm typecheck && pnpm arch:check` and the hermetic
-vitest lane.
+**Gates:** `cd server && pnpm typecheck && pnpm arch:check`, the hermetic vitest
+lane, and the DB-backed lane.
 
 ## Acceptance
 
-1. `docs/agent-prompts/test-quality-reviewer.md` exists and follows the eight-section house structure.
+1. `docs/agent-prompts/test-quality-reviewer.md` exists, follows the house structure, and contains **no** `What to look for` section — its `Role` points at `## Skills / rules` instead.
 2. `TEST_QUALITY_REVIEWER_PROMPT` mirrors it exactly, and the mirror guard proves it for all four reviewers.
-3. `pnpm db:seed` on an existing database adds "Test Quality Reviewer" and is idempotent on a second run.
-4. The agent appears in `/agents` with no client change.
-5. The prompt's `CRITICAL` list contains only the five closed items; coverage percentages appear nowhere in it.
-6. `docs/agent-prompts/README.md` lists all four canonical prompts.
+3. `pnpm db:seed` creates the agent and four skills, links all four to the Test Quality Reviewer in order 0–3, and leaves General/Security/Performance with no skills. A second run changes nothing.
+4. Each seeded skill has a `skill_versions` v1 row.
+5. A review run by this agent puts the four bodies into `## Skills / rules` in link order; disabling one removes it.
+6. Editing a skill body in the UI changes the next review with no deploy — the property the whole design exists for.
+7. The prompt's `CRITICAL` list contains only the five closed items, and states that a skill may not add a new one. Coverage percentages appear nowhere.
