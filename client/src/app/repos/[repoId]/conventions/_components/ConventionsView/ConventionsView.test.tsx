@@ -131,6 +131,39 @@ describe("ConventionsView", () => {
     expect(await screen.findByText(/Merged from 1 accepted convention/)).toBeInTheDocument();
   });
 
+  it("says so when deselect-all only partly succeeded", async () => {
+    const accepted = ["c1", "c2", "c3"].map((id) => ({ ...candidate, id, status: "accepted" }));
+    const patched: string[] = [];
+    const fetchMock = vi.fn(async (url: string, init?: RequestInit) => {
+      if (init?.method === "PATCH") {
+        const id = String(url).split("/conventions/")[1]!;
+        patched.push(id);
+        return id === "c2"
+          ? {
+              ok: false,
+              status: 500,
+              statusText: "Internal Server Error",
+              json: async () => ({ error: { message: "boom" } }),
+            }
+          : { ok: true, status: 200, statusText: "OK", json: async () => ({ ...candidate, id }) };
+      }
+      return {
+        ok: true,
+        status: 200,
+        statusText: "OK",
+        json: async () => ({ scan: scan(), candidates: accepted }),
+      };
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    renderView();
+    fireEvent.click(await screen.findByRole("button", { name: /deselect all/i }));
+
+    expect(await screen.findByText(/Some conventions could not be deselected/)).toBeInTheDocument();
+    // The other two were still attempted — one failure must not abort the rest.
+    expect(patched.sort()).toEqual(["c1", "c2", "c3"]);
+  });
+
   it("surfaces a failed scan with its reason", async () => {
     stubView({
       scan: scan({ status: "failed", error: "OPENROUTER_API_KEY is not configured" }),

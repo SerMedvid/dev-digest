@@ -28,4 +28,5 @@ export const s = {
     alignItems: "center",
   } as const,
   reason: { fontSize: 12.5, color: "var(--text-muted)" } as const,
+  error: { fontSize: 12.5, color: "var(--danger)", paddingBottom: 8 } as const,
 };

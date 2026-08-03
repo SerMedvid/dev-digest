@@ -34,6 +34,7 @@ export function ConventionsView({
   const extract = useExtractConventions();
   const patch = usePatchConvention();
   const [modalOpen, setModalOpen] = React.useState(false);
+  const [deselectFailed, setDeselectFailed] = React.useState(false);
 
   const scan = view.data?.scan ?? null;
   const candidates = React.useMemo(() => view.data?.candidates ?? [], [view.data]);
@@ -44,11 +45,23 @@ export function ConventionsView({
     extract.mutate(repoId);
   }
 
-  /** Reject every accepted candidate — "deselect all" in the mockup. */
-  function deselectAll() {
-    for (const c of candidates.filter((x) => x.status === "accepted")) {
-      patch.mutate({ repoId, id: c.id, patch: { status: "rejected" } });
-    }
+  /**
+   * Reject every accepted candidate — "deselect all" in the mockup.
+   *
+   * `mutateAsync` + `allSettled` rather than a loop of `mutate`: these all share
+   * one mutation instance, and re-calling `mutate` re-points its observer, so
+   * `isError` tracks only the last call and every superseded call's `onError`
+   * is dropped (see client/INSIGHTS.md). A partial failure would otherwise be
+   * invisible — some rows rejected, some not, and nothing said so.
+   */
+  async function deselectAll() {
+    setDeselectFailed(false);
+    const results = await Promise.allSettled(
+      candidates
+        .filter((x) => x.status === "accepted")
+        .map((c) => patch.mutateAsync({ repoId, id: c.id, patch: { status: "rejected" } })),
+    );
+    if (results.some((r) => r.status === "rejected")) setDeselectFailed(true);
   }
 
   const header = (
@@ -143,6 +156,7 @@ export function ConventionsView({
             onDeselectAll={deselectAll}
             onCreateSkill={() => setModalOpen(true)}
           />
+          {deselectFailed && <div style={s.error}>{t("selection.deselectFailed")}</div>}
           <div style={s.list}>
             {candidates.map((c) => (
               <ConventionCard key={c.id} repoId={repoId} candidate={c} />

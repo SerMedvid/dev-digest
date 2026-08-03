@@ -51,7 +51,8 @@
   "selection": {
     "count": "{accepted} of {total} accepted",
     "deselectAll": "Deselect all",
-    "createSkill": "Create skill"
+    "createSkill": "Create skill",
+    "deselectFailed": "Some conventions could not be deselected. Reload to see what stuck."
   },
   "card": {
     "confidence": "Confidence",
@@ -69,6 +70,8 @@
     "lineLabel": "Line",
     "snippetLabel": "Evidence",
     "saveFailed": "Could not save this convention.",
+    "ruleRequired": "A rule cannot be empty.",
+    "lineInvalid": "Line must be a whole number greater than 0.",
     "category": {
       "naming": "naming",
       "structure": "structure",
