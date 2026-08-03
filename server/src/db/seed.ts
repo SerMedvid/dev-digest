@@ -8,6 +8,7 @@ import {
   SECURITY_REVIEWER_PROMPT,
   PERFORMANCE_REVIEWER_PROMPT,
 } from './seed-prompts.js';
+import { SEED_AGENT_SKILLS, SEED_SKILLS } from './seed-skills.js';
 
 /** Default provider/model for the built-in reviewer agents. */
 const DEFAULT_PROVIDER = 'openrouter' as const;
@@ -219,6 +220,62 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       .from(t.agents)
       .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, a.name)));
     if (!existing) await db.insert(t.agents).values(a);
+  }
+
+  // ---- built-in skills + their agent links ----
+  // Bodies live in ./seed-skills.ts. Idempotent by (workspace, name), like the
+  // agents above.
+  for (const s of SEED_SKILLS) {
+    const [existing] = await db
+      .select()
+      .from(t.skills)
+      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, s.name)));
+    if (existing) continue;
+
+    const [row] = await db
+      .insert(t.skills)
+      .values({
+        workspaceId,
+        name: s.name,
+        description: s.description,
+        type: s.type,
+        source: 'manual',
+        body: s.body,
+        enabled: true,
+        version: 1,
+      })
+      .returning();
+    // A skill at v1 must have its v1 snapshot: SkillsRepository.insert
+    // guarantees this for user-created skills, and the Versions tab reads
+    // skill_versions — without this a seeded skill shows an empty history.
+    await db
+      .insert(t.skillVersions)
+      .values({ skillId: row!.id, version: 1, summary: null, body: row!.body })
+      .onConflictDoNothing();
+  }
+
+  // Links are plain rows on purpose. Going through AgentsRepository.setSkills
+  // would bump the agent to v2 and write an agent_versions snapshot, while the
+  // other seeded agents sit at v1 with no snapshots at all — this seed does not
+  // do agent versioning.
+  for (const [agentName, skillNames] of Object.entries(SEED_AGENT_SKILLS)) {
+    const [agent] = await db
+      .select({ id: t.agents.id })
+      .from(t.agents)
+      .where(and(eq(t.agents.workspaceId, workspaceId), eq(t.agents.name, agentName)));
+    if (!agent) continue;
+
+    for (const [order, skillName] of skillNames.entries()) {
+      const [skill] = await db
+        .select({ id: t.skills.id })
+        .from(t.skills)
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.name, skillName)));
+      if (!skill) continue;
+      await db
+        .insert(t.agentSkills)
+        .values({ agentId: agent.id, skillId: skill.id, order })
+        .onConflictDoNothing();
+    }
   }
 
   return { workspaceId, userId };
