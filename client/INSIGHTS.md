@@ -42,6 +42,18 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-03** — The vendored [`Modal`](src/vendor/ui/kit/Modal.tsx) pads its
+  own header (`18px 24px`) and footer (`16px 24px`) but gives the body **zero
+  padding**, so children dropped straight in sit flush against the border while
+  the title and buttons above/below them are inset — the feature has to supply
+  that gutter itself (`<div style={{ padding: 24 }}>`, as
+  [`CreateAgentModal`](src/app/agents/_components/AgentsListView/_components/CreateAgentModal/CreateAgentModal.tsx)
+  does). Compounding it, [`Tabs`](src/vendor/ui/kit/Tabs.tsx) defaults to
+  `pad="0 28px"`, which mismatches a modal's 24 — pass `pad="0 24px"` inside a
+  `Modal`. Every surface that composes these two has to restate the gutter, so
+  copy it from a neighbour rather than trusting the primitive's default.
+  (`src/app/skills/_components/SkillsListView/_components/CreateSkillModal/styles.ts:11`)
+
 - **2026-08-02** — The vendored form controls split on whether they forward
   props, which decides how a test can reach them.
   [`TextInput`](src/vendor/ui/kit/TextInput.tsx) spreads `...rest` onto its

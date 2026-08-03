@@ -88,12 +88,15 @@
   },
   "drawer": {
     "title": "Add a skill",
-    "subtitle": "Import from a file, a URL, or search vetted community skills",
+    "subtitle": "Write the rule yourself, or import a Markdown file from your machine",
     "tabs": {
+      "create": "Create",
       "file": "From file",
       "url": "From URL",
       "community": "Community"
     },
+    "create": "Create skill",
+    "creating": "Creating…",
     "importFailed": "Import failed"
   },
   "file": {
@@ -111,6 +114,10 @@
     "typeLabel": "Type",
     "pickFile": "Import from file",
     "pickFileHint": "Read in your browser — the file is never uploaded.",
+    "fileLabel": "Markdown file",
+    "dropzone": "Drop a .md file here, or",
+    "browse": "browse…",
+    "replaceFile": "replace…",
     "chars": "{count} / {max} characters",
     "cancel": "Cancel"
   },

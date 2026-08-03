@@ -8,7 +8,7 @@ import { useTranslations } from "next-intl";
 import { Button, Dropdown, EmptyState, ErrorState, Skeleton, Icon } from "@devdigest/ui";
 import { useSkills, useUpdateSkill } from "../../../../lib/hooks/skills";
 import { SkillCard } from "./_components/SkillCard";
-import { CreateSkillModal } from "./_components/CreateSkillModal";
+import { CreateSkillModal, type CreateSkillTab } from "./_components/CreateSkillModal";
 import { filterSkills } from "./helpers";
 import { s } from "./styles";
 
@@ -18,7 +18,8 @@ export function SkillsListView({ activeId }: { activeId?: string }) {
   const search = useSearchParams();
   const { data: skills, isLoading, isError, refetch } = useSkills();
   const update = useUpdateSkill();
-  const [creating, setCreating] = React.useState(false);
+  // null = closed; otherwise the tab the chosen entry point should open on.
+  const [creating, setCreating] = React.useState<CreateSkillTab | null>(null);
   const [query, setQuery] = React.useState("");
 
   const list = filterSkills(skills ?? [], query);
@@ -30,9 +31,10 @@ export function SkillsListView({ activeId }: { activeId?: string }) {
       {creating && (
         <CreateSkillModal
           open
-          onClose={() => setCreating(false)}
+          initialTab={creating}
+          onClose={() => setCreating(null)}
           onCreated={(id) => {
-            setCreating(false);
+            setCreating(null);
             router.push(`/skills/${id}?tab=config`);
           }}
         />
@@ -49,8 +51,8 @@ export function SkillsListView({ activeId }: { activeId?: string }) {
               </Button>
             }
             items={[
-              { label: t("page.menu.manual"), icon: "Edit", onClick: () => setCreating(true) },
-              { label: t("page.menu.fromFile"), icon: "FileText", onClick: () => setCreating(true) },
+              { label: t("page.menu.manual"), icon: "Edit", onClick: () => setCreating("create") },
+              { label: t("page.menu.fromFile"), icon: "FileText", onClick: () => setCreating("file") },
             ]}
           />
         </div>
@@ -81,7 +83,7 @@ export function SkillsListView({ activeId }: { activeId?: string }) {
             title={t("page.empty.title")}
             body={t("page.empty.body")}
             cta={t("page.empty.cta")}
-            onCta={() => setCreating(true)}
+            onCta={() => setCreating("file")}
           />
         )}
         {list.map((skill) => (
