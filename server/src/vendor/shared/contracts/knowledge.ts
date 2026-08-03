@@ -170,15 +170,90 @@ export const SkillWithUsage = Skill.extend({ agent_count: z.number().int() });
 export type SkillWithUsage = z.infer<typeof SkillWithUsage>;
 
 // ---- Conventions ----
+/**
+ * A house rule extracted from a repo. Closed category enum: the extractor
+ * enforces a per-category quota, which only works if the set is finite.
+ */
+export const ConventionCategory = z.enum([
+  'naming',
+  'structure',
+  'error-handling',
+  'api-shape',
+  'testing',
+  'imports',
+  'typing',
+  'tooling',
+]);
+export type ConventionCategory = z.infer<typeof ConventionCategory>;
+
+/** Three states, not a boolean: "rejected" and "not yet decided" differ. */
+export const ConventionStatus = z.enum(['pending', 'accepted', 'rejected']);
+export type ConventionStatus = z.infer<typeof ConventionStatus>;
+
 export const ConventionCandidate = z.object({
   id: z.string(),
+  category: ConventionCategory,
   rule: z.string(),
   evidence_path: z.string(),
+  /** 1-based, and verified against the file — never the model's raw guess. */
+  evidence_line: z.number().int().positive(),
   evidence_snippet: z.string(),
   confidence: z.number().min(0).max(1),
-  accepted: z.boolean(),
+  status: ConventionStatus,
 });
 export type ConventionCandidate = z.infer<typeof ConventionCandidate>;
+
+export const ConventionScanStatus = z.enum(['queued', 'running', 'done', 'failed']);
+export type ConventionScanStatus = z.infer<typeof ConventionScanStatus>;
+
+/**
+ * Why a candidate the model produced never reached the user. Surfaced so a
+ * zero-candidate scan is distinguishable from a scan that found twenty and
+ * threw them all away.
+ */
+export const ConventionDropCounts = z.object({
+  unknown_path: z.number().int().optional(),
+  missing_file: z.number().int().optional(),
+  line_out_of_range: z.number().int().optional(),
+  snippet_not_found: z.number().int().optional(),
+  low_confidence: z.number().int().optional(),
+  duplicate: z.number().int().optional(),
+  over_quota: z.number().int().optional(),
+});
+export type ConventionDropCounts = z.infer<typeof ConventionDropCounts>;
+
+export const ConventionScan = z.object({
+  status: ConventionScanStatus,
+  /** Code-file paths offered to the selection call; configs are not in the pool. */
+  pool_count: z.number().int(),
+  /** Files actually read and sent to extraction, configs included. */
+  sample_count: z.number().int(),
+  candidate_count: z.number().int(),
+  dropped: ConventionDropCounts,
+  provider: z.string().nullable(),
+  model: z.string().nullable(),
+  error: z.string().nullable(),
+  started_at: z.string().nullable(),
+  finished_at: z.string().nullable(),
+});
+export type ConventionScan = z.infer<typeof ConventionScan>;
+
+/** `scan: null` means this repo has never been scanned. */
+export const ConventionsView = z.object({
+  scan: ConventionScan.nullable(),
+  candidates: z.array(ConventionCandidate),
+});
+export type ConventionsView = z.infer<typeof ConventionsView>;
+
+/** The prefill for the create-skill modal, assembled server-side. */
+export const ConventionSkillDraft = z.object({
+  name: z.string(),
+  description: z.string(),
+  type: SkillType,
+  body: z.string(),
+  token_estimate: z.number().int(),
+});
+export type ConventionSkillDraft = z.infer<typeof ConventionSkillDraft>;
 
 // ---- Agents ----
 // 'openrouter' routes through the OpenAI-compatible API (OpenAIProvider with a
