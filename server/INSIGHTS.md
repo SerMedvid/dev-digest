@@ -13,6 +13,32 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-03** — Extends the entry below: bumping the version in SQL fixed the
+  *collision*, not the whole class, because `isBodyChange` still compared against
+  an unlocked read. Two concurrent `PUT /skills/:id` calls where one re-sends the
+  body it read make that one decide "unchanged" — so it skips the bump but
+  **still writes its body** (the `set` includes `body` regardless of
+  `bodyChanged`), and if its UPDATE lands second the live `skills.body` ends up in
+  no snapshot at all. Any "did this field change?" rule that gates a side effect
+  is a read-modify-write and needs the row: wrap it in `db.transaction` with
+  `.for('update')` on the read, and pass the `tx` into the write *and* the
+  snapshot insert (`snapshotVersion(tx, …)` — a snapshot written on `this.db`
+  escapes the transaction). This is the first transaction in `src/`; drizzle's tx
+  handle types as `Parameters<Parameters<Db['transaction']>[0]>[0]`.
+  `AgentsRepository.update` gates `configChanged` on the same kind of unlocked
+  read. (`src/modules/skills/repository.ts:104`)
+
+- **2026-08-03** — A single-shot concurrency test passes by luck often enough to
+  be worthless. The unlocked-read defect above showed up in ~5 of 8 races and the
+  first version of its test — one race, one ordering — went green against the
+  broken code. Race tests here need **both orderings** (`[a(), b()]` and
+  `[b(), a()]`) repeated ~3× each inside one `it`, with the ordering and
+  iteration in the assertion message so a failure says which interleaving broke.
+  Also worth knowing where the window is: two `app.inject` PUTs in a
+  `Promise.all` do interleave their reads, while two direct `repo.update` calls
+  in a `Promise.all` serialised and never reproduced it — test the race at the
+  layer that actually has it. (`test/skills.it.test.ts:206`)
+
 - **2026-08-03** — Computing the next version in JS (`existing.version + 1` from
   a prior `SELECT`) and snapshotting it with `.onConflictDoNothing()` **loses
   history silently**. Two `PUT /skills/:id` bodies landing together both read v1,

@@ -207,6 +207,39 @@ d('/skills versioning', () => {
     await app.close();
   });
 
+  it('the live body always has a snapshot, even when a save races a no-op save', async () => {
+    const app = await makeApp();
+
+    /* One save changes the body; the other re-sends the body it read, which
+       against an unlocked read looks like a no-op — so it skipped the version
+       bump and still wrote its body over the other's, leaving skills.body in no
+       snapshot. Both orderings, several times each: the interleaving that broke
+       the invariant showed up in roughly 5 of 8 races, not every one. */
+    for (const noopFirst of [false, true]) {
+      for (let i = 0; i < 3; i++) {
+        const payload = body();
+        const id = (await app.inject({ method: 'POST', url: '/skills', payload })).json().id;
+        const noop = () =>
+          app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { body: payload.body } });
+        const change = () =>
+          app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { body: '# changed' } });
+        await Promise.all(noopFirst ? [noop(), change()] : [change(), noop()]);
+
+        const skill = (await app.inject({ method: 'GET', url: `/skills/${id}` })).json();
+        const versions = (
+          await app.inject({ method: 'GET', url: `/skills/${id}/versions` })
+        ).json();
+        const current = versions.find(
+          (v: { version: number }) => v.version === skill.version,
+        );
+        const where = `noopFirst=${noopFirst} run=${i}`;
+        expect(current, `${where}: no snapshot for v${skill.version}`).toBeDefined();
+        expect(current.body, where).toBe(skill.body);
+      }
+    }
+    await app.close();
+  });
+
   it('restore appends a new version with the old body instead of rewinding', async () => {
     const app = await makeApp();
     const payload = body();

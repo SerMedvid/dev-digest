@@ -14,6 +14,9 @@ import { isBodyChange } from './helpers.js';
 import type { SkillRow, SkillVersionRow } from '../../db/rows.js';
 export type { SkillRow, SkillVersionRow };
 
+/** The handle `db.transaction` hands its callback — same query API as `Db`. */
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
 export interface InsertSkill {
   workspaceId: string;
   name: string;
@@ -89,7 +92,7 @@ export class SkillsRepository {
         version: INITIAL_SKILL_VERSION,
       })
       .returning();
-    await this.snapshotVersion(row!, INITIAL_SKILL_VERSION, null);
+    await this.snapshotVersion(this.db, row!, INITIAL_SKILL_VERSION, null);
     return row!;
   }
 
@@ -97,6 +100,15 @@ export class SkillsRepository {
    * Patch a skill. A changed `body` bumps the version and snapshots it with the
    * caller's `summary`; every other field is a plain update. A summary sent
    * without a body change is dropped — there is no version for it to describe.
+   *
+   * Runs in a transaction that takes `FOR UPDATE` on the skill row, because
+   * "did the body change?" is a read-modify-write and every part of it has to
+   * see the same body. Two concurrent saves against one unlocked read left the
+   * live body in no snapshot at all: the one whose patch matched the body it
+   * read decided "unchanged", skipped the bump, and still wrote its body over
+   * the other's — so skills.body and the snapshot for skills.version disagreed
+   * (observed in ~5 of 8 races before the lock). The second save now waits and
+   * re-reads, so it compares against what actually landed.
    */
   async update(
     workspaceId: string,
@@ -104,32 +116,37 @@ export class SkillsRepository {
     patch: UpdateSkill,
     summary?: string,
   ): Promise<SkillRow | undefined> {
-    const existing = await this.getById(workspaceId, id);
-    if (!existing) return undefined;
+    return this.db.transaction(async (tx) => {
+      const [existing] = await tx
+        .select()
+        .from(t.skills)
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+        .for('update');
+      if (!existing) return undefined;
 
-    const bodyChanged = isBodyChange(existing, patch);
+      const bodyChanged = isBodyChange(existing, patch);
 
-    const [row] = await this.db
-      .update(t.skills)
-      .set({
-        ...(patch.name !== undefined ? { name: patch.name } : {}),
-        ...(patch.description !== undefined ? { description: patch.description } : {}),
-        ...(patch.type !== undefined ? { type: patch.type } : {}),
-        ...(patch.body !== undefined ? { body: patch.body } : {}),
-        ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
-        // Bumped in SQL, not as `existing.version + 1`: two saves landing
-        // together would both compute the same next version, and the second
-        // snapshot insert would be swallowed by `onConflictDoNothing` — leaving
-        // skills.version pointing at a snapshot holding the OTHER writer's body.
-        // Incrementing in the row gives each save its own version to snapshot.
-        // Same reason AgentsRepository.bumpForSkillChange does it this way.
-        ...(bodyChanged ? { version: sql`${t.skills.version} + 1` } : {}),
-      })
-      .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
-      .returning();
+      const [row] = await tx
+        .update(t.skills)
+        .set({
+          ...(patch.name !== undefined ? { name: patch.name } : {}),
+          ...(patch.description !== undefined ? { description: patch.description } : {}),
+          ...(patch.type !== undefined ? { type: patch.type } : {}),
+          ...(patch.body !== undefined ? { body: patch.body } : {}),
+          ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
+          // Bumped in SQL rather than as `existing.version + 1`. The lock above
+          // already makes those equivalent; this keeps the version correct if the
+          // lock is ever dropped, since two savers computing the same next
+          // version would collide on (skill_id, version) and lose a snapshot to
+          // `onConflictDoNothing`. Same reason bumpForSkillChange does it here.
+          ...(bodyChanged ? { version: sql`${t.skills.version} + 1` } : {}),
+        })
+        .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
+        .returning();
 
-    if (bodyChanged && row) await this.snapshotVersion(row, row.version, summary ?? null);
-    return row;
+      if (bodyChanged && row) await this.snapshotVersion(tx, row, row.version, summary ?? null);
+      return row;
+    });
   }
 
   async deleteById(workspaceId: string, id: string): Promise<boolean> {
@@ -169,11 +186,12 @@ export class SkillsRepository {
   }
 
   private async snapshotVersion(
+    db: Db | Tx,
     row: SkillRow,
     version: number,
     summary: string | null,
   ): Promise<void> {
-    await this.db
+    await db
       .insert(t.skillVersions)
       .values({ skillId: row.id, version, summary, body: row.body })
       .onConflictDoNothing();
