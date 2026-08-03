@@ -1,7 +1,7 @@
 import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { SkillType } from '@devdigest/shared';
+import type { SkillSource, SkillType } from '@devdigest/shared';
 import { INITIAL_SKILL_VERSION } from './constants.js';
 import { isBodyChange } from './helpers.js';
 
@@ -24,6 +24,13 @@ export interface InsertSkill {
   type: SkillType;
   body: string;
   enabled?: boolean;
+  /**
+   * Defaults to 'manual'. The conventions extractor passes 'extracted'; see the
+   * trust note in specs/skills.md before adding a third source.
+   */
+  source?: SkillSource;
+  /** Paths the extracted rules were evidenced against. */
+  evidenceFiles?: string[];
 }
 
 export interface UpdateSkill {
@@ -86,7 +93,8 @@ export class SkillsRepository {
         name: values.name,
         description: values.description,
         type: values.type,
-        source: 'manual',
+        source: values.source ?? 'manual',
+        ...(values.evidenceFiles !== undefined ? { evidenceFiles: values.evidenceFiles } : {}),
         body: values.body,
         enabled: values.enabled ?? true,
         version: INITIAL_SKILL_VERSION,
