@@ -2,7 +2,7 @@
 
 Date: 2026-08-02
 Revised: 2026-08-03 — the domain rules are **pluggable skills**, not prompt text.
-Status: approved, not yet implemented
+Status: **implemented** 2026-08-03
 
 ## Problem
 
@@ -73,6 +73,8 @@ both DB-driven, so the new reviewer and its rules appear on their own.
 | [`server/src/db/seed.ts`](../../../server/src/db/seed.ts) | `+ 1` entry in `seedAgents` |
 | [`docs/agent-prompts/README.md`](../../agent-prompts/README.md) | `+ 1` link, and a note that this agent's checks are skills |
 | `server/test/seed-prompts.test.ts` | **new** — the mirror guard |
+| `server/test/seed-agent-skills.it.test.ts` | **new** — the seed's agent/skill wiring (see [Testing](#testing)) |
+| [`server/README.md`](../../../server/README.md) | the `db:seed` line: four agents, and what link reconciliation owns |
 
 ### 2. The prompt shell
 
@@ -200,8 +202,18 @@ blocking rules were kept native rather than pushed into a fifth skill.
 - No test asserts an agent count, and `e2e/specs/03-agents.flow.json` waits on
   the text `"Security Reviewer"` specifically, so a fourth seeded agent breaks
   nothing. Verified 2026-08-02.
+- `server/test/seed-agent-skills.it.test.ts` (DB-backed) — acceptance 3 and 4
+  as a test rather than a manual check: the agent row, the four links **with
+  their stored `order`**, the other three reviewers left empty, a
+  `skill_versions` v1 row per skill, a no-op re-seed, and the reconciliation in
+  both directions (a stale built-in link goes, a custom agent's link stays).
+  Added because the reconciliation is the one part of this design that silently
+  does the wrong thing when it breaks. Verified by mutation: zeroing the link
+  `order`, disabling the delete, and widening its scope past built-in agents
+  each turn it red.
 - The existing DB-backed lane already covers the seed path (45 tests green with
-  the three-skill seed on 2026-08-03); re-run it after the link retarget.
+  the three-skill seed on 2026-08-03); re-run it after the link retarget. It is
+  51 with the tests above.
 - Prompt and skill *content* is not unit-testable and deliberately has no test:
   it is reviewed as prose, in `docs/agent-prompts/` and the Skills library.
 

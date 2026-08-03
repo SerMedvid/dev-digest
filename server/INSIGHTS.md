@@ -13,6 +13,17 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-03** — Asserting `agent_skills.order` by sorting on it and comparing
+  the *names* is a test that cannot fail. `Array.prototype.sort` is stable, so
+  when every link is written at `order: 0` the rows keep the order Postgres
+  returned — which is insertion order — and the expected sequence still matches.
+  A mutation that replaced `order` with `0` in
+  [`src/db/seed.ts`](src/db/seed.ts)'s link loop left the suite green. Assert the
+  `[name, order]` pairs sorted by **name** instead: the stored column is then
+  part of the comparison. The same trap applies to any ordered join table here
+  (`agent_skills`, and anything else keyed on a positional column).
+  (`test/seed-agent-skills.it.test.ts:63`)
+
 - **2026-08-02** — Supersedes the 2026-08-02 entry below on cycle counts: taking
   `Container` does **not** by itself close a cycle. The frozen baseline holds
   five `no-circular` entries; four run through `platform/container.ts`, and all

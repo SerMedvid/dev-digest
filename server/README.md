@@ -107,7 +107,12 @@ through `SecretsProvider` (`~/.devdigest/secrets.json`, mode `0600`, with
 
 Migrations are **not** applied on boot — run `pnpm db:migrate` (pgvector is
 enabled by migration `0000`). `pnpm db:seed` is idempotent demo data
-(`acme/payments-api`, PR #482, the two built-in agents).
+(`acme/payments-api`, PR #482, the four built-in agents, and the built-in skills
+linked to the Test Quality Reviewer). The seed also **reconciles** those links:
+a link between a built-in agent and a built-in skill that
+[`seed-skills.ts`](src/db/seed-skills.ts) no longer declares is deleted on the
+next run, so retargeting takes effect on an existing database. Links involving
+an agent or skill you created are never touched.
 
 ## Review context (non-obvious)
 

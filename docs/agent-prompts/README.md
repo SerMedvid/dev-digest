@@ -9,10 +9,17 @@ in the DB). The canonical, reviewable copies live next to this file:
 - [`general-reviewer.md`](./general-reviewer.md)
 - [`security-reviewer.md`](./security-reviewer.md)
 - [`performance-reviewer.md`](./performance-reviewer.md)
+- [`test-quality-reviewer.md`](./test-quality-reviewer.md) — **a shell**: it has
+  no "what to look for" of its own. See [Prompts that are shells](#prompts-that-are-shells).
 
 > The DB is the source of truth at run time. These files are the human-readable
 > originals — when you change a prompt, edit the file here **and** push it to the
 > agent (`PUT /agents/:id`, which versions the change into `agent_versions`).
+
+Each file is mirrored by a constant in
+[`server/src/db/seed-prompts.ts`](../../server/src/db/seed-prompts.ts), which is
+what a freshly seeded workspace gets. `server/test/seed-prompts.test.ts` fails if
+you edit only one of the two.
 
 ## How a prompt is assembled
 
@@ -100,6 +107,30 @@ numbers and gates from what the model returns:
    findings" as a quota and pad the list with repeats to hit N, which also corrupts
    the score. State that the count is free and repeats are forbidden.
 
+## Prompts that are shells
+
+Most reviewer prompts carry their own subject matter in a `What to look for`
+section. The **Test Quality Reviewer** deliberately does not: its role, severity
+rubric, verdict mapping and findings discipline are native, and every check it
+performs arrives at run time from the skills linked to it, rendered into
+`## Skills / rules` in link order. The bodies are in
+[`server/src/db/seed-skills.ts`](../../server/src/db/seed-skills.ts) and are
+editable in the Skills library — changing one changes the next review with no
+deploy, which is the entire point of the shape.
+
+Two rules make that safe, and both are stated in the prompt itself:
+
+- **Skill bodies are trusted instructions rendered verbatim**, so a rule could
+  otherwise declare its own blocker. The prompt's `CRITICAL` list is therefore
+  *closed*: a linked skill cannot add to it, and anything a skill reports is at
+  most `WARNING`.
+- **A shell with nothing linked must still be valid.** Unlink every skill and
+  the agent keeps its blocking rules and returns a coherent verdict — degraded,
+  not broken.
+
+Use this shape when the checks are expected to be tuned by whoever runs the
+tool. Keep whatever decides severity, and therefore the merge gate, native.
+
 ## How the engine uses the output (why the conventions matter)
 
 `reviewer-core/src/review/run.ts` + `reduce.ts`:
@@ -130,7 +161,9 @@ model's `verdict`. Keep your severities honest and the gate behaves.
 
 ## Checklist before shipping a prompt
 
-- [ ] Role + concrete "what to look for", in priority order.
+- [ ] Role + concrete "what to look for", in priority order — unless the prompt
+      is a shell, in which case the `Role` says where the checks come from and
+      the `CRITICAL` list is explicitly closed against them.
 - [ ] "Analyze along the execution path; state the mechanism" guidance.
 - [ ] Quality bar: precision over volume; empty list is allowed.
 - [ ] Severity rubric using `CRITICAL/WARNING/SUGGESTION` + anti-inflation rule.
@@ -138,4 +171,7 @@ model's `verdict`. Keep your severities honest and the gate behaves.
 - [ ] Findings discipline: distinct only, no count target.
 - [ ] No JSON shape / markdown layout / alternate severity scale described in prose.
 - [ ] No "return at most N findings" quota.
-- [ ] File updated here **and** pushed to the agent (versioned).
+- [ ] File updated here **and** mirrored in `server/src/db/seed-prompts.ts`
+      (`pnpm exec vitest run test/seed-prompts.test.ts` proves it).
+- [ ] Pushed to the agent (`PUT /agents/:id`, versioned) — the seed only reaches
+      workspaces that have not been seeded yet.
