@@ -227,6 +227,48 @@ d('/conventions', () => {
       expect(after.json().version).toBeGreaterThan(agent.version);
     });
 
+    it('404s an agent in another workspace, and writes nothing', async () => {
+      const [otherWs] = await pg.handle.db
+        .insert(t.workspaces)
+        .values({ name: `other-${Date.now()}` })
+        .returning();
+      const [foreignAgent] = await pg.handle.db
+        .insert(t.agents)
+        .values({
+          workspaceId: otherWs!.id,
+          name: 'Foreign Reviewer',
+          description: 'belongs to another tenant',
+          provider: 'openai',
+          model: 'gpt-4.1',
+          systemPrompt: 'review',
+        })
+        .returning();
+
+      const res = await app.inject({
+        method: 'POST',
+        url: `/repos/${repoId}/conventions/skill`,
+        payload: {
+          name: 'stolen-link-conventions',
+          type: 'convention',
+          body: '# nope',
+          agent_id: foreignAgent!.id,
+        },
+      });
+      expect(res.statusCode).toBe(404);
+
+      // The link is refused AND no skill is left behind by the failed attempt.
+      const links = await pg.handle.db
+        .select()
+        .from(t.agentSkills)
+        .where(eq(t.agentSkills.agentId, foreignAgent!.id));
+      expect(links).toHaveLength(0);
+      const orphans = await pg.handle.db
+        .select()
+        .from(t.skills)
+        .where(eq(t.skills.name, 'stolen-link-conventions'));
+      expect(orphans).toHaveLength(0);
+    });
+
     it('409s the draft once nothing is accepted', async () => {
       const view = await app.inject({ method: 'GET', url: `/repos/${repoId}/conventions` });
       for (const c of view.json().candidates) {

@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { ConventionStatus, FEATURE_MODELS, SkillType } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
+import { NotFoundError } from '../../platform/errors.js';
 import { EXTRACT_JOB_KIND } from './constants.js';
 import { ConventionsModel } from './model.js';
 import { CloneSampler } from './sampler.js';
@@ -84,7 +85,15 @@ export default async function conventionsRoutes(appBase: FastifyInstance) {
             source: 'extracted',
             evidenceFiles: input.evidenceFiles,
           }),
-        linkToAgent: async (_workspaceId, agentId, skillId) => {
+        // `AgentsRepository.linkSkill` takes no workspace and applies no
+        // predicate — the scoping lives in `AgentsService.linkSkill`, which
+        // this module cannot import (no-cross-module-internals). So the check
+        // is made here, against the workspace-scoped `getById`.
+        assertAgent: async (workspaceId, agentId) => {
+          const agent = await container.agentsRepo.getById(workspaceId, agentId);
+          if (!agent) throw new NotFoundError('Agent not found');
+        },
+        linkToAgent: async (agentId, skillId) => {
           const linked = await container.agentsRepo.linkedSkills(agentId);
           await container.agentsRepo.linkSkill(agentId, skillId, linked.length);
         },

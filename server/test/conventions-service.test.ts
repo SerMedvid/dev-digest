@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { NotFoundError } from '../src/platform/errors.js';
 import { ConventionsService } from '../src/modules/conventions/service.js';
 import type {
   ConventionsRepoPort,
@@ -100,7 +101,11 @@ function deps(over: Partial<ConventionsServiceDeps> = {}): ConventionsServiceDep
       selectFiles: async ({ pool }) => pool.slice(0, 12),
       extract: async () => [raw()],
     }),
-    skills: { createExtracted: async () => ({ id: 'sk1' }), linkToAgent: async () => {} },
+    skills: {
+      createExtracted: async () => ({ id: 'sk1' }),
+      assertAgent: async () => {},
+      linkToAgent: async () => {},
+    },
     tokenCount: (text) => text.length,
     ...over,
   };
@@ -269,7 +274,7 @@ describe('skillDraft and createSkill', () => {
     const createExtracted = vi.fn(async () => ({ id: 'sk9' }));
     const linkToAgent = vi.fn(async () => {});
     const svc = new ConventionsService(
-      deps({ repo: port, skills: { createExtracted, linkToAgent } }),
+      deps({ repo: port, skills: { createExtracted, assertAgent: async () => {}, linkToAgent } }),
     );
     const out = await svc.createSkill(WS, REPO, {
       name: 'payments-api-conventions',
@@ -283,7 +288,37 @@ describe('skillDraft and createSkill', () => {
       WS,
       expect.objectContaining({ body: 'edited by the user', evidenceFiles: ['src/a.ts'] }),
     );
-    expect(linkToAgent).toHaveBeenCalledWith(WS, 'agent1', 'sk9');
+    expect(linkToAgent).toHaveBeenCalledWith('agent1', 'sk9');
+  });
+
+  it('refuses an agent outside the workspace, before writing a skill', async () => {
+    const { port } = fakeRepo({ listAccepted: async () => [accepted] });
+    const createExtracted = vi.fn(async () => ({ id: 'sk9' }));
+    const linkToAgent = vi.fn(async () => {});
+    const svc = new ConventionsService(
+      deps({
+        repo: port,
+        skills: {
+          createExtracted,
+          assertAgent: async () => {
+            throw new NotFoundError('Agent not found');
+          },
+          linkToAgent,
+        },
+      }),
+    );
+    await expect(
+      svc.createSkill(WS, REPO, {
+        name: 'n',
+        description: 'd',
+        type: 'convention',
+        body: 'b',
+        agentId: 'agent-in-another-workspace',
+      }),
+    ).rejects.toMatchObject({ statusCode: 404 });
+    // The ordering is the point: a rejected link must not leave a skill behind.
+    expect(createExtracted).not.toHaveBeenCalled();
+    expect(linkToAgent).not.toHaveBeenCalled();
   });
 
   it('does not link when no agent was chosen', async () => {
@@ -292,7 +327,11 @@ describe('skillDraft and createSkill', () => {
     const svc = new ConventionsService(
       deps({
         repo: port,
-        skills: { createExtracted: async () => ({ id: 'sk9' }), linkToAgent },
+        skills: {
+          createExtracted: async () => ({ id: 'sk9' }),
+          assertAgent: async () => {},
+          linkToAgent,
+        },
       }),
     );
     await svc.createSkill(WS, REPO, {

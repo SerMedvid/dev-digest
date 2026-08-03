@@ -83,8 +83,15 @@ export interface SkillsPort {
       evidenceFiles: string[];
     },
   ): Promise<{ id: string }>;
+  /**
+   * Throws when the agent is not in this workspace. Separate from `linkToAgent`
+   * and called *before* the skill is created: the link is the last step, so a
+   * check inside it would reject the request only after a skill had already
+   * been written, leaving one orphaned behind every failed attempt.
+   */
+  assertAgent(workspaceId: string, agentId: string): Promise<void>;
   /** Appends the skill to the agent's ordered list and bumps its version. */
-  linkToAgent(workspaceId: string, agentId: string, skillId: string): Promise<void>;
+  linkToAgent(agentId: string, skillId: string): Promise<void>;
 }
 
 /** The narrow half of the platform logger — never the platform object itself. */

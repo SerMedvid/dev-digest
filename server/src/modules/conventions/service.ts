@@ -129,6 +129,12 @@ export class ConventionsService {
     const accepted = await this.mustHaveAccepted(repoId);
     const evidenceFiles = [...new Set(accepted.map((c) => c.evidencePath))];
 
+    // Before anything is written: an agent id from the request body is not
+    // proof the caller may touch that agent, and linking is workspace-scoped
+    // only if someone checks. Doing it here also keeps a rejected request from
+    // leaving a created-but-unlinked skill behind.
+    if (input.agentId) await this.deps.skills.assertAgent(workspaceId, input.agentId);
+
     const skill = await this.deps.skills.createExtracted(workspaceId, {
       name: input.name,
       description: input.description,
@@ -138,7 +144,7 @@ export class ConventionsService {
       evidenceFiles,
     });
     if (input.agentId) {
-      await this.deps.skills.linkToAgent(workspaceId, input.agentId, skill.id);
+      await this.deps.skills.linkToAgent(input.agentId, skill.id);
     }
     return skill;
   }
