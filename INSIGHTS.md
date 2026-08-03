@@ -43,4 +43,15 @@ an entry can age — verify before relying on one.
 
 ## Recurring errors & fixes
 
+- **2026-08-03** — There is **no `.gitattributes`**, so nothing normalises line
+  endings: any edit made by a tool that rewrites a whole file with platform
+  defaults (Python's `io.open(..., 'w')` on Windows translates `\n` to `\r\n`)
+  silently converts the file to CRLF, and the change lands as a **whole-file
+  diff** — a 6-line edit showed up as 324 changed lines. It type-checks and
+  tests green, so only the diff reveals it. Check `git diff --stat` for a file
+  whose line count dwarfs the edit before committing, and prefer restoring a
+  backup with `cp` (byte-for-byte) over rewriting it. To repair: `git checkout
+  --` the file if the edit is unwanted, else rewrite in binary
+  (`open(p,'rb')` → `replace(b'\r\n', b'\n')` → `open(p,'wb')`).
+
 ## Open questions

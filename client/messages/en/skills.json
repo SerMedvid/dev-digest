@@ -7,9 +7,8 @@
     "searchPlaceholder": "Search skills…",
     "loadError": "Could not load skills.",
     "menu": {
-      "fromFile": "Import from file",
-      "fromUrl": "Import from URL",
-      "community": "Search community skills…"
+      "manual": "Create manually",
+      "fromFile": "Import from file"
     },
     "empty": {
       "title": "No skills yet",
@@ -21,6 +20,13 @@
       "body": "Pick a skill on the left to preview its body."
     }
   },
+  "card": {
+    "agentCount": "{count, plural, one {# agent} other {# agents}}",
+    "unused": "Not used yet",
+    "noDescription": "No description",
+    "deleteConfirm": "Delete skill \"{name}\"? Agents using it lose the rule.",
+    "deleteTitle": "Delete skill"
+  },
   "detail": {
     "crumbSkill": "Skill",
     "back": "← All skills",
@@ -28,16 +34,70 @@
     "notFound": {
       "title": "Skill not found",
       "body": "It may have been deleted."
+    },
+    "tabs": {
+      "config": "Config",
+      "preview": "Preview",
+      "stats": "Stats",
+      "versions": "Versions"
     }
+  },
+  "config": {
+    "heading": "Configuration",
+    "nameLabel": "Name",
+    "descriptionLabel": "Description",
+    "typeLabel": "Type",
+    "bodyLabel": "Skill body",
+    "bodyHint": "Markdown. Sent to the reviewing agent exactly as written.",
+    "summaryLabel": "Change note",
+    "summaryHint": "Optional — shown in the version history.",
+    "unsaved": "unsaved",
+    "chars": "{count} / {max} characters",
+    "save": "Save",
+    "saving": "Saving…",
+    "saveFailed": "Could not save this skill.",
+    "enabled": "Enabled"
+  },
+  "stats": {
+    "usedBy": "Used by",
+    "agentsUnit": "agents",
+    "agentsHeading": "Agents using this skill",
+    "disabled": "disabled",
+    "empty": "Not used by any agent yet",
+    "emptyHint": "Attach it from an agent's Skills tab.",
+    "loadError": "Could not load usage for this skill."
+  },
+  "versions": {
+    "heading": "Version history",
+    "count": "{count, plural, one {# version} other {# versions}}",
+    "subtitle": "Every save snapshots the body, so a review can be traced to the exact text it ran on.",
+    "current": "Current",
+    "diff": "Diff",
+    "hideDiff": "Hide diff",
+    "restore": "Restore",
+    "restoring": "Restoring…",
+    "restoreConfirm": "Restore v{version}? This adds a new version with that body.",
+    "restoreFailed": "Could not restore this version.",
+    "noSummary": "No change note",
+    "loadError": "Could not load the version history."
+  },
+  "previewTab": {
+    "heading": "Preview",
+    "subtitle": "Rendered as the reviewing agent receives it.",
+    "empty": "This skill has no body yet."
   },
   "drawer": {
     "title": "Add a skill",
-    "subtitle": "Import from a file, a URL, or search vetted community skills",
+    "subtitle": "Write the rule yourself, or import a Markdown file from your machine",
     "tabs": {
+      "create": "Create",
       "file": "From file",
       "url": "From URL",
       "community": "Community"
     },
+    "create": "Create skill",
+    "creating": "Creating…",
+    "createFailed": "Could not create this skill.",
     "importFailed": "Import failed"
   },
   "file": {
@@ -49,7 +109,18 @@
     "bodyPlaceholder": "# Rule\nDescribe the rule…",
     "importing": "Importing…",
     "import": "Import skill",
-    "success": "Imported \"{name}\" (stored as untrusted data)."
+    "success": "Imported \"{name}\" (stored as untrusted data).",
+    "descriptionLabel": "Description",
+    "descriptionHint": "Optional — one line, shown on the card.",
+    "typeLabel": "Type",
+    "pickFile": "Import from file",
+    "pickFileHint": "Read in your browser — the file is never uploaded.",
+    "fileLabel": "Markdown file",
+    "dropzone": "Drop a .md file here, or",
+    "browse": "browse…",
+    "replaceFile": "replace…",
+    "chars": "{count} / {max} characters",
+    "cancel": "Cancel"
   },
   "url": {
     "label": "Skill URL",

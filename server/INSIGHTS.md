@@ -13,6 +13,58 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-03** — Extends the entry below: bumping the version in SQL fixed the
+  *collision*, not the whole class, because `isBodyChange` still compared against
+  an unlocked read. Two concurrent `PUT /skills/:id` calls where one re-sends the
+  body it read make that one decide "unchanged" — so it skips the bump but
+  **still writes its body** (the `set` includes `body` regardless of
+  `bodyChanged`), and if its UPDATE lands second the live `skills.body` ends up in
+  no snapshot at all. Any "did this field change?" rule that gates a side effect
+  is a read-modify-write and needs the row: wrap it in `db.transaction` with
+  `.for('update')` on the read, and pass the `tx` into the write *and* the
+  snapshot insert (`snapshotVersion(tx, …)` — a snapshot written on `this.db`
+  escapes the transaction). This is the first transaction in `src/`; drizzle's tx
+  handle types as `Parameters<Parameters<Db['transaction']>[0]>[0]`.
+  `AgentsRepository.update` gates `configChanged` on the same kind of unlocked
+  read. (`src/modules/skills/repository.ts:104`)
+
+- **2026-08-03** — A single-shot concurrency test passes by luck often enough to
+  be worthless. The unlocked-read defect above showed up in ~5 of 8 races and the
+  first version of its test — one race, one ordering — went green against the
+  broken code. Race tests here need **both orderings** (`[a(), b()]` and
+  `[b(), a()]`) repeated ~3× each inside one `it`, with the ordering and
+  iteration in the assertion message so a failure says which interleaving broke.
+  Also worth knowing where the window is: two `app.inject` PUTs in a
+  `Promise.all` do interleave their reads, while two direct `repo.update` calls
+  in a `Promise.all` serialised and never reproduced it — test the race at the
+  layer that actually has it. (`test/skills.it.test.ts:206`)
+
+- **2026-08-03** — Computing the next version in JS (`existing.version + 1` from
+  a prior `SELECT`) and snapshotting it with `.onConflictDoNothing()` **loses
+  history silently**. Two `PUT /skills/:id` bodies landing together both read v1,
+  both write `version = 2`, and the second `skill_versions` insert hits the
+  `(skill_id, version)` unique index and is swallowed — so the row says v2 while
+  the only v2 snapshot holds the *other* writer's body, and the Versions tab
+  shows a body that was never saved. Bump in SQL instead
+  (`set({ version: sql`${t.skills.version} + 1` })`) and snapshot
+  `.returning()`'s `row.version`: each writer then gets its own version number
+  and its own snapshot. `AgentsRepository.bumpForSkillChange` already did it this
+  way; `AgentsRepository.update` still computes `nextVersion` in JS and has the
+  same hole. Reproducible without any sleep: two `app.inject` calls in one
+  `Promise.all` (`test/skills.it.test.ts:183`).
+  (`src/modules/skills/repository.ts:120`)
+
+- **2026-08-03** — Asserting `agent_skills.order` by sorting on it and comparing
+  the *names* is a test that cannot fail. `Array.prototype.sort` is stable, so
+  when every link is written at `order: 0` the rows keep the order Postgres
+  returned — which is insertion order — and the expected sequence still matches.
+  A mutation that replaced `order` with `0` in
+  [`src/db/seed.ts`](src/db/seed.ts)'s link loop left the suite green. Assert the
+  `[name, order]` pairs sorted by **name** instead: the stored column is then
+  part of the comparison. The same trap applies to any ordered join table here
+  (`agent_skills`, and anything else keyed on a positional column).
+  (`test/seed-agent-skills.it.test.ts:63`)
+
 - **2026-08-02** — Supersedes the 2026-08-02 entry below on cycle counts: taking
   `Container` does **not** by itself close a cycle. The frozen baseline holds
   five `no-circular` entries; four run through `platform/container.ts`, and all
@@ -37,6 +89,19 @@ an entry can age — verify before relying on one.
   `ContainerOverrides`. (`src/modules/repo-intel/service.ts:104`)
 
 ## Codebase patterns & tool notes
+
+- **2026-08-02** — Corrects the "reaching for the alias through the wrong file"
+  advice in the `no-circular` entry below: a module's `helpers.ts` cannot import
+  its row types from [`src/db/rows.ts`](src/db/rows.ts) either. `core-no-persistence`
+  scopes the core ring to `src/modules/*/(service|helpers|domain|ports).ts` and
+  bans every `^src/db/` import but `db/client.ts`, so that route trades a
+  `no-circular` failure for a `core-no-persistence` one — the two rules close off
+  both files a row type could come from. What works is declaring the row shape
+  **structurally** in `helpers.ts` (a plain interface of the columns the
+  transforms read): the Drizzle `$inferSelect` row satisfies it, so the
+  repository and service call sites type-check with no cast and no re-export. A
+  module-local `domain.ts` would also satisfy both rules, but only if nothing in
+  it imports `src/db/`. (`src/modules/skills/helpers.ts:15`)
 
 - **2026-08-02** — `pnpm arch:check` does **not** keep the database out of the
   core. `core-no-persistence` exempts [`src/db/client.ts`](src/db/client.ts) by

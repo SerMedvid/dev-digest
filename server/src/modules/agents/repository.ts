@@ -1,4 +1,4 @@
-import { and, asc, desc, eq } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import type { CiFailOn, Provider, ReviewStrategy } from '@devdigest/shared';
@@ -204,6 +204,20 @@ export class AgentsRepository {
     return links.map((l) => l.skill.id);
   }
 
+  /**
+   * A change to the linked skill set IS a config change: an agent's behaviour
+   * depends on its skills, so "agent v3" has to mean one fixed set of them.
+   * Bumps the version and snapshots the new ordered ids.
+   */
+  private async bumpForSkillChange(agentId: string): Promise<void> {
+    const [row] = await this.db
+      .update(t.agents)
+      .set({ version: sql`${t.agents.version} + 1` })
+      .where(eq(t.agents.id, agentId))
+      .returning();
+    if (row) await this.snapshotVersion(row, row.version);
+  }
+
   /** Link a skill to an agent at a given order (idempotent: upserts order). */
   async linkSkill(agentId: string, skillId: string, order: number): Promise<void> {
     await this.db
@@ -213,12 +227,17 @@ export class AgentsRepository {
         target: [t.agentSkills.agentId, t.agentSkills.skillId],
         set: { order },
       });
+    await this.bumpForSkillChange(agentId);
   }
 
+  /** Detach one skill. No caller today (the editor posts the full set through
+      `setSkills`), but it bumps like its siblings so wiring a route to it can't
+      silently leave the agent's version history missing a change. */
   async unlinkSkill(agentId: string, skillId: string): Promise<void> {
     await this.db
       .delete(t.agentSkills)
       .where(and(eq(t.agentSkills.agentId, agentId), eq(t.agentSkills.skillId, skillId)));
+    await this.bumpForSkillChange(agentId);
   }
 
   /**
@@ -228,9 +247,11 @@ export class AgentsRepository {
    */
   async setSkills(agentId: string, skillIds: string[]): Promise<void> {
     await this.db.delete(t.agentSkills).where(eq(t.agentSkills.agentId, agentId));
-    if (skillIds.length === 0) return;
-    await this.db
-      .insert(t.agentSkills)
-      .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    if (skillIds.length > 0) {
+      await this.db
+        .insert(t.agentSkills)
+        .values(skillIds.map((skillId, i) => ({ agentId, skillId, order: i })));
+    }
+    await this.bumpForSkillChange(agentId);
   }
 }

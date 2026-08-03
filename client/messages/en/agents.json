@@ -34,6 +34,18 @@
       "systemPrompt": "System prompt"
     }
   },
+  "skillsTab": {
+    "heading": "Skills",
+    "counter": "{linked} of {total} enabled",
+    "hint": "Order matters — earlier skills appear earlier in the assembled prompt. Drag to reorder.",
+    "filterPlaceholder": "Filter skills…",
+    "empty": "No skills in this workspace yet",
+    "emptyCta": "Create one in the Skills library",
+    "loadError": "Could not load skills.",
+    "saveFailed": "Could not save the skill order.",
+    "open": "Open",
+    "dragHandle": "Drag to reorder"
+  },
   "editor": {
     "loadErrorTitle": "Couldn’t load this agent",
     "loadErrorBody": "The agent could not be loaded.",

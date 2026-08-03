@@ -42,6 +42,70 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-03** — A test that asserts a query's **error** state must build its
+  QueryClient with `defaultOptions: { queries: { retry: false } }`. The test
+  helpers here all do a bare `new QueryClient()`, which inherits react-query's
+  default `retry: 3` with exponential backoff — the stubbed failure retries for
+  ~7s, `ErrorState` never renders inside `waitFor`'s 1s window, and the test
+  reads as "the error branch is broken" when it is only slow. Mutation-error
+  tests need no such change (mutations default to `retry: 0`), which is why a
+  failed *save* asserts fine with the plain helper. Also: stub the failure as
+  `{ ok: false, status, json: async () => ({ error: { message } }) }` —
+  `apiFetch` reads `body.error.message` for the `ApiError` text, and without it
+  the inline detail is just `"500 Internal Server Error"`.
+  (`src/app/skills/[id]/_components/SkillDetail/_components/StatsTab/StatsTab.test.tsx:26`)
+
+- **2026-08-03** — With `@tanstack/react-query` 5.62, calling `mutate` again on
+  the same `useMutation` instance **discards the previous call's mutate-level
+  callbacks**: `mutate` re-points the single mutation observer, so when the
+  superseded request settles its `onSuccess`/`onError` never run (probed:
+  0 calls for the superseded one, 1 for the newest). That is what makes the
+  `previous`-snapshot revert in
+  [`SkillsTab`](src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx)
+  safe under rapid toggling — a stale revert *cannot* overwrite a newer
+  optimistic update, so no sequence guard is needed. Two consequences: don't
+  "fix" that pattern with a ref counter (dead code), and don't assume an error
+  banner appears for a failed call that has been superseded — `isError` tracks
+  the newest call only. Splitting one mutation into several instances (one per
+  row, say) removes the protection and *then* needs explicit ordering.
+  (`src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.test.tsx:151`)
+
+- **2026-08-03** — The vendored [`Modal`](src/vendor/ui/kit/Modal.tsx) pads its
+  own header (`18px 24px`) and footer (`16px 24px`) but gives the body **zero
+  padding**, so children dropped straight in sit flush against the border while
+  the title and buttons above/below them are inset — the feature has to supply
+  that gutter itself (`<div style={{ padding: 24 }}>`, as
+  [`CreateAgentModal`](src/app/agents/_components/AgentsListView/_components/CreateAgentModal/CreateAgentModal.tsx)
+  does). Compounding it, [`Tabs`](src/vendor/ui/kit/Tabs.tsx) defaults to
+  `pad="0 28px"`, which mismatches a modal's 24 — pass `pad="0 24px"` inside a
+  `Modal`. Every surface that composes these two has to restate the gutter, so
+  copy it from a neighbour rather than trusting the primitive's default.
+  (`src/app/skills/_components/SkillsListView/_components/CreateSkillModal/styles.ts:11`)
+
+- **2026-08-02** — The vendored form controls split on whether they forward
+  props, which decides how a test can reach them.
+  [`TextInput`](src/vendor/ui/kit/TextInput.tsx) spreads `...rest` onto its
+  `<input>`, so `aria-label` works and `getByLabelText` finds it;
+  [`Textarea`](src/vendor/ui/kit/Textarea.tsx) accepts only
+  `value/onChange/placeholder/rows/mono` and forwards nothing, and
+  [`FormField`](src/vendor/ui/kit/FormField.tsx) renders a bare `<label>` with
+  no `htmlFor`. A textarea inside a FormField therefore has **no accessible
+  name at all** — `getByLabelText(/…/)` and `getByRole("textbox", {name})` both
+  fail, however the label reads on screen. Query it via
+  `container.querySelector("textarea")` (or a placeholder) rather than adding a
+  second `<label>` or forking the primitive. Same family as the `MonoLink` and
+  badge entries below. (`src/app/skills/[id]/_components/SkillDetail/_components/ConfigTab/ConfigTab.test.tsx:52`)
+
+- **2026-08-02** — jsdom 25 implements `File` **without `Blob.prototype.text()`**,
+  so `await file.text()` in a file-picker handler throws
+  `file.text is not a function` — and it surfaces as an *unhandled rejection*
+  inside a React event handler, not as a clean test failure, so the assertion
+  error you see names the missing DOM node rather than the cause. Read picked
+  files with `FileReader` + `readAsText`, which jsdom does implement and every
+  target browser supports. Companion to the `SubtleCrypto` entry below: assume
+  nothing about which Blob/File methods this jsdom has.
+  (`src/app/skills/_components/SkillsListView/_components/CreateSkillModal/CreateSkillModal.tsx:16`)
+
 - **2026-08-02** — jsdom ships **no `SubtleCrypto`**, so `crypto.subtle` is
   `undefined` under vitest even though `crypto` exists. Any browser-crypto code
   needs `vi.stubGlobal("crypto", { ...globalThis.crypto, subtle: { digest } })`

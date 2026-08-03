@@ -151,6 +151,36 @@ d('GET /agents/:id/versions', () => {
     await app.close();
   });
 
+  it('changing the linked skill set bumps the agent version and snapshots it', async () => {
+    const app = await makeApp();
+    const agentId = (
+      await app.inject({ method: 'POST', url: '/agents', payload: createBody })
+    ).json().id as string;
+    const skillId = (
+      await app.inject({
+        method: 'POST',
+        url: '/skills',
+        payload: { name: `rule-${Date.now()}`, type: 'rubric', body: '# rule' },
+      })
+    ).json().id as string;
+
+    await app.inject({
+      method: 'POST',
+      url: `/agents/${agentId}/skills`,
+      payload: { skill_ids: [skillId] },
+    });
+
+    const agent = (await app.inject({ method: 'GET', url: `/agents/${agentId}` })).json();
+    expect(agent.version).toBe(2);
+
+    const versions = (
+      await app.inject({ method: 'GET', url: `/agents/${agentId}/versions` })
+    ).json();
+    expect(versions[0]).toMatchObject({ version: 2, config: { skills: [skillId] } });
+    expect(versions[1].config.skills).toEqual([]);
+    await app.close();
+  });
+
   it('versions are workspace-scoped: another tenant cannot read them', async () => {
     const { db } = pg.handle;
     // An agent that lives in a DIFFERENT workspace than the request context.

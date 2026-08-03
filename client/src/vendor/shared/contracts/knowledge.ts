@@ -140,6 +140,35 @@ export const CommunitySkill = z.object({
 });
 export type CommunitySkill = z.infer<typeof CommunitySkill>;
 
+/** One immutable snapshot of a skill body. `summary` is the author's note. */
+export const SkillVersion = z.object({
+  skill_id: z.string(),
+  version: z.number().int(),
+  summary: z.string().nullable(),
+  body: z.string(),
+  created_at: z.string(),
+});
+export type SkillVersion = z.infer<typeof SkillVersion>;
+
+/** An agent that has this skill linked. */
+export const SkillAgentRef = z.object({
+  id: z.string(),
+  name: z.string(),
+  enabled: z.boolean(),
+});
+export type SkillAgentRef = z.infer<typeof SkillAgentRef>;
+
+/** Everything the Stats tab can honestly show: who uses this skill. */
+export const SkillStats = z.object({
+  agent_count: z.number().int(),
+  agents: z.array(SkillAgentRef),
+});
+export type SkillStats = z.infer<typeof SkillStats>;
+
+/** List-row shape: a skill plus how many agents link it. */
+export const SkillWithUsage = Skill.extend({ agent_count: z.number().int() });
+export type SkillWithUsage = z.infer<typeof SkillWithUsage>;
+
 // ---- Conventions ----
 export const ConventionCandidate = z.object({
   id: z.string(),

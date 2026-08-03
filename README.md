@@ -51,7 +51,9 @@ flowchart LR
 
 The review flow end to end: **add a repo** → server clones it and `repo-intel`
 indexes it (the **Indexed** badge) → **import PRs** from GitHub → open a PR and
-**Review** → `reviewer-core` assembles a prompt from the diff + the repo map,
+**Review** → `reviewer-core` assembles a prompt from the diff + the repo map +
+the agent's linked **skills** (reusable rules, prepended as a
+`## Skills / rules` section in the order set in the agent editor),
 calls the LLM, validates every finding against the diff (the **grounding gate**
 drops hallucinated line references), and persists structured findings with a
 severity and score. All local; the only outbound calls are to GitHub (PR data)
@@ -71,6 +73,7 @@ Each package has its own README with deeper diagrams:
 - **Import pull requests** — pull open PRs and their diff, commits, body, and linked issue.
 - **View diff** — GitHub-like diff in the browser.
 - **Agents** — two built-in reviewers (General + Security); create/edit your own (model + system prompt).
+- **Skills** — a versioned library of reusable rules; attach them to any number of agents, in order, and they land in the review prompt.
 - **Run a review** — single-pass analysis returning structured findings (severity + score), with the grounding gate and repo-map context working from the start.
 
 ## What you build in the course
@@ -80,7 +83,7 @@ These are intentionally **not** in the starter — each lesson adds one back:
 | Lesson | You build |
 |--------|-----------|
 | L01 | Run cost badge · severity filter on findings |
-| L02 | Skills in the product · Conventions extractor |
+| L02 | ~~Skills in the product~~ (shipped — see [`server/specs/skills.md`](server/specs/skills.md)) · Conventions extractor |
 | L03 | Intent layer · Smart Diff |
 | L04 | `devdigest-mcp` server · Blast Radius (reads `repo-intel`) |
 | L05 | Project Context Folder · Onboarding generator · PR Brief card |
