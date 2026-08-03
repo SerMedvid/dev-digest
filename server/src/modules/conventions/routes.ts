@@ -97,6 +97,9 @@ export default async function conventionsRoutes(appBase: FastifyInstance) {
           const linked = await container.agentsRepo.linkedSkills(agentId);
           await container.agentsRepo.linkSkill(agentId, skillId, linked.length);
         },
+        deleteSkill: async (workspaceId, skillId) => {
+          await container.skillsService.delete(workspaceId, skillId);
+        },
       },
       tokenCount: (text) => container.tokenizer.count(text),
       logger: app.log,

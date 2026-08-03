@@ -46,16 +46,14 @@ function fakeRepo(overrides: Partial<ConventionsRepoPort> = {}) {
     markRunning: async (_id, provider, model) => {
       state.scan = { ...blankScan('running'), provider, model };
     },
-    finishScan: async (_id, stats) => {
+    completeScan: async (_ws, _repo, candidates, stats) => {
       state.stats = stats;
+      state.candidates = candidates.map((c, i) => ({ ...c, id: `c${i}`, status: 'pending' }));
       state.scan = { ...blankScan('done'), ...stats, provider: stats.provider, model: stats.model };
     },
     failScan: async (_id, error) => {
       state.error = error;
       state.scan = { ...blankScan('failed'), error };
-    },
-    replaceCandidates: async (_ws, _repo, candidates) => {
-      state.candidates = candidates.map((c, i) => ({ ...c, id: `c${i}`, status: 'pending' }));
     },
     listCandidates: async () => state.candidates,
     listAccepted: async () => state.candidates.filter((c) => c.status === 'accepted'),
@@ -105,6 +103,7 @@ function deps(over: Partial<ConventionsServiceDeps> = {}): ConventionsServiceDep
       createExtracted: async () => ({ id: 'sk1' }),
       assertAgent: async () => {},
       linkToAgent: async () => {},
+      deleteSkill: async () => {},
     },
     tokenCount: (text) => text.length,
     ...over,
@@ -274,7 +273,15 @@ describe('skillDraft and createSkill', () => {
     const createExtracted = vi.fn(async () => ({ id: 'sk9' }));
     const linkToAgent = vi.fn(async () => {});
     const svc = new ConventionsService(
-      deps({ repo: port, skills: { createExtracted, assertAgent: async () => {}, linkToAgent } }),
+      deps({
+        repo: port,
+        skills: {
+          createExtracted,
+          assertAgent: async () => {},
+          linkToAgent,
+          deleteSkill: async () => {},
+        },
+      }),
     );
     const out = await svc.createSkill(WS, REPO, {
       name: 'payments-api-conventions',
@@ -304,6 +311,7 @@ describe('skillDraft and createSkill', () => {
             throw new NotFoundError('Agent not found');
           },
           linkToAgent,
+          deleteSkill: async () => {},
         },
       }),
     );
@@ -321,6 +329,35 @@ describe('skillDraft and createSkill', () => {
     expect(linkToAgent).not.toHaveBeenCalled();
   });
 
+  it('deletes the skill it just created when the link fails', async () => {
+    const { port } = fakeRepo({ listAccepted: async () => [accepted] });
+    const deleteSkill = vi.fn(async () => {});
+    const svc = new ConventionsService(
+      deps({
+        repo: port,
+        skills: {
+          createExtracted: async () => ({ id: 'sk9' }),
+          assertAgent: async () => {},
+          linkToAgent: async () => {
+            throw new Error('agent_skills insert failed');
+          },
+          deleteSkill,
+        },
+      }),
+    );
+    await expect(
+      svc.createSkill(WS, REPO, {
+        name: 'n',
+        description: 'd',
+        type: 'convention',
+        body: 'b',
+        agentId: 'agent1',
+      }),
+    ).rejects.toThrow('agent_skills insert failed');
+    // Otherwise the retry collides with the name this attempt already wrote.
+    expect(deleteSkill).toHaveBeenCalledWith(WS, 'sk9');
+  });
+
   it('does not link when no agent was chosen', async () => {
     const { port } = fakeRepo({ listAccepted: async () => [accepted] });
     const linkToAgent = vi.fn(async () => {});
@@ -331,6 +368,7 @@ describe('skillDraft and createSkill', () => {
           createExtracted: async () => ({ id: 'sk9' }),
           assertAgent: async () => {},
           linkToAgent,
+          deleteSkill: async () => {},
         },
       }),
     );

@@ -38,14 +38,18 @@ export interface ConventionsRepoPort {
   /** Upsert to `queued`, clearing the previous run's statistics. */
   queueScan(repoId: string): Promise<void>;
   markRunning(repoId: string, provider: string, model: string): Promise<void>;
-  finishScan(repoId: string, stats: ScanStats): Promise<void>;
-  failScan(repoId: string, error: string): Promise<void>;
-  /** Delete every candidate for the repo and insert these, in one transaction. */
-  replaceCandidates(
+  /**
+   * Replace the repo's candidates and mark the scan done — one transaction,
+   * because they are one fact. Split in two, a failure between them commits the
+   * new candidates under a scan row that then gets marked `failed`.
+   */
+  completeScan(
     workspaceId: string,
     repoId: string,
     candidates: RawCandidate[],
+    stats: ScanStats,
   ): Promise<void>;
+  failScan(repoId: string, error: string): Promise<void>;
   listCandidates(repoId: string): Promise<ConventionRecord[]>;
   listAccepted(repoId: string): Promise<ConventionRecord[]>;
   patchCandidate(
@@ -92,6 +96,13 @@ export interface SkillsPort {
   assertAgent(workspaceId: string, agentId: string): Promise<void>;
   /** Appends the skill to the agent's ordered list and bumps its version. */
   linkToAgent(agentId: string, skillId: string): Promise<void>;
+  /**
+   * Compensating delete for a link that failed after the skill was written.
+   * Skill creation and agent linking touch two modules' tables, so there is no
+   * transaction that spans them — the alternative to compensating is leaving a
+   * skill the caller was told it did not get.
+   */
+  deleteSkill(workspaceId: string, skillId: string): Promise<void>;
 }
 
 /** The narrow half of the platform logger — never the platform object itself. */

@@ -81,8 +81,7 @@ export class ConventionsService {
       const raw = files.length === 0 ? [] : await model.extract({ files });
       const { kept, dropped } = verifyCandidates({ candidates: raw, shown: shownLines(files) });
 
-      await this.deps.repo.replaceCandidates(workspaceId, repoId, kept);
-      await this.deps.repo.finishScan(repoId, {
+      await this.deps.repo.completeScan(workspaceId, repoId, kept, {
         poolCount: pool.length,
         sampleCount: files.length,
         candidateCount: kept.length,
@@ -144,7 +143,15 @@ export class ConventionsService {
       evidenceFiles,
     });
     if (input.agentId) {
-      await this.deps.skills.linkToAgent(input.agentId, skill.id);
+      try {
+        await this.deps.skills.linkToAgent(input.agentId, skill.id);
+      } catch (err) {
+        // The caller is about to be told this failed, so it must not keep the
+        // skill: a retry would otherwise collide with the name it just wrote
+        // and fail again, this time as a confusing duplicate-name error.
+        await this.deps.skills.deleteSkill(workspaceId, skill.id).catch(() => {});
+        throw err;
+      }
     }
     return skill;
   }
