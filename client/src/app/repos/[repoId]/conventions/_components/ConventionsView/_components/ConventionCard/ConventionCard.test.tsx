@@ -122,14 +122,32 @@ describe("ConventionCard", () => {
     expect(screen.getByText(candidate.rule)).toBeInTheDocument();
   });
 
-  it("does not send an empty rule", () => {
+  it("does not send an empty rule, and says why", () => {
     const mock = stubPatch();
     const { container } = renderCard();
     fireEvent.click(screen.getByRole("button", { name: /edit/i }));
     fireEvent.change(container.querySelector("textarea")!, { target: { value: "   " } });
     fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
     expect(mock).not.toHaveBeenCalled();
+    expect(screen.getByText(/A rule cannot be empty/)).toBeInTheDocument();
   });
+
+  it.each(["abc", "0", "-5", ""])(
+    "refuses the line %o out loud instead of dropping it from the patch",
+    (bad) => {
+      const mock = stubPatch();
+      const { container } = renderCard();
+      fireEvent.click(screen.getByRole("button", { name: /edit/i }));
+      // Edit the rule too: without the guard the rule would save and the bad
+      // line would vanish silently, which is the failure being pinned here.
+      fireEvent.change(container.querySelector("textarea")!, { target: { value: "Never chain" } });
+      fireEvent.change(screen.getByLabelText("Line"), { target: { value: bad } });
+      fireEvent.click(screen.getByRole("button", { name: /^save$/i }));
+      expect(mock).not.toHaveBeenCalled();
+      expect(screen.getByText(/Line must be a whole number greater than 0/)).toBeInTheDocument();
+      expect(container.querySelector("textarea")!).toHaveValue("Never chain");
+    },
+  );
 
   it("surfaces a failed save without losing the user's text", async () => {
     stubFailure();

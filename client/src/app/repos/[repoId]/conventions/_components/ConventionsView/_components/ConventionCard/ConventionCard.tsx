@@ -24,20 +24,33 @@ export function ConventionCard({
   const [rule, setRule] = React.useState(candidate.rule);
   const [line, setLine] = React.useState(String(candidate.evidence_line));
   const [path, setPath] = React.useState(candidate.evidence_path);
+  const [invalid, setInvalid] = React.useState<string | null>(null);
 
   function send(body: ConventionPatch) {
     patch.mutate({ repoId, id: candidate.id, patch: body });
   }
 
-  /** Only changed fields go over the wire — an unchanged field is not an edit. */
+  /**
+   * Only changed fields go over the wire — an unchanged field is not an edit.
+   * Bad input is refused out loud: silently dropping an unparseable line from
+   * the patch leaves the user believing they changed something they did not.
+   */
   function save() {
-    const next: ConventionPatch = {};
-    if (rule.trim() && rule.trim() !== candidate.rule) next.rule = rule.trim();
-    if (path.trim() && path.trim() !== candidate.evidence_path) next.evidence_path = path.trim();
-    const parsed = Number(line);
-    if (Number.isInteger(parsed) && parsed > 0 && parsed !== candidate.evidence_line) {
-      next.evidence_line = parsed;
+    if (!rule.trim()) {
+      setInvalid(t("card.ruleRequired"));
+      return;
     }
+    const parsed = Number(line);
+    if (!Number.isInteger(parsed) || parsed <= 0) {
+      setInvalid(t("card.lineInvalid"));
+      return;
+    }
+    setInvalid(null);
+
+    const next: ConventionPatch = {};
+    if (rule.trim() !== candidate.rule) next.rule = rule.trim();
+    if (path.trim() && path.trim() !== candidate.evidence_path) next.evidence_path = path.trim();
+    if (parsed !== candidate.evidence_line) next.evidence_line = parsed;
     if (Object.keys(next).length === 0) {
       setEditing(false);
       return;
@@ -52,6 +65,7 @@ export function ConventionCard({
     setRule(candidate.rule);
     setLine(String(candidate.evidence_line));
     setPath(candidate.evidence_path);
+    setInvalid(null);
     setEditing(false);
   }
 
@@ -107,6 +121,7 @@ export function ConventionCard({
           </>
         )}
 
+        {invalid && <div style={s.error}>{invalid}</div>}
         {patch.isError && <div style={s.error}>{t("card.saveFailed")}</div>}
       </div>
 
