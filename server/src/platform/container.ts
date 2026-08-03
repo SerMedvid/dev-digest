@@ -25,6 +25,8 @@ import { PriceBook } from './price-book.js';
 import { ConfigError } from './errors.js';
 import { AgentsRepository } from '../modules/agents/repository.js';
 import { SkillsRepository } from '../modules/skills/repository.js';
+import { SkillsService } from '../modules/skills/service.js';
+import { ConventionsRepository } from '../modules/conventions/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -73,6 +75,8 @@ export class Container {
   // `container.agentsRepo` instead of reaching into another module's folder.
   private _agentsRepo?: AgentsRepository;
   private _skillsRepo?: SkillsRepository;
+  private _skillsService?: SkillsService;
+  private _conventionsRepo?: ConventionsRepository;
   private _reviewRepo?: ReviewRepository;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
@@ -100,6 +104,20 @@ export class Container {
 
   get skillsRepo(): SkillsRepository {
     return (this._skillsRepo ??= new SkillsRepository(this.db));
+  }
+
+  /**
+   * Skill creation is needed by more than the skills module — the conventions
+   * extractor turns accepted rules into a skill. Constructed here so that
+   * module calls one use-case instead of importing `modules/skills/service.ts`,
+   * which the `no-cross-module-internals` gate forbids.
+   */
+  get skillsService(): SkillsService {
+    return (this._skillsService ??= new SkillsService(this.skillsRepo));
+  }
+
+  get conventionsRepo(): ConventionsRepository {
+    return (this._conventionsRepo ??= new ConventionsRepository(this.db));
   }
 
   get reviewRepo(): ReviewRepository {
