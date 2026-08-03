@@ -10,17 +10,95 @@
     "runExtraction": "Run extraction",
     "extractionFailed": "Extraction failed",
     "loadError": "Could not load conventions.",
+    "retry": "Retry",
     "empty": {
       "title": "No conventions extracted yet",
       "body": "Scan the repo to surface house-rules — naming, error handling, structure — each backed by evidence you can turn into a Skill.",
       "cta": "Run extraction"
     },
+    "notIndexed": {
+      "title": "This repo is not indexed yet",
+      "body": "Without an index we can only read your config files. Re-sync the repo for a full scan across its most central code.",
+      "cta": "Scan configs only"
+    },
+    "noneSurvived": {
+      "title": "Nothing survived verification",
+      "body": "The model proposed rules, but none cited evidence we could find in the sampled files. Re-scanning may do better.",
+      "reasonsLabel": "Discarded"
+    },
     "candidateCount": "{count, plural, one {# candidate} other {# candidates}} · grounded against sampled files"
+  },
+  "scan": {
+    "detected": "Detected from {count, plural, one {# sample file} other {# sample files}}",
+    "lastScan": "last scan {ago}",
+    "never": "never scanned",
+    "inFlight": "Scanning {sampled, plural, =0 {the repo} other {# files}}…",
+    "model": "{provider} · {model}",
+    "confirmTitle": "Re-scan this repo?",
+    "confirmBody": "A re-scan replaces every candidate for this repo. This discards {accepted} accepted and {rejected} rejected {rejected, plural, one {convention} other {conventions}}. Skills you already created are unaffected.",
+    "confirmCta": "Discard and re-scan",
+    "confirmCancel": "Keep them",
+    "dropReason": {
+      "unknown_path": "cited a file we never showed the model",
+      "missing_file": "cited a missing file",
+      "line_out_of_range": "cited a line past the end of the file",
+      "snippet_not_found": "quoted code we could not find",
+      "low_confidence": "too low confidence",
+      "duplicate": "duplicate of another rule",
+      "over_quota": "over the per-category limit"
+    }
+  },
+  "selection": {
+    "count": "{accepted} of {total} accepted",
+    "deselectAll": "Deselect all",
+    "createSkill": "Create skill"
   },
   "card": {
     "confidence": "Confidence",
     "accepted": "Accepted",
     "accepting": "Accepting…",
-    "acceptAsSkill": "Accept as Skill"
+    "acceptAsSkill": "Accept as Skill",
+    "accept": "Accept",
+    "reject": "Reject",
+    "rejected": "Rejected",
+    "edit": "Edit",
+    "save": "Save",
+    "cancel": "Cancel",
+    "ruleLabel": "Rule",
+    "pathLabel": "Evidence file",
+    "lineLabel": "Line",
+    "snippetLabel": "Evidence",
+    "saveFailed": "Could not save this convention.",
+    "category": {
+      "naming": "naming",
+      "structure": "structure",
+      "error-handling": "error handling",
+      "api-shape": "API shape",
+      "testing": "testing",
+      "imports": "imports",
+      "typing": "typing",
+      "tooling": "tooling"
+    }
+  },
+  "modal": {
+    "title": "Create skill from conventions",
+    "mergedFrom": "Merged from {count, plural, one {# accepted convention} other {# accepted conventions}} in {repo}. Everything below is editable before you save.",
+    "nameLabel": "Name",
+    "descriptionLabel": "Description",
+    "typeLabel": "Type",
+    "enabledLabel": "Enabled",
+    "enabledHint": "Whether this block is added to agents' prompts.",
+    "bodyLabel": "Skill body",
+    "unsaved": "unsaved",
+    "tokens": "{count} tokens",
+    "agentLabel": "Link to agent (optional)",
+    "agentHint": "The skill lands in the agent's prompt on its next review.",
+    "agentNone": "Don't link yet",
+    "footerNote": "Saved as v1 · added to Skills Lab",
+    "cancel": "Cancel",
+    "create": "Create skill",
+    "creating": "Creating…",
+    "createFailed": "Could not create the skill.",
+    "draftFailed": "Could not build the skill draft."
   }
 }
