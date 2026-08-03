@@ -39,3 +39,10 @@ export class ConfigError extends AppError {
     super('config_error', message, 500, details);
   }
 }
+
+/** The request is valid but conflicts with current state (e.g. a scan already running). */
+export class ConflictError extends AppError {
+  constructor(message = 'Conflict', details?: unknown) {
+    super('conflict', message, 409, details);
+  }
+}
