@@ -102,21 +102,38 @@ export class ConventionsRepository implements ConventionsRepoPort {
       .onConflictDoUpdate({ target: t.conventionScans.repoId, set });
   }
 
-  async finishScan(repoId: string, stats: ScanStats): Promise<void> {
-    await this.db
-      .update(t.conventionScans)
-      .set({
-        status: 'done',
-        poolCount: stats.poolCount,
-        sampleCount: stats.sampleCount,
-        candidateCount: stats.candidateCount,
-        dropped: stats.dropped as Record<string, number>,
-        provider: stats.provider,
-        model: stats.model,
-        error: null,
-        finishedAt: new Date(),
-      })
-      .where(eq(t.conventionScans.repoId, repoId));
+  /**
+   * The candidates and the `done` status commit together. Two statements on one
+   * connection is not the same as one transaction: a failure after the delete
+   * and insert commit would leave this run's candidates sitting under a scan row
+   * the worker then marks `failed`.
+   */
+  async completeScan(
+    workspaceId: string,
+    repoId: string,
+    candidates: RawCandidate[],
+    stats: ScanStats,
+  ): Promise<void> {
+    await this.db.transaction(async (tx) => {
+      await tx.delete(t.conventions).where(eq(t.conventions.repoId, repoId));
+      if (candidates.length > 0) {
+        await tx.insert(t.conventions).values(toInsert(workspaceId, repoId, candidates));
+      }
+      await tx
+        .update(t.conventionScans)
+        .set({
+          status: 'done',
+          poolCount: stats.poolCount,
+          sampleCount: stats.sampleCount,
+          candidateCount: stats.candidateCount,
+          dropped: stats.dropped as Record<string, number>,
+          provider: stats.provider,
+          model: stats.model,
+          error: null,
+          finishedAt: new Date(),
+        })
+        .where(eq(t.conventionScans.repoId, repoId));
+    });
   }
 
   async failScan(repoId: string, error: string): Promise<void> {
@@ -128,8 +145,10 @@ export class ConventionsRepository implements ConventionsRepoPort {
   }
 
   /**
-   * Replace-all, in one transaction. A re-scan discards the user's accept and
-   * reject decisions by design (see the design doc §5); the UI confirms first.
+   * Replace-all on its own, without touching the scan row. A re-scan discards
+   * the user's accept and reject decisions by design (see the design doc §5);
+   * the UI confirms first. `completeScan` is what the worker uses — this is for
+   * seeding candidates independently of a run.
    */
   async replaceCandidates(
     workspaceId: string,
@@ -139,19 +158,7 @@ export class ConventionsRepository implements ConventionsRepoPort {
     await this.db.transaction(async (tx) => {
       await tx.delete(t.conventions).where(eq(t.conventions.repoId, repoId));
       if (candidates.length === 0) return;
-      await tx.insert(t.conventions).values(
-        candidates.map((c) => ({
-          workspaceId,
-          repoId,
-          category: c.category,
-          rule: c.rule,
-          evidencePath: c.evidencePath,
-          evidenceLine: c.evidenceLine,
-          evidenceSnippet: c.evidenceSnippet,
-          confidence: c.confidence,
-          status: 'pending' as const,
-        })),
-      );
+      await tx.insert(t.conventions).values(toInsert(workspaceId, repoId, candidates));
     });
   }
 
@@ -193,6 +200,21 @@ export class ConventionsRepository implements ConventionsRepoPort {
       .returning();
     return row ? toRecord(row) : undefined;
   }
+}
+
+/** Domain candidates → insertable rows. Every candidate starts undecided. */
+function toInsert(workspaceId: string, repoId: string, candidates: RawCandidate[]) {
+  return candidates.map((c) => ({
+    workspaceId,
+    repoId,
+    category: c.category,
+    rule: c.rule,
+    evidencePath: c.evidencePath,
+    evidenceLine: c.evidenceLine,
+    evidenceSnippet: c.evidenceSnippet,
+    confidence: c.confidence,
+    status: 'pending' as const,
+  }));
 }
 
 /** The one place a Drizzle row becomes a domain record. */

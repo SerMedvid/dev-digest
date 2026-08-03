@@ -168,13 +168,26 @@ extraction — writes `done` or `failed` with a readable error. Nothing awaits t
 promise, so a scan left at `running` would show the user a spinner forever,
 which is worse than an error.
 
-### 3.6 A scan is replace-all
+### 3.6 A scan is replace-all, and finishing it is one write
 
-`replaceCandidates` deletes every candidate for the repo and inserts the new set
-in one transaction. A re-scan therefore discards the user's accept and reject
-decisions by design; the UI confirms first.
+`completeScan` deletes every candidate for the repo, inserts the new set, and
+marks the scan `done` — all in **one transaction**. Splitting the candidates
+from the status leaves a window where a failure between them commits this run's
+candidates and then marks the scan `failed`, so the user reads "extraction
+failed" above a list of perfectly good rules.
 
-### 3.7 The created skill
+A re-scan therefore discards the user's accept and reject decisions by design;
+the UI confirms first.
+
+### 3.7 Creating a skill compensates rather than transacts
+
+Skills and `agent_skills` belong to different modules' repositories, so no
+transaction spans "create the skill" and "link it to the agent". The agent is
+therefore checked *before* anything is written, and if the link still fails the
+new skill is deleted again. Returning an error while keeping the skill would
+make the obvious retry fail a second time, as a duplicate name.
+
+### 3.8 The created skill
 
 The body is the client's, edits included — the server does not re-derive it.
 `evidence_files` is **not** the client's: it is the distinct `evidence_path` set
