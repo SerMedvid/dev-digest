@@ -129,6 +129,17 @@ Immediately before `reviewPullRequest`, the executor reads
   `source = 'manual'` being the only source in scope. **If URL or community
   import is ever added, this decision must be revisited before that code
   merges.**
+- **`source: 'extracted'` now exists, and this is that revisit.** The conventions
+  extractor ([`specs/conventions.md`](conventions.md)) writes skills whose bodies
+  derive from repository content, including code snippets. A repo file can contain
+  "ignore previous instructions", a model can surface it as a convention, and it
+  would then enter every review prompt as a trusted instruction. The verbatim
+  rendering is **kept**, because the trust boundary here is a person: no candidate
+  reaches a skill without an explicit accept, the full merged body is visible and
+  editable before saving, and evidence snippets are capped at ten fenced lines so
+  whole files never reach a body. That is a procedural guarantee, not a technical
+  one. A source that removes the human step — URL import, community search — must
+  not reuse it.
 - The run uses the **current** bodies, not the bodies as of the agent's
   snapshot: `agent_versions` records which skills were linked, not what they
   said.
