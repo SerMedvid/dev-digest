@@ -180,6 +180,33 @@ d('/skills versioning', () => {
     await app.close();
   });
 
+  it('two concurrent body saves each get their own version and snapshot', async () => {
+    const app = await makeApp();
+    const id = (await app.inject({ method: 'POST', url: '/skills', payload: body() })).json().id;
+
+    // Both requests read v1 before either writes. Computing the next version in
+    // JS gave both of them "2", so the second snapshot insert hit the
+    // (skill_id, version) unique index and was dropped by onConflictDoNothing —
+    // leaving skills.version at 2 with a snapshot holding the other body.
+    await Promise.all([
+      app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { body: '# from A' } }),
+      app.inject({ method: 'PUT', url: `/skills/${id}`, payload: { body: '# from B' } }),
+    ]);
+
+    const versions = (await app.inject({ method: 'GET', url: `/skills/${id}/versions` })).json();
+    expect(versions.map((v: { version: number }) => v.version)).toEqual([3, 2, 1]);
+    expect(
+      versions.slice(0, 2).map((v: { body: string }) => v.body).sort(),
+    ).toEqual(['# from A', '# from B']);
+
+    // The live row is one of the two, and its version has a matching snapshot.
+    const skill = (await app.inject({ method: 'GET', url: `/skills/${id}` })).json();
+    expect(skill.version).toBe(3);
+    const current = versions.find((v: { version: number }) => v.version === skill.version);
+    expect(current.body).toBe(skill.body);
+    await app.close();
+  });
+
   it('restore appends a new version with the old body instead of rewinding', async () => {
     const app = await makeApp();
     const payload = body();

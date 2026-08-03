@@ -72,6 +72,12 @@ export function SkillsTab({ agent }: { agent: Agent }) {
   );
   const linkedIds = pending ?? serverIds;
 
+  /* `previous` is captured per call, which is safe only because these two
+     handlers belong to the newest call: `mutate` re-points the single mutation
+     observer, so a superseded call's mutate-level callbacks never run (verified
+     against @tanstack/react-query 5.62). Rapid toggles therefore converge on the
+     last one instead of an older revert winning. Adding a second mutation
+     instance — one per row, say — would break that and need explicit ordering. */
   function save(next: string[]) {
     const previous = linkedIds;
     setPending(next);

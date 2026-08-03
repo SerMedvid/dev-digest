@@ -230,10 +230,14 @@ export class AgentsRepository {
     await this.bumpForSkillChange(agentId);
   }
 
+  /** Detach one skill. No caller today (the editor posts the full set through
+      `setSkills`), but it bumps like its siblings so wiring a route to it can't
+      silently leave the agent's version history missing a change. */
   async unlinkSkill(agentId: string, skillId: string): Promise<void> {
     await this.db
       .delete(t.agentSkills)
       .where(and(eq(t.agentSkills.agentId, agentId), eq(t.agentSkills.skillId, skillId)));
+    await this.bumpForSkillChange(agentId);
   }
 
   /**

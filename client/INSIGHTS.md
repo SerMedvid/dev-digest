@@ -42,6 +42,21 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-03** — With `@tanstack/react-query` 5.62, calling `mutate` again on
+  the same `useMutation` instance **discards the previous call's mutate-level
+  callbacks**: `mutate` re-points the single mutation observer, so when the
+  superseded request settles its `onSuccess`/`onError` never run (probed:
+  0 calls for the superseded one, 1 for the newest). That is what makes the
+  `previous`-snapshot revert in
+  [`SkillsTab`](src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.tsx)
+  safe under rapid toggling — a stale revert *cannot* overwrite a newer
+  optimistic update, so no sequence guard is needed. Two consequences: don't
+  "fix" that pattern with a ref counter (dead code), and don't assume an error
+  banner appears for a failed call that has been superseded — `isError` tracks
+  the newest call only. Splitting one mutation into several instances (one per
+  row, say) removes the protection and *then* needs explicit ordering.
+  (`src/app/agents/[id]/_components/AgentEditor/_components/SkillsTab/SkillsTab.test.tsx:151`)
+
 - **2026-08-03** — The vendored [`Modal`](src/vendor/ui/kit/Modal.tsx) pads its
   own header (`18px 24px`) and footer (`16px 24px`) but gives the body **zero
   padding**, so children dropped straight in sit flush against the border while

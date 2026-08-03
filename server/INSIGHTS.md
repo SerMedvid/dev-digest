@@ -13,6 +13,21 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-03** — Computing the next version in JS (`existing.version + 1` from
+  a prior `SELECT`) and snapshotting it with `.onConflictDoNothing()` **loses
+  history silently**. Two `PUT /skills/:id` bodies landing together both read v1,
+  both write `version = 2`, and the second `skill_versions` insert hits the
+  `(skill_id, version)` unique index and is swallowed — so the row says v2 while
+  the only v2 snapshot holds the *other* writer's body, and the Versions tab
+  shows a body that was never saved. Bump in SQL instead
+  (`set({ version: sql`${t.skills.version} + 1` })`) and snapshot
+  `.returning()`'s `row.version`: each writer then gets its own version number
+  and its own snapshot. `AgentsRepository.bumpForSkillChange` already did it this
+  way; `AgentsRepository.update` still computes `nextVersion` in JS and has the
+  same hole. Reproducible without any sleep: two `app.inject` calls in one
+  `Promise.all` (`test/skills.it.test.ts:183`).
+  (`src/modules/skills/repository.ts:120`)
+
 - **2026-08-03** — Asserting `agent_skills.order` by sorting on it and comparing
   the *names* is a test that cannot fail. `Array.prototype.sort` is stable, so
   when every link is written at `order: 0` the rows keep the order Postgres

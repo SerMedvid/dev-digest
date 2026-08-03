@@ -108,7 +108,6 @@ export class SkillsRepository {
     if (!existing) return undefined;
 
     const bodyChanged = isBodyChange(existing, patch);
-    const nextVersion = bodyChanged ? existing.version + 1 : existing.version;
 
     const [row] = await this.db
       .update(t.skills)
@@ -118,12 +117,18 @@ export class SkillsRepository {
         ...(patch.type !== undefined ? { type: patch.type } : {}),
         ...(patch.body !== undefined ? { body: patch.body } : {}),
         ...(patch.enabled !== undefined ? { enabled: patch.enabled } : {}),
-        ...(bodyChanged ? { version: nextVersion } : {}),
+        // Bumped in SQL, not as `existing.version + 1`: two saves landing
+        // together would both compute the same next version, and the second
+        // snapshot insert would be swallowed by `onConflictDoNothing` — leaving
+        // skills.version pointing at a snapshot holding the OTHER writer's body.
+        // Incrementing in the row gives each save its own version to snapshot.
+        // Same reason AgentsRepository.bumpForSkillChange does it this way.
+        ...(bodyChanged ? { version: sql`${t.skills.version} + 1` } : {}),
       })
       .where(and(eq(t.skills.workspaceId, workspaceId), eq(t.skills.id, id)))
       .returning();
 
-    if (bodyChanged && row) await this.snapshotVersion(row, nextVersion, summary ?? null);
+    if (bodyChanged && row) await this.snapshotVersion(row, row.version, summary ?? null);
     return row;
   }
 
