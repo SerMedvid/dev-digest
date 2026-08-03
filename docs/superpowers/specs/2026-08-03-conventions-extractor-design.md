@@ -239,14 +239,22 @@ model was actually shown — at most three rules per category. It also carries a
 
 ### 4.1 Model resolution
 
-`getFeatureModelOverride(container, workspaceId, 'conventions')`, falling back to
-a module constant of `{ provider: 'openrouter', model: 'deepseek/deepseek-v4-flash' }`.
+The workspace's Settings choice for `conventions`, falling back to that feature's
+entry in the shared `FEATURE_MODELS` registry.
 
-The registry default for `conventions` is `openai/gpt-5.4`, which is not a cheap
-model; `feature-models.ts` documents this exact pattern — "callers that keep
-their own dynamic default (e.g. conventions) use this directly so that default is
-preserved". This wires up the dangling resolver instead of hardcoding a model,
-and gives the Settings screen something real to configure.
+> **Corrected 2026-08-03, after implementation.** This section originally
+> specified a *module constant* of
+> `{ provider: 'openrouter', model: 'deepseek/deepseek-v4-flash' }` as the
+> fallback, reasoning that the registry default (`openai/gpt-5.4`) is not cheap
+> and that `feature-models.ts` sanctions "callers that keep their own dynamic
+> default". That is wrong, and it shipped as a visible bug: the Settings screen
+> renders `chosen[id]?.model ?? f.defaultModel` **from the registry**, so with
+> nothing chosen it advertised `openai/gpt-5.4` while every scan actually ran
+> deepseek. A local default cannot be reconciled with a UI that reads the
+> registry. The cheap model was the right call — so the **registry entry** for
+> `conventions` was changed to `openrouter/deepseek-v4-flash` (both physical
+> copies of `@devdigest/shared`, plus the client's `lib/feature-models.ts`
+> mirror), and the fallback is now read from the registry rather than restated.
 
 ### 4.2 Evidence verification — code, no model
 
