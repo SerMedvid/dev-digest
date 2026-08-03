@@ -42,6 +42,31 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-03** — Two more vendored components that fix their own shape, same
+  family as the `Textarea`/`FormField` entry below.
+  [`EmptyState`](src/vendor/ui/primitives/EmptyState.tsx) takes **no children** —
+  it has `cta`/`onCta`/`ctaLoading` for its one button, and `body` is a
+  `ReactNode`, which is the only slot arbitrary content can ride in (a list of
+  drop reasons, say). `<EmptyState>{…}</EmptyState>` is a type error, not a
+  silent no-op, so it fails loudly — but plan-shaped code that assumes children
+  has to be restructured, not patched.
+  [`SelectInput`](src/vendor/ui/kit/SelectInput.tsx) accepts only
+  `value/onChange/options/mono` and forwards nothing, so `aria-label` never
+  reaches its `<select>`; inside a `FormField` it therefore has no accessible
+  name at all. Query it through an option only it carries —
+  `screen.getByRole("option", { name: "…" }).closest("select")` — rather than
+  by index, which breaks the moment another select is added.
+  (`src/app/repos/[repoId]/conventions/_components/ConventionsView/ConventionsView.tsx:104`)
+
+- **2026-08-03** — [`ProgressBar`](src/vendor/ui/primitives/ProgressBar.tsx)
+  takes a **0–100** value, not a 0–1 fraction: it does
+  `Math.min(100, value) + "%"` directly. Passing a confidence or ratio straight
+  through renders a bar that is technically correct and visually empty (0.91 →
+  a 0.91%-wide sliver), and nothing throws — so it survives a test that only
+  asserts the numeric label beside it. Multiply at the call site. Its sibling
+  `PercentProgress` takes the same 0–100 scale and rounds for you.
+  (`src/app/repos/[repoId]/conventions/_components/ConventionsView/_components/ConventionCard/ConventionCard.tsx:96`)
+
 - **2026-08-03** — A test that asserts a query's **error** state must build its
   QueryClient with `defaultOptions: { queries: { retry: false } }`. The test
   helpers here all do a bare `new QueryClient()`, which inherits react-query's
