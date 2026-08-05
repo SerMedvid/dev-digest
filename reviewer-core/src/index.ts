@@ -60,3 +60,12 @@ export { OpenRouterProvider, type OpenRouterProviderOptions } from './llm/openro
 
 // Intent layer — cheap classifier input (file-level diff topology, never content).
 export { hunkHeaderDigest } from './intent/hunk-digest.js';
+
+// Intent layer — the classifier call + the reviewer-facing renderer.
+export { classifyIntent, renderIntent } from './intent/classify.js';
+export type {
+  IntentSource,
+  ClassifyIntentInput,
+  ClassifyIntentResult,
+} from './intent/classify.js';
+export { INTENT_SYSTEM_PROMPT, INTENT_USE_RULE } from './intent/prompt.js';
