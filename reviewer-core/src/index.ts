@@ -57,3 +57,6 @@ export {
 // The single OpenAI-compatible structured provider (OpenRouter), shared by the
 // CI runner and the server's openrouter path. Owns session grouping + guards.
 export { OpenRouterProvider, type OpenRouterProviderOptions } from './llm/openrouter.js';
+
+// Intent layer — cheap classifier input (file-level diff topology, never content).
+export { hunkHeaderDigest } from './intent/hunk-digest.js';
