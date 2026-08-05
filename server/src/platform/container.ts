@@ -11,6 +11,7 @@ import type { AppConfig } from './config.js';
 import type { Db } from '../db/client.js';
 import { JobRunner } from './jobs.js';
 import { runBus, type RunBus } from './sse.js';
+import type { PinoLike } from './run-logger.js';
 import { LocalSecretsProvider } from '../adapters/secrets/local.js';
 import { LocalNoAuthProvider } from '../adapters/auth/local.js';
 import { OctokitGitHubClient } from '../adapters/github/octokit.js';
@@ -100,7 +101,22 @@ export class Container {
   private _tokenizer?: Tokenizer;
   private _priceBook?: PriceBook;
 
-  constructor(config: AppConfig, db: Db, private overrides: ContainerOverrides = {}) {
+  /**
+   * The process's structured logger (pino), supplied by `buildApp` so that
+   * services composed here can report best-effort failures they swallow by
+   * contract. Typed as `PinoLike` — the platform's own narrow pino shape —
+   * rather than Fastify's logger type, so no SDK type enters the graph.
+   * Optional so a Container is still constructible without one.
+   */
+  readonly logger?: PinoLike;
+
+  constructor(
+    config: AppConfig,
+    db: Db,
+    private overrides: ContainerOverrides = {},
+    logger?: PinoLike,
+  ) {
+    this.logger = logger;
     this.config = config;
     this.db = db;
     this.secrets = overrides.secrets ?? new LocalSecretsProvider(config.secretsPath);
@@ -179,6 +195,10 @@ export class Container {
         return new IntentModel(llm, choice.provider, choice.model);
       },
       tokenCount: (text) => this.tokenizer.count(text),
+      // `ensureFresh` swallows every derivation failure by contract, so without
+      // a logger a review's failed classification would go unrecorded until a
+      // caller happens to pass `onLog`. This is that record.
+      ...(this.logger ? { logger: this.logger } : {}),
     }));
   }
 

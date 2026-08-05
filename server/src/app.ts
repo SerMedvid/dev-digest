@@ -64,7 +64,10 @@ export async function buildApp(opts: BuildAppOptions = {}): Promise<FastifyInsta
   app.setValidatorCompiler(validatorCompiler);
   app.setSerializerCompiler(serializerCompiler);
 
-  const container = new Container(config, db, opts.overrides);
+  // `app.log` exists from `Fastify()` above (a no-op logger when logging is
+  // disabled), so the container can hand it to services that swallow failures
+  // by contract — intent derivation inside a review is otherwise silent.
+  const container = new Container(config, db, opts.overrides, app.log);
   app.decorate('container', container);
 
   // Reap runs left 'running' by a previous (now-dead) process — otherwise they

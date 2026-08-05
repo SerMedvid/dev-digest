@@ -211,13 +211,38 @@ describe('IntentService.ensureFresh', () => {
 
   it('degrades to undefined when derivation fails — the review must still run', async () => {
     const onLog = vi.fn();
+    const logger = { info: vi.fn(), warn: vi.fn() };
     const rec = await new IntentService(
       deps({
+        logger,
         model: async () => {
           throw new Error('OPENROUTER_API_KEY is not configured');
         },
       }),
     ).ensureFresh('w1', 'pr1', 'sha-1', { onLog });
+    expect(rec).toBeUndefined();
+    // The failure is recorded somewhere even when nobody passes an onLog.
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ prId: 'pr1', err: 'OPENROUTER_API_KEY is not configured' }),
+      expect.stringContaining('derivation failed'),
+    );
+    expect(onLog).toHaveBeenCalled();
+  });
+
+  it('still returns undefined when the recovery sinks themselves throw', async () => {
+    // `onLog` becomes run-executor's run-log writer, which is not throw-free.
+    // A logging failure must not turn a degraded intent into a failed review.
+    const boom = () => {
+      throw new Error('log sink is down');
+    };
+    const rec = await new IntentService(
+      deps({
+        logger: { info: boom, warn: boom },
+        model: async () => {
+          throw new Error('OPENROUTER_API_KEY is not configured');
+        },
+      }),
+    ).ensureFresh('w1', 'pr1', 'sha-1', { onLog: boom });
     expect(rec).toBeUndefined();
   });
 });

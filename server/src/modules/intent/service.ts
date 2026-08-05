@@ -63,8 +63,23 @@ export class IntentService {
       return await this.derive(workspaceId, prId, opts);
     } catch (err) {
       // Best-effort, exactly like repo-intel enrichment: the review runs on.
-      this.deps.logger?.warn({ prId, err: (err as Error).message }, 'intent: derivation failed');
-      opts.onLog?.(`Intent derivation failed: ${(err as Error).message}`);
+      //
+      // Nothing in this recovery path may throw — "never throws" is the whole
+      // contract, and a handler that throws breaks it just as loudly as the
+      // body would. `onLog` is run-executor's run-log writer in a review, which
+      // is not obviously throw-free. Each sink is guarded on its own so a
+      // failing one cannot suppress the other.
+      const message = err instanceof Error ? err.message : String(err);
+      try {
+        this.deps.logger?.warn({ prId, err: message }, 'intent: derivation failed');
+      } catch {
+        /* a logging sink must never be the thing that fails a review */
+      }
+      try {
+        opts.onLog?.(`Intent derivation failed: ${message}`);
+      } catch {
+        /* ditto */
+      }
       return undefined;
     }
   }
@@ -95,8 +110,12 @@ export class IntentService {
 
       // Linked issues. Cross-repo references are recorded, never fetched.
       const issueNumbers = linkedIssueNumbers(pull.body);
-      // Guarded like the docs read below: a PR that links no issue has nothing
-      // to fetch, so no GitHub client is built and no token is required for it.
+      // Skip the port call when the body links no issue. This saves no GitHub
+      // call and no token — `GitHubIssueReader.fetch` already early-returns on
+      // an empty list, before it ever resolves the client. What it does is pin
+      // the rule at the service boundary: a PR that links no issue can never
+      // acquire an `issue#` source or an issue-shaped missing-context note,
+      // whatever a port implementation hands back for an empty request.
       const issues: { found: IntentDoc[]; missing: string[] } =
         issueNumbers.length > 0
           ? await this.deps.issues.fetch({ owner: repo.owner, name: repo.name }, issueNumbers)
