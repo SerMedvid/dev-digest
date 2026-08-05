@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, integer, index, jsonb, timestamp, doublePrecision } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, text, integer, index, jsonb, timestamp, doublePrecision, boolean } from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
@@ -47,6 +47,8 @@ export const findings = pgTable(
     suggestion: text('suggestion'),
     confidence: doublePrecision('confidence').notNull(),
     kind: text('kind').notNull().default('finding'),
+    /** Set by the reviewer model when an intent was in the prompt (L03). */
+    outOfScope: boolean('out_of_scope').notNull().default(false),
     trifectaComponents: jsonb('trifecta_components').$type<string[]>(),
     acceptedAt: timestamp('accepted_at', { withTimezone: true }),
     dismissedAt: timestamp('dismissed_at', { withTimezone: true }),
@@ -62,6 +64,15 @@ export const prIntent = pgTable('pr_intent', {
   intent: text('intent').notNull(),
   inScope: jsonb('in_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
   outOfScope: jsonb('out_of_scope').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  /** Head commit the intent was derived against — stale means re-derive. */
+  headSha: text('head_sha').notNull().default(''),
+  /** 'high' | 'medium' | 'low', computed from the sources that arrived. */
+  confidence: text('confidence').notNull().default('low'),
+  sources: jsonb('sources').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  missingContext: jsonb('missing_context').$type<string[]>().notNull().default(sql`'[]'::jsonb`),
+  provider: text('provider').notNull().default(''),
+  model: text('model').notNull().default(''),
+  createdAt: now(),
 });
 
 export const prBrief = pgTable('pr_brief', {
