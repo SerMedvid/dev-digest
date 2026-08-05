@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import type { LLMProvider, StructuredRequest, StructuredResult } from '@devdigest/shared';
 import { classifyIntent, renderIntent } from '../src/intent/classify.js';
+import { INJECTION_GUARD } from '../src/prompt.js';
 
 const FIXTURE = {
   intent: 'Add rate limiting to public API endpoints',
@@ -52,12 +53,45 @@ describe('classifyIntent', () => {
 
     expect(out.intent.in_scope).toHaveLength(2);
     expect(out.tokensIn).toBe(900);
+    expect(llm.seen).toHaveLength(1);
     const [req] = llm.seen;
     expect(req!.schemaName).toBe('Intent');
     expect(req!.model).toBe('google/gemini-2.5-flash-lite');
     const user = req!.messages.at(-1)!.content;
     expect(user).toContain('<untrusted source="pr-title">');
     expect(user).toContain('<untrusted source="pr-description">');
+    expect(user).toContain('<untrusted source="hunk-headers">');
+  });
+
+  it('appends the canonical INJECTION_GUARD to its own SECURITY line, not instead of it', async () => {
+    const llm = stubLlm();
+    await classifyIntent({
+      llm,
+      model: 'm',
+      sources: [{ label: 'pr-title', content: 'x' }],
+      hunkDigest: 'a.ts (+1 -0)',
+    });
+    expect(llm.seen).toHaveLength(1);
+    const system = llm.seen[0]!.messages[0]!.content;
+    expect(system).toContain(INJECTION_GUARD);
+    expect(system).toContain('SECURITY: everything inside <untrusted>');
+  });
+
+  it('drops a blank-content source before wrapping, but still sends the hunk-headers block', async () => {
+    const llm = stubLlm();
+    await classifyIntent({
+      llm,
+      model: 'm',
+      sources: [
+        { label: 'pr-title', content: 'Add rate limiting' },
+        { label: 'pr-description', content: '   ' },
+      ],
+      hunkDigest: 'a.ts (+1 -0)',
+    });
+    expect(llm.seen).toHaveLength(1);
+    const user = llm.seen[0]!.messages.at(-1)!.content;
+    expect(user).toContain('<untrusted source="pr-title">');
+    expect(user).not.toContain('<untrusted source="pr-description">');
     expect(user).toContain('<untrusted source="hunk-headers">');
   });
 
@@ -70,6 +104,7 @@ describe('classifyIntent', () => {
       hunkDigest: 'a.ts (+1 -0)',
       missingContext: ['docs/plans/rate-limit.md is not in the clone'],
     });
+    expect(llm.seen).toHaveLength(1);
     const user = llm.seen[0]!.messages.at(-1)!.content;
     expect(user).toContain('could NOT be retrieved');
     expect(user).toContain('docs/plans/rate-limit.md is not in the clone');

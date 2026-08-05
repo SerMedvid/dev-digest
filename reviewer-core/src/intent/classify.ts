@@ -1,6 +1,6 @@
 import type { Intent, LLMProvider } from '@devdigest/shared';
 import { Intent as IntentSchema } from '@devdigest/shared';
-import { wrapUntrusted } from '../prompt.js';
+import { wrapUntrusted, INJECTION_GUARD } from '../prompt.js';
 import { INTENT_SYSTEM_PROMPT } from './prompt.js';
 
 export { renderIntent } from './render.js';
@@ -49,13 +49,19 @@ export async function classifyIntent(input: ClassifyIntentInput): Promise<Classi
         ].join('\n')
       : '';
 
+  // Compose the canonical, shared guard onto this call's own SECURITY line —
+  // the same pattern assemblePrompt uses (prompt.ts) — so a future
+  // strengthening of INJECTION_GUARD reaches this call path too, without
+  // diverging from or weakening the classifier's own wording.
+  const system = `${INTENT_SYSTEM_PROMPT}\n\n${INJECTION_GUARD}`;
+
   const res = await input.llm.completeStructured({
     model: input.model,
     schema: IntentSchema,
     schemaName: 'Intent',
     temperature: 0,
     messages: [
-      { role: 'system', content: INTENT_SYSTEM_PROMPT },
+      { role: 'system', content: system },
       { role: 'user', content: `${blocks.join('\n\n')}${missing}` },
     ],
     ...(input.sessionId ? { sessionId: input.sessionId } : {}),
