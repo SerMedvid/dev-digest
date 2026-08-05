@@ -15,6 +15,28 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-05** — A Claude Code Bash permission rule with a trailing wildcard
+  does **not** match the bare command: `Bash(pnpm typecheck *)` never authorises
+  `pnpm typecheck` with no arguments, so a rule that looks installed silently
+  prompts anyway. List both forms. Shell operators are outside the match too —
+  `Bash(safe-cmd *)` does not cover `safe-cmd && other-cmd`, which makes a `deny`
+  entry a partial net at best (`Bash(docker compose down -v*)` misses
+  `docker compose -f x.yml down -v` and `--volumes`). Put the load-bearing
+  prohibition in the agent's own prompt body and treat the `deny` list as the
+  second rubber. (`.claude/settings.local.json:17`)
+
+- **2026-08-05** — `superpowers` v6.2.0 plan/execute skills mandate three steps a
+  repo-local agent may not be allowed to run: `writing-plans` templates a
+  `Step N: Commit` with a real `git commit` at the end of every task, and
+  `executing-plans` opens by requiring a git worktree via `using-git-worktrees`
+  and closes by handing off to `finishing-a-development-branch`. Wiring any agent
+  to execute a plan from [`docs/superpowers/plans/`](docs/superpowers/plans/)
+  therefore needs those three carved out explicitly, with a stated replacement
+  (report the intended commit message, work in the tree it was given, stop and
+  report). Skill sources live in the plugin cache, not the repo:
+  `~/.claude/plugins/cache/claude-plugins-official/superpowers/<version>/skills/`.
+  (`.claude/agents/implementer.md:72`)
+
 - **2026-08-02** — A Claude Code hook in [`.claude/settings.json`](.claude/settings.json)
   has **no `args` field**. A `type: "command"` hook is a single shell string
   (`command`, plus optional `timeout` / `shell` / `async`); writing
@@ -40,6 +62,24 @@ an entry can age — verify before relying on one.
   they belong nowhere in it. (`skills-lock.json:4`)
 
 ## Decisions
+
+- **2026-08-05** — The [`planner`](.claude/agents/planner.md) /
+  [`implementer`](.claude/agents/implementer.md) split exists **despite**
+  Anthropic documenting it as an anti-pattern: their multi-agent guidance reports
+  that with agents specialised by development role (planner, implementer, tester,
+  reviewer) "the subagents spent more tokens on coordination than on actual work",
+  and recommends splitting by context boundary instead — "an agent handling a
+  feature should also handle its tests". Four mitigations are what make ours
+  viable, so treat them as load-bearing rather than stylistic: the handoff is a
+  **file** in `docs/plans/` or `docs/superpowers/plans/`, never a chat message;
+  both agents read [`.claude/skills/README.md`](.claude/skills/README.md) as the
+  single shared rule source instead of each carrying its own skill list; the
+  implementer takes a vertical slice **including its own tests**; and
+  architecture/security review is done by separate blackbox agents, which is the
+  one role split that guidance endorses ("verification requires minimal context
+  transfer by nature"). Dropping any of them reopens the telephone-game failure.
+  Source: `claude.com/blog/building-multi-agent-systems-when-and-how-to-use-them`.
+  (`.claude/agents/planner.md:1`)
 
 ## Recurring errors & fixes
 

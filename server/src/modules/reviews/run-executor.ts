@@ -1,6 +1,6 @@
 import type { Container } from '../../platform/container.js';
 import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import { reviewPullRequest, countBlockers, renderIntent } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -106,6 +106,29 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // ---- Intent (L03) — derived ONCE for the batch, before the agent loop ----
+    // On the fanned-out logger, so every target run's buffer (and therefore its
+    // persisted trace) records it. Best-effort: a failure omits the prompt
+    // section, exactly like repo-intel enrichment — it never fails the review.
+    let intentText: string | undefined;
+    const intentRecord = await runLog.step(
+      'Deriving PR intent',
+      () =>
+        this.container.intentService.ensureFresh(workspaceId, pull.id, pull.headSha, {
+          onLog: (msg, data) => runLog.tool(msg, data),
+        }),
+      { kind: 'tool' },
+    );
+    if (intentRecord) {
+      intentText = renderIntent(intentRecord);
+      runLog.info(
+        `Intent: ${intentRecord.confidence} confidence from ${intentRecord.sources.length} source(s)`,
+        { confidence: intentRecord.confidence, sources: intentRecord.sources, model: intentRecord.model },
+      );
+    } else {
+      runLog.info('No PR intent available — reviewing without the intent section');
+    }
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -113,7 +136,16 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(
+          workspaceId,
+          pull,
+          repo,
+          diff,
+          intentText,
+          agent,
+          runId,
+          runLog,
+        );
         logger?.info(
           {
             runId,
@@ -142,6 +174,8 @@ export class ReviewRunExecutor {
     pull: PullRow,
     repo: typeof schema.repos.$inferSelect,
     diff: UnifiedDiff,
+    /** Rendered PR intent from the batch pre-work; undefined when derivation failed. */
+    intentText: string | undefined,
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
@@ -209,6 +243,8 @@ export class ReviewRunExecutor {
         ...(callersDigest ? { callers: callersDigest } : {}),
         // T3 — repo skeleton, same omit-when-empty contract.
         ...(repoMap ? { repoMap } : {}),
+        // L03 — derived intent, same omit-when-empty contract as repoMap/callers.
+        ...(intentText ? { intent: intentText } : {}),
         // Reusable skill bodies. Trusted instructions (manual source only), so
         // they are NOT delimiter-wrapped; assemblePrompt omits the section when
         // the array is empty.
