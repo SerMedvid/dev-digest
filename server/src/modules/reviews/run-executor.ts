@@ -96,7 +96,7 @@ export class ReviewRunExecutor {
 
     let diff: UnifiedDiff;
     try {
-      diff = await runLog.step('Loading PR diff', () => loadDiff(this.container, this.repo, workspaceId, pull, repo), {
+      diff = await runLog.step('Loading PR diff', () => loadDiff(this.container.git, this.repo, workspaceId, pull, repo), {
         kind: 'tool',
       });
     } catch (err) {

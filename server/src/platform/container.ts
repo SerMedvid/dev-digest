@@ -19,7 +19,8 @@ import { RipgrepCodeIndex } from '../adapters/codeindex/ripgrep.js';
 import { OpenAIProvider } from '../adapters/llm/openai.js';
 import { AnthropicProvider } from '../adapters/llm/anthropic.js';
 import { OpenAIEmbedder } from '../adapters/embedder/openai.js';
-import { OpenRouterProvider } from '@devdigest/reviewer-core';
+import { hunkHeaderDigest, OpenRouterProvider } from '@devdigest/reviewer-core';
+import { FEATURE_MODELS } from '@devdigest/shared';
 import { estimateCost } from '../adapters/llm/pricing.js';
 import { PriceBook } from './price-book.js';
 import { ConfigError } from './errors.js';
@@ -29,10 +30,23 @@ import { SkillsService } from '../modules/skills/service.js';
 import { ConventionsRepository } from '../modules/conventions/repository.js';
 import { ReviewRepository } from '../modules/reviews/repository.js';
 import { IntentRepository } from '../modules/intent/repository.js';
+import { IntentService } from '../modules/intent/service.js';
+import { IntentModel } from '../modules/intent/model.js';
+import { CloneDocReader } from '../modules/intent/docs.js';
+import { GitHubIssueReader } from '../modules/intent/github.js';
+import { loadDiff } from '../modules/reviews/diff-loader.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
 import { type DepGraph, DepCruiseGraph } from '../adapters/depgraph/index.js';
 import { type Tokenizer, TiktokenTokenizer } from '../adapters/tokenizer/index.js';
+
+/** Registry default — never a local restatement. Changing the model means
+    changing FEATURE_MODELS (and its client mirror), not this line. */
+const INTENT_REGISTRY_ENTRY = FEATURE_MODELS.find((f) => f.id === 'review_intent')!;
+const INTENT_DEFAULT_MODEL = {
+  provider: INTENT_REGISTRY_ENTRY.defaultProvider,
+  model: INTENT_REGISTRY_ENTRY.defaultModel,
+};
 
 /**
  * DI container. One per app instance. Holds config, db, the JobRunner,
@@ -80,6 +94,7 @@ export class Container {
   private _conventionsRepo?: ConventionsRepository;
   private _reviewRepo?: ReviewRepository;
   private _intentRepo?: IntentRepository;
+  private _intentService?: IntentService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -128,6 +143,43 @@ export class Container {
 
   get intentRepo(): IntentRepository {
     return (this._intentRepo ??= new IntentRepository(this.db));
+  }
+
+  /**
+   * Intent derivation is needed by two callers — the intent routes and the
+   * review pre-work in `run-executor` — so the composition root is here rather
+   * than in the module's routes file. The service takes ports, never `Container`.
+   */
+  get intentService(): IntentService {
+    return (this._intentService ??= new IntentService({
+      repo: this.intentRepo,
+      store: {
+        get: (prId) => this.reviewRepo.getIntent(prId),
+        put: (prId, rec) => this.reviewRepo.upsertIntent(prId, rec),
+      },
+      docs: new CloneDocReader(),
+      issues: new GitHubIssueReader(() => this.github()),
+      diff: {
+        hunkDigest: async (workspaceId, prId) => {
+          // loadDiff needs the FULL pull + repo rows (it falls back to stored
+          // pr_files patches), so read them through the reviews aggregate —
+          // intentRepo returns deliberately narrow projections that would not
+          // type-check here.
+          const pull = await this.reviewRepo.getPull(workspaceId, prId);
+          if (!pull) return undefined;
+          const repo = await this.reviewRepo.getRepo(pull.repoId);
+          if (!repo) return undefined;
+          const diff = await loadDiff(this.git, this.reviewRepo, workspaceId, pull, repo);
+          return hunkHeaderDigest(diff);
+        },
+      },
+      model: async (workspaceId) => {
+        const choice = (await this.intentRepo.featureModelChoice(workspaceId)) ?? INTENT_DEFAULT_MODEL;
+        const llm = await this.llm(choice.provider as 'openai' | 'anthropic' | 'openrouter');
+        return new IntentModel(llm, choice.provider, choice.model);
+      },
+      tokenCount: (text) => this.tokenizer.count(text),
+    }));
   }
 
   get codeIndex(): CodeIndex {
