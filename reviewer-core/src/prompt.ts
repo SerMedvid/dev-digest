@@ -1,4 +1,5 @@
 import type { ChatMessage, PromptAssembly } from '@devdigest/shared';
+import { INTENT_USE_RULE } from './intent/prompt.js';
 
 /**
  * Prompt assembly + prompt-injection hardening.
@@ -60,6 +61,12 @@ export interface PromptParts {
    */
   callers?: string;
   /**
+   * Derived PR intent (L03), rendered by `renderIntent`. UNTRUSTED: it is
+   * distilled from the author's own description, so it is delimiter-wrapped like
+   * any other author-controlled content. Empty/undefined → section omitted.
+   */
+  intent?: string;
+  /**
    * The PR author's description/body (untrusted — author-controlled, a prime
    * injection vector). Delimiter-wrapped + truncated. Rendered right after the
    * task line so the model knows what the PR claims to do and why. Empty /
@@ -117,6 +124,11 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
       `## Callers of changed symbols\n${wrapUntrusted('callers', parts.callers)}`,
     );
   }
+  if (parts.intent && parts.intent.trim().length > 0) {
+    userSections.push(
+      `## Derived intent\n${wrapUntrusted('intent', parts.intent)}\n${INTENT_USE_RULE}`,
+    );
+  }
   userSections.push(`## Diff to review\n${wrapUntrusted('diff', parts.diff)}`);
 
   const user = userSections.join('\n\n');
@@ -134,6 +146,7 @@ export function assemblePrompt(parts: PromptParts): AssembledPrompt {
     callers: parts.callers ?? null,
     repo_map: parts.repoMap ?? null,
     pr_description: prDescription ?? null,
+    intent: parts.intent ?? null,
     user,
   };
 
