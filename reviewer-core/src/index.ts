@@ -22,6 +22,9 @@ export {
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 
+// Intent scope gate — the deterministic half of the Intent Layer.
+export { scopeFindings, scopeSummary, type ScopeResult } from './scope.js';
+
 // Structured-output helpers (Zod → JSON Schema + parse-with-repair).
 export {
   toJsonSchema,

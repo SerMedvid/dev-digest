@@ -9,6 +9,7 @@ import type {
 import { Review as ReviewSchema } from '@devdigest/shared';
 import { assemblePrompt } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
+import { scopeFindings } from '../scope.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
 /**
@@ -102,6 +103,8 @@ export interface ReviewOutcome {
   grounding: string;
   /** Findings dropped by grounding, with reasons (for logs / "never go silent"). */
   dropped: { finding: Finding; reason: string }[];
+  /** Findings filtered by the intent scope gate, with reasons. */
+  scopeDropped: { finding: Finding; reason: string }[];
   /** Which path ran. */
   mode: ReviewMode;
   /** Prompt assembly (for the run trace). Single-pass: the one call; map-reduce: the whole-diff assembly. */
@@ -205,13 +208,21 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
   }
   emit('result', `Citation grounding: ${grounding}`);
 
-  // Score is derived from the findings that SURVIVED grounding (not the model's
-  // self-reported number, and not the pre-grounding set) so the score, the
-  // findings list, and the deterministic event always agree.
+  // Intent scope gate — runs AFTER grounding and BEFORE scoring, so the score
+  // reflects exactly the findings the user will see. A no-op without an intent.
+  const scoped = scopeFindings(ground.kept, Boolean(input.intent && input.intent.trim()));
+  for (const d of scoped.dropped) {
+    emit('info', `scope dropped "${d.finding.title}": ${d.reason}`);
+  }
+  if (scoped.dropped.length > 0) {
+    emit('result', `Intent scope: ${scoped.dropped.length} out-of-scope suggestion(s) filtered`);
+  }
+
   return {
-    review: { ...merged, findings: ground.kept, score: scoreFromFindings(ground.kept) },
+    review: { ...merged, findings: scoped.kept, score: scoreFromFindings(scoped.kept) },
     grounding,
     dropped: ground.dropped,
+    scopeDropped: scoped.dropped,
     mode,
     assembly,
     chunks: chunks.map((c) => ({ label: c.label })),
