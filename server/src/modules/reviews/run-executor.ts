@@ -1,6 +1,6 @@
 import type { Container } from '../../platform/container.js';
 import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers, renderIntent } from '@devdigest/reviewer-core';
+import { reviewPullRequest, countBlockers, renderIntent, hunkHeaderDigest } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -124,6 +124,10 @@ export class ReviewRunExecutor {
         () =>
           this.container.intentService.ensureFresh(workspaceId, pull.id, pull.headSha, {
             onLog: (msg, data) => runLog.tool(msg, data),
+            // The diff is already in hand from the step above. Without this the
+            // intent's diff port runs `loadDiff` — a git subprocess, or a read
+            // of every stored `pr_files` patch — a second time for this batch.
+            hunkDigest: hunkHeaderDigest(diff),
           }),
         { kind: 'tool' },
       );

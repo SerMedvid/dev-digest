@@ -282,6 +282,15 @@ Surviving findings persist their marker: `findings.out_of_scope` is written from
   recovery path is individually guarded, because "never throws" is the whole
   contract and a logging sink that throws would break it just as loudly.
 
+The review has just loaded the diff at that point, so it passes the digest in as
+`opts.hunkDigest` and the service skips its diff port entirely; otherwise the
+port re-runs `loadDiff` (plus its own `getPull`/`getRepo`) for a diff the caller
+is already holding. The option is a **string**, not a `UnifiedDiff` — the service
+must not acquire a reviews-module type — and `''` is a real answer meaning "the
+diff loaded and it is empty", which still yields §3.2's `the PR diff could not be
+loaded` note without a second load. A caller with no diff in hand (the route)
+omits it and the port loads as before.
+
 With a record, `renderIntent(record)` becomes `ReviewInput.intent` for every agent
 in the batch. Without one, the slot is omitted and §3.5's gate is a no-op — the
 review behaves exactly as it did before this feature.

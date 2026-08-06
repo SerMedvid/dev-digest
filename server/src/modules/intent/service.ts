@@ -13,6 +13,17 @@ import type { IntentServiceDeps } from './ports.js';
  *   - `derive` is a user action, so it throws (404 unknown PR, 409 in flight).
  *   - `ensureFresh` runs inside a review, where a failed classification must
  *     degrade to "no intent section" rather than fail the review.
+ *
+ * Both entry points accept an already-computed hunk digest. A review has just
+ * loaded the diff when it calls `ensureFresh`, and without this the diff port
+ * loads it a second time (plus its own `getPull` + `getRepo`) — `loadDiff` is a
+ * git subprocess or a read of every stored `pr_files` patch, so it is not free.
+ *
+ * It is a `string`, deliberately, not the caller's `UnifiedDiff`: the service
+ * depends on the narrow `diff.hunkDigest(workspaceId, prId)` port and must not
+ * acquire a reviews-module type. An empty string is a real answer ("the diff
+ * loaded and it is empty"), so `??` — never `||` — decides whether to fall back
+ * to the port, and passing `''` is how a caller says "do not reload".
  */
 export class IntentService {
   /** In-process guard against two derivations for one PR. Like RunBus's cancel
@@ -48,7 +59,7 @@ export class IntentService {
     workspaceId: string,
     prId: string,
     headSha: string,
-    opts: { onLog?: (msg: string, data?: unknown) => void } = {},
+    opts: { onLog?: (msg: string, data?: unknown) => void; hunkDigest?: string } = {},
   ): Promise<PrIntentRecord | undefined> {
     try {
       const existing = await this.get(workspaceId, prId);
@@ -94,7 +105,7 @@ export class IntentService {
   async derive(
     workspaceId: string,
     prId: string,
-    opts: { onLog?: (msg: string, data?: unknown) => void } = {},
+    opts: { onLog?: (msg: string, data?: unknown) => void; hunkDigest?: string } = {},
   ): Promise<PrIntentRecord> {
     const pull = await this.deps.repo.getPull(workspaceId, prId);
     if (!pull) throw new NotFoundError('Pull request not found');
@@ -147,8 +158,11 @@ export class IntentService {
         }
       }
 
-      // Files + hunk headers. Never bodies.
-      const hunkDigest = (await this.deps.diff.hunkDigest(workspaceId, prId)) ?? '';
+      // Files + hunk headers. Never bodies. `??` on both steps: a caller that
+      // passed '' has already loaded the diff and found it empty, and must not
+      // trigger a second load — see the note on the class.
+      const hunkDigest =
+        opts.hunkDigest ?? (await this.deps.diff.hunkDigest(workspaceId, prId)) ?? '';
       if (!hunkDigest) missingContext.push('the PR diff could not be loaded');
 
       const model = await this.deps.model(workspaceId);
