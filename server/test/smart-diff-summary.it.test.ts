@@ -1,10 +1,16 @@
 /**
  * POST /pulls/:id/smart-diff/summary — the on-demand per-file summary write
  * path: prompt assembly, the one structured model call, cache-on-head-sha,
- * the in-flight 409 guard, and failure propagation. This is deliberately the
- * opposite of the GET path's behaviour (`smart-diff-routes.it.test.ts`): the
- * user clicked a button, so a failed derivation must surface as an error, not
- * degrade to an empty summary.
+ * and failure propagation. This is deliberately the opposite of the GET
+ * path's behaviour (`smart-diff-routes.it.test.ts`): the user clicked a
+ * button, so a failed derivation must surface as an error, not degrade to an
+ * empty summary.
+ *
+ * The in-flight 409 guard itself is NOT covered here: `app.inject()` can't
+ * observe the race — `MockLLMProvider.completeStructured` resolves
+ * synchronously, so a second inject always arrives after the first has
+ * already finished. That coverage (two concurrent `summarize()` calls against
+ * a gated promise) lives in `smart-diff-service.test.ts`, hermetically.
  *
  * The LLM is a MockLLMProvider keyed by schema name ('FileSummary' — the
  * schemaName `FileSummaryModel.summarize` sends), wired into the

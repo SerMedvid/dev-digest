@@ -4,9 +4,11 @@
  * Task 3's pure `classifyPath`/`groupFiles`/`splitSuggestion`, marks are
  * derived from live findings, and no LLM is ever called on this path.
  *
- * Gated on Docker (needs Postgres), matching the other integration tests.
- * The hermetic degradation case at the bottom needs no DB and runs even
- * without Docker.
+ * Gated on Docker (needs Postgres), matching the other integration tests. The
+ * hermetic `SmartDiffService` cases (findings-fetch degradation, the in-flight
+ * summary guard) live in `smart-diff-service.test.ts` instead — this file's
+ * `.it.test.ts` suffix drops it whole from the hermetic lane's exclude glob,
+ * so a case that needs no DB has no business living here.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { and, eq } from 'drizzle-orm';
@@ -16,8 +18,6 @@ import { loadConfig } from '../src/platform/config.js';
 import { seed } from '../src/db/seed.js';
 import { MockGitClient, MockGitHubClient, MockLLMProvider } from '../src/adapters/mocks.js';
 import * as t from '../src/db/schema.js';
-import { SmartDiffService } from '../src/modules/smart-diff/service.js';
-import type { SmartDiffStorePort } from '../src/modules/smart-diff/domain.js';
 
 const hasDocker = await dockerAvailable();
 const d = hasDocker ? describe : describe.skip;
@@ -292,50 +292,5 @@ d('smart-diff endpoints (Testcontainers pg)', () => {
       );
       expect(totalFiles).toBe(9);
     });
-  });
-});
-
-/**
- * Findings-fetch degradation (SS-7): a failure reading findings must degrade
- * to empty marks with grouping intact, not fail the whole response. Runs
- * hermetically — no DB, no Docker — against the service directly.
- */
-describe('SmartDiffService degradation (hermetic)', () => {
-  it('degrades to empty marks, grouping intact, when findingsForPull rejects', async () => {
-    const store: SmartDiffStorePort = {
-      getPull: async () => ({ id: 'pr-1', headSha: 'sha-1' }),
-      getPrFiles: async () => [
-        { path: 'src/service.ts', additions: 5, deletions: 1 },
-        { path: 'README.md', additions: 1, deletions: 0 },
-      ],
-      findingsForPull: async () => {
-        throw new Error('db unavailable');
-      },
-    };
-    const warnings: unknown[] = [];
-    const service = new SmartDiffService({
-      store,
-      // Task 6 widened this port; only `summariesForPr` is exercised by
-      // `get()`, which is all this hermetic test calls.
-      repo: {
-        summariesForPr: async () => [],
-        upsertSummary: async () => {},
-        featureModelChoice: async () => undefined,
-      },
-      model: async () => {
-        throw new Error('not used: this test never calls summarize()');
-      },
-      log: { warn: (obj) => warnings.push(obj) },
-    });
-
-    const result = await service.get('ws-1', 'pr-1');
-
-    expect(result.groups.map((g) => g.role)).toEqual(['core', 'boilerplate']);
-    for (const group of result.groups) {
-      for (const file of group.files) {
-        expect(file.finding_marks).toEqual([]);
-      }
-    }
-    expect(warnings).toHaveLength(1);
   });
 });
