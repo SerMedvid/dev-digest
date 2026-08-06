@@ -59,6 +59,23 @@ describe("FileCard", () => {
     expect(onMarkClick).toHaveBeenCalledWith("f1");
   });
 
+  it("picks the highest-severity mark when two findings land on the same line, regardless of array order", () => {
+    const onMarkClick = vi.fn();
+    // Deliberately unfavourable order: SUGGESTION first, CRITICAL second. A
+    // naive `marks.find(...)` would pick SUGGESTION here and pass under the
+    // old buggy code too — the ordering is the whole point of this test.
+    const marks: FindingMark[] = [
+      { line: 3, severity: "SUGGESTION", finding_id: "low" },
+      { line: 3, severity: "CRITICAL", finding_id: "high" },
+    ];
+    render(wrap(<FileCard file={FILE} marks={marks} onMarkClick={onMarkClick} />));
+
+    const chips = screen.getAllByRole("button", { name: /finding/i });
+    expect(chips).toHaveLength(1); // only the winning mark renders a chip
+    fireEvent.click(chips[0]!);
+    expect(onMarkClick).toHaveBeenCalledWith("high");
+  });
+
   it("scrolls to the target line once, and does not replay the scroll after collapsing and reopening", () => {
     const scrollSpy = vi.fn();
     Element.prototype.scrollIntoView = scrollSpy;

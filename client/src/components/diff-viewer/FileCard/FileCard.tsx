@@ -12,6 +12,7 @@ import { Icon } from "@devdigest/ui";
 import type { FindingMark } from "@devdigest/shared";
 import type { PrFile } from "@/lib/types";
 import { AUTO_EXPAND_MAX_LINES } from "../constants";
+import { SEVERITY_RANK } from "./constants";
 import { parsePatch, type Line } from "../helpers";
 import {
   buildThreads,
@@ -35,11 +36,23 @@ function threadsForLine(ln: Line, matched: Map<string, CommentThread[]>): Commen
   return out;
 }
 
-/** A mark anchors to the new-side line it names — never a deleted line, which
-    has no `newNo`. */
+/**
+ * A mark anchors to the new-side line it names — never a deleted line, which
+ * has no `newNo`. More than one mark can name the same line: `finding_marks`
+ * is one entry per non-dismissed finding, not deduplicated by line (that's
+ * `finding_lines`'s job, a different projection), so two agents flagging the
+ * same line is expected, not a data bug. Pick deterministically by severity
+ * (`SEVERITY_RANK`) rather than trusting array order, which is incidental DB
+ * iteration order and would otherwise silently drop every mark but the first.
+ */
 function markForLine(ln: Line, marks: FindingMark[] | undefined): FindingMark | undefined {
   if (!marks || marks.length === 0 || ln.kind === "del" || ln.newNo == null) return undefined;
-  return marks.find((m) => m.line === ln.newNo);
+  let best: FindingMark | undefined;
+  for (const m of marks) {
+    if (m.line !== ln.newNo) continue;
+    if (!best || SEVERITY_RANK[m.severity] < SEVERITY_RANK[best.severity]) best = m;
+  }
+  return best;
 }
 
 export function FileCard({

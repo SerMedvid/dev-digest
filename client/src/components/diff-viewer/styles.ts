@@ -111,7 +111,7 @@ export function markChipFor(severity: Severity): CSSProperties {
     height: 16,
     borderRadius: "50%",
     border: "none",
-    background: MARK_COLOR[severity] ?? "var(--text-muted)",
+    background: MARK_COLOR[severity],
     color: "#fff",
     fontSize: 10,
     fontWeight: 700,
