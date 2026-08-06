@@ -54,11 +54,21 @@
     "coreLabel": "Core",
     "wiringLabel": "Wiring",
     "boilerplateLabel": "Boilerplate",
+    "coreDesc": "The substance of the change — read this first.",
+    "wiringDesc": "Connects the change rather than being it — read second.",
+    "boilerplateDesc": "Generated, vendored or peripheral — skim",
     "largeTitle": "This PR is large ({lines} changed lines)",
     "largeBody": "Consider splitting it into smaller, focused PRs for easier review:",
+    "splitFiles": "{name} — {count} files",
     "filesCount": "{count} files",
     "findingLines": "{count} finding-lines",
-    "groupedByRole": "Smart Diff · grouped by role"
+    "findingsBadge": "{count} findings",
+    "groupedByRole": "Smart Diff · grouped by role",
+    "orderSmart": "Smart order",
+    "orderOriginal": "Original order",
+    "summarize": "✨ Summarize",
+    "summarizing": "Summarizing…",
+    "whatThisDoes": "What this does:"
   },
   "list": {
     "breadcrumb": "Pull Requests",

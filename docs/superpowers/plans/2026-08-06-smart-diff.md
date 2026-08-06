@@ -318,10 +318,10 @@ export function initialOpenState(groups: SmartDiffGroup[]): Record<string, boole
 
 **Skills:** `react-best-practices`, `frontend-architecture`, `react-testing-library`, `next-best-practices`.
 
-- [ ] **Step 1: Write the failing tests** — `SmartDiffViewer.test.tsx` with a mocked fetch returning a three-group `SmartDiff` fixture + matching `files`. QueryClient with `retry: false` for the error case (client/INSIGHTS.md 2026-08-03). Cases: three groups render in fixed order with labels and counts; boilerplate file collapsed even though it carries a mark, but badged (§6.2 precedence); finding-bearing core file open; badge click opens the file and calls `scrollIntoView`; chip click calls `onOpenFinding` with the id; summary pill: click → POST body `{ path }`, pending label, success renders the sentence; failure (stubbed `{ ok: false, status: 500, json: async () => ({ error: { message } }) }` — the `apiFetch` shape) → toast + idle; `DiffTab` with `order="original"` renders the flat `DiffViewer` (assert a `SmartDiffViewer`-only element is absent).
-- [ ] **Step 2: Run to verify failure** — `cd client && pnpm exec vitest run "src/app/repos/[repoId]/pulls/[number]/_components/DiffTab"`. Expected: FAIL.
-- [ ] **Step 3: Implement** components, DiffTab/page wiring, i18n keys.
-- [ ] **Step 4: Verify** — suite PASSes; `pnpm test` fully green; `pnpm typecheck`.
+- [x] **Step 1: Write the failing tests** — `SmartDiffViewer.test.tsx` with a mocked fetch returning a three-group `SmartDiff` fixture + matching `files`. QueryClient with `retry: false` for the error case (client/INSIGHTS.md 2026-08-03). Cases: three groups render in fixed order with labels and counts; boilerplate file collapsed even though it carries a mark, but badged (§6.2 precedence); finding-bearing core file open; badge click opens the file and calls `scrollIntoView`; chip click calls `onOpenFinding` with the id; summary pill: click → POST body `{ path }`, pending label, success renders the sentence; failure (stubbed `{ ok: false, status: 500, json: async () => ({ error: { message } }) }` — the `apiFetch` shape) → toast + idle; `DiffTab` with `order="original"` renders the flat `DiffViewer` (assert a `SmartDiffViewer`-only element is absent).
+- [x] **Step 2: Run to verify failure** — `cd client && pnpm exec vitest run "src/app/repos/[repoId]/pulls/[number]/_components/DiffTab"`. Expected: FAIL.
+- [x] **Step 3: Implement** components, DiffTab/page wiring, i18n keys.
+- [x] **Step 4: Verify** — suite PASSes; `pnpm test` fully green; `pnpm typecheck`.
 - [ ] **Step 5: Commit** — `feat(client): SmartDiffViewer as the default Files changed order`.
 
 ---
