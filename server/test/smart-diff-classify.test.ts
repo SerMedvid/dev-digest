@@ -165,7 +165,7 @@ describe('splitSuggestion', () => {
     expect(result.proposed_splits).toEqual([]);
   });
 
-  it('groups by two-segment directory prefix, ordered by lines desc, excluding boilerplate', () => {
+  it('groups by the file\'s full directory path, ordered by lines desc, excluding boilerplate', () => {
     const files: FileStat[] = [
       { path: 'src/api/a.ts', additions: 50, deletions: 0 },
       { path: 'src/middleware/b.ts', additions: 200, deletions: 0 },
@@ -184,6 +184,41 @@ describe('splitSuggestion', () => {
     expect(totalSplitFiles.sort()).toEqual(
       ['src/api/a.ts', 'src/middleware/b.ts', 'src/jobs/c.ts'].sort(),
     );
+  });
+
+  it('a 3+-segment directory is NOT truncated to two segments, and sibling deep directories are different splits', () => {
+    // Mirrors the design's own src/api/public example (3 segments) plus a
+    // deeper 4-segment path, and pairs src/api/public with the sibling
+    // src/api/private to pin that neither collapses into a shared "src/api"
+    // bucket.
+    const files: FileStat[] = [
+      { path: 'src/api/public/webhooks.ts', additions: 150, deletions: 0 },
+      { path: 'src/api/public/index.ts', additions: 50, deletions: 0 }, // wiring (barrel), still eligible
+      { path: 'src/api/private/secrets.ts', additions: 60, deletions: 0 },
+      { path: 'src/api/users.ts', additions: 100, deletions: 0 },
+      { path: 'server/src/modules/thing/x.ts', additions: 200, deletions: 0 },
+    ];
+    const result = splitSuggestion(files);
+    expect(result.too_big).toBe(true);
+
+    const names = result.proposed_splits.map((s) => s.name);
+    // The full directory path is the split name — never truncated to two
+    // segments (which would have merged public/private/users all under
+    // "src/api", and dropped "server/src" or "modules/thing" from the deep
+    // path).
+    expect(names).toEqual(['src/api/public', 'server/src/modules/thing', 'src/api', 'src/api/private']);
+
+    const byName = Object.fromEntries(result.proposed_splits.map((s) => [s.name, s.files]));
+    expect(byName['src/api/public']!.sort()).toEqual(
+      ['src/api/public/index.ts', 'src/api/public/webhooks.ts'].sort(),
+    );
+    expect(byName['src/api/private']).toEqual(['src/api/private/secrets.ts']);
+    expect(byName['src/api']).toEqual(['src/api/users.ts']);
+    expect(byName['server/src/modules/thing']).toEqual(['server/src/modules/thing/x.ts']);
+
+    // Sibling deep directories (public vs private, both 3 segments under
+    // src/api) land in different splits, not merged.
+    expect(byName['src/api/public']).not.toEqual(byName['src/api/private']);
   });
 
   it('caps at MAX_PROPOSED_SPLITS, folding the remainder into FALLBACK_SPLIT_NAME', () => {

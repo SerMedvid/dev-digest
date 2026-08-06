@@ -1,11 +1,13 @@
 import type { FindingMark, SmartDiff, SmartDiffFile, SmartDiffGroup, SmartDiffRole } from '@devdigest/shared';
 import {
   BINARY_ASSET_EXTENSIONS,
+  DOC_PATTERNS,
   FALLBACK_SPLIT_NAME,
   GENERATED_DIR_SEGMENTS,
   GENERATED_FILE_PATTERNS,
   LOCK_FILES,
   MAX_PROPOSED_SPLITS,
+  MIGRATIONS_SQL_PATTERN,
   ROOT_SPLIT_NAME,
   SNAPSHOT_PATTERNS,
   SPLIT_FILES_MAX,
@@ -30,14 +32,6 @@ export interface FileStat {
   deletions: number;
 }
 
-/** Two markdown/docs rules with no dedicated constant (design §2.1): a doc is
- * boilerplate by extension or by living under a `docs/` directory. */
-const MARKDOWN_EXT = /\.md$/i;
-const DOCS_DIR = /(^|\/)docs\//i;
-/** Generated SQL: anything under a `migrations/` segment. A hand-written
- * `.sql` elsewhere is core (design §2.1). */
-const MIGRATIONS_SQL = /(^|\/)migrations\/.*\.sql$/i;
-
 function basename(path: string): string {
   const idx = path.lastIndexOf('/');
   return idx === -1 ? path : path.slice(idx + 1);
@@ -60,8 +54,8 @@ function isBoilerplate(path: string): boolean {
   if (SNAPSHOT_PATTERNS.some((re) => re.test(path))) return true;
   if (GENERATED_FILE_PATTERNS.some((re) => re.test(path))) return true;
   if ((BINARY_ASSET_EXTENSIONS as readonly string[]).includes(extname(path))) return true;
-  if (MARKDOWN_EXT.test(path) || DOCS_DIR.test(path)) return true;
-  if (MIGRATIONS_SQL.test(path)) return true;
+  if (DOC_PATTERNS.some((re) => re.test(path))) return true;
+  if (MIGRATIONS_SQL_PATTERN.test(path)) return true;
   return false;
 }
 
@@ -199,6 +193,8 @@ export function splitSuggestion(files: FileStat[]): SmartDiff['split_suggestion'
     return { too_big: true, total_lines: totalLines, proposed_splits: [] };
   }
 
+  // Lines desc only — ties keep insertion (Map iteration) order via
+  // Array.prototype.sort's guaranteed stability, not a secondary key.
   prefixGroups.sort((a, b) => b.lines - a.lines);
 
   if (prefixGroups.length <= MAX_PROPOSED_SPLITS) {

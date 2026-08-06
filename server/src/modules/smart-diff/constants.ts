@@ -44,6 +44,19 @@ export const GENERATED_FILE_PATTERNS: readonly RegExp[] = [
   /\.generated\./i,
 ];
 
+/**
+ * Prose docs — not generated, but skim-first and with no better home in a
+ * three-role enum. Matches a `.md` extension or anything under a `docs/`
+ * directory.
+ */
+export const DOC_PATTERNS: readonly RegExp[] = [/\.md$/i, /(^|\/)docs\//i];
+
+/**
+ * Generated SQL: anything under a `migrations/` directory segment. A
+ * hand-written `.sql` elsewhere is `core`, not boilerplate.
+ */
+export const MIGRATIONS_SQL_PATTERN = /(^|\/)migrations\/.*\.sql$/i;
+
 /** Binary and asset extensions — nothing here is reviewed line by line. */
 export const BINARY_ASSET_EXTENSIONS = [
   '.png',
