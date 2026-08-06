@@ -137,9 +137,8 @@ both, so the banner is absent on a fresh install — matching the mockup, which
 shows no banner.
 
 When `too_big`, splits are formed from `core` and `wiring` files only, grouped by
-their two-segment directory prefix (`src/middleware`, `src/api/public`). A
-directory with only one segment is that segment (`src/x.ts` → `src`); a file at
-the repository root groups under `root`. Splits are ordered by changed lines
+their **full directory path** (`src/middleware`, `src/api/public`); a file at the
+repository root groups under `root`. Splits are ordered by changed lines
 descending and capped at `MAX_PROPOSED_SPLITS` (4), with every remaining file
 folded into a final split named `everything else` — capped, but nothing silently
 dropped. Boilerplate never forms a split: "open a PR containing only your
@@ -148,6 +147,15 @@ lock-file" is not advice.
 If the grouping yields **fewer than two** splits, `proposed_splits` is `[]`. The
 PR is large but it is all one area, and an empty list under the banner says that
 more honestly than a one-item list pretending to be a plan.
+
+> *Corrected 2026-08-06, during implementation.* This paragraph originally said
+> "two-segment directory prefix" while giving `src/api/public` — three segments —
+> as one of its two examples, so the label and the examples disagreed. The
+> examples were right and the label was wrong: the key is the full directory
+> path. A literal two-segment truncation would collapse nearly this entire
+> backend into one `server/src` bucket, which is the opposite of what a split
+> suggestion is for. `MAX_PROPOSED_SPLITS` plus the `everything else` remainder
+> is what bounds the granularity on a deep tree.
 
 ## 3. Data model
 
@@ -391,8 +399,11 @@ and exactly the `total_lines: 285` already asserted in `contracts.test.ts`. Thre
 populated groups and a lock file, with no model key and no network.
 
 Files carrying seeded findings also get a minimal unified-diff `patch` at the
-line numbers those findings cite (`src/config.ts:12`, `src/api/users.ts:44`), or
+line numbers those findings cite (`src/config.ts:12`, `src/api/users.ts:45`), or
 there is no rendered line for a chip to land on and criterion 2 is untestable.
+Read those line numbers out of the seed's own `t.findings` block rather than from
+this table — this paragraph said `:44` until implementation found the seeded
+finding is at `startLine: 45`, and the code is the authority.
 
 Two mechanics matter:
 
