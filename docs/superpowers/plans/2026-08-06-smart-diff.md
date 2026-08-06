@@ -341,7 +341,7 @@ export function initialOpenState(groups: SmartDiffGroup[]): Record<string, boole
 **Skills:** `doc-writer` conventions apply, but the implementer writes these (they're per-task deliverables, not post-hoc docs).
 
 - [ ] **Step 1: Write the flow** against a locally running hermetic stack (see `e2e/README.md` for the runner command) and run it: `cd e2e && npm ci` (first time) then the README's run command filtered to `09`. Expected: PASS against a freshly-seeded DB.
-- [ ] **Step 2: Write both spec files**, checking every behavioural claim against the shipped code (`file:line` where the spec convention uses them).
+- [x] **Step 2: Write both spec files**, checking every behavioural claim against the shipped code (`file:line` where the spec convention uses them).
 - [ ] **Step 3: Verify** — full gate: `cd server && pnpm typecheck && pnpm arch:check && pnpm exec vitest run --exclude '**/*.it.test.ts'` + `pnpm exec vitest run .it.test` (Docker); `cd client && pnpm typecheck && pnpm test`; e2e flow 09 green.
 - [ ] **Step 4: Commit** — `feat(smart-diff): e2e flow and per-package specs` — then run the `pr-self-review` skill before any PR.
 

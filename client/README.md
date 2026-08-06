@@ -33,7 +33,7 @@ flowchart TD
   SETTINGS["/settings/:section<br/>API keys · models"]
 
   PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
-  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent<br/>POST /pulls/:id/review · /pulls/:id/intent · /findings/:id/(accept|dismiss)"| API
+  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent · /pulls/:id/smart-diff<br/>POST /pulls/:id/review · /pulls/:id/intent · /pulls/:id/smart-diff/summary · /findings/:id/(accept|dismiss)"| API
   AGENTS -->|"/agents · /agents/:id · /agents/:id/skills"| API
   SKILLS -->|"/skills · /skills/:id · /skills/:id/(stats|versions)"| API
   CONV -->|"GET/POST /repos/:id/conventions(/extract|/skill-draft|/skill)<br/>PATCH /conventions/:id"| API
@@ -49,6 +49,18 @@ error) and re-derives through `POST /pulls/:id/intent`, both via
 `src/lib/hooks/intent.ts`. When the stored `head_sha` no longer matches the PR's,
 the card says so and the button becomes **Re-derive**. Server contract:
 [`../server/specs/intent.md`](../server/specs/intent.md).
+
+The **Files changed** tab defaults to Smart Diff: the PR's files grouped into
+Core / Wiring / Boilerplate, with findings marked inline and mechanical files
+(lock files, generated output) collapsed by default. `?order=original` falls
+back to the flat, ungrouped viewer. A per-file ✨ pill derives a one-sentence
+"what does this do?" summary on an explicit click — the one place this tab
+calls a model. It reads `GET /pulls/:id/smart-diff` (never a model call) and
+posts to `POST /pulls/:id/smart-diff/summary` on demand, both via
+[`src/lib/hooks/smart-diff.ts`](src/lib/hooks/smart-diff.ts). Server contract:
+[`../server/specs/smart-diff.md`](../server/specs/smart-diff.md); client
+journey and states:
+[`specs/smart-diff-display.md`](specs/smart-diff-display.md).
 
 Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,
 `g`-then-key shortcuts). Pages are thin; feature logic sits in colocated

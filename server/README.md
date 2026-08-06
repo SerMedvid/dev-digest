@@ -71,6 +71,7 @@ flowchart TB
   subgraph Review["Review & runs"]
     reviews["reviews<br/>/pulls/:id/review · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
     intent["intent<br/>GET/POST /pulls/:id/intent"]
+    smartDiff["smart-diff<br/>GET /pulls/:id/smart-diff<br/>POST /pulls/:id/smart-diff/summary"]
   end
   subgraph Agents["Agents & skills"]
     agents["agents<br/>/agents · /agents/:id · /agents/:id/skills"]
@@ -97,6 +98,15 @@ registry is now **consumed**, not just displayed on Settings → Models: it is t
 model the classifier actually calls, with the registry's `defaultModel` as the
 fallback when the workspace has chosen nothing. Full contract, caps, confidence
 tiers and degradation paths: [`specs/intent.md`](specs/intent.md).
+
+`GET /pulls/:id/smart-diff` groups a PR's changed files into `core`/`wiring`/
+`boilerplate` by path alone, marks them with the PR's existing findings, and
+proposes a split when the PR is too big — deterministically, with **no model
+call on this path**. `POST /pulls/:id/smart-diff/summary` is the one place a
+model runs: an explicit, per-file, on-demand "what does this do?" call, cached
+on `head_sha` in `pr_file_summary`. The `file_summary` entry in `FEATURE_MODELS`
+is consumed the same way `review_intent` is. Full contract, classification
+rules and degradation paths: [`specs/smart-diff.md`](specs/smart-diff.md).
 
 ## Environment
 

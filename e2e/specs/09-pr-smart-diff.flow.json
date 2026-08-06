@@ -1,0 +1,30 @@
+{
+  "name": "PR Files changed tab renders Smart Diff: groups, collapsed lock file, badge reveal",
+  "description": "From PR #482, open the Files changed tab (Smart Diff is now the default order) and confirm: the three role groups render (Core/Wiring/Boilerplate, uppercased by CSS text-transform — agent-browser matches innerText); package-lock.json is present but collapsed by design (a boilerplate file always starts collapsed, even with a finding — none here); the split banner is absent (the seeded PR's 285 changed lines / 9 files sit under both too_big thresholds); and clicking src/config.ts's finding badge reveals its CRITICAL line. Model-free: the flow never clicks the per-file ✨ Summarize pill, because deriving a real summary needs a model key and e2e runs without one (same rule 08-pr-intent.flow.json follows for 'Derive intent'). Collapse is asserted by an element COUNT, not just the header's presence — a header-only check would still pass if collapse were broken: exactly five of the nine seeded files render the shared 'no diff text' placeholder (the core/wiring files with no patch and no finding, all auto-expanded under 200 changed lines); package-lock.json and README.md (boilerplate, always collapsed) and src/config.ts / src/api/users.ts (real patch text, not the placeholder) are not among them. The two files with a seeded finding (src/config.ts CRITICAL, src/api/users.ts WARNING) both render a '1 findings' badge with identical text, so the config.ts badge is targeted by DOM position (nth, 0-based) rather than by text alone: sorted by finding count desc within its group, config.ts is the first file in the Wiring group, i.e. the second '1 findings' badge on the page (src/api/users.ts's is the first, as the first file of the Core group). Assumes a freshly-seeded DB where acme/payments-api (PR #482) is the first repo — guaranteed by e2e-web.yml; run locally via the hermetic stack (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["find", "role", "button", "click", "--name", "Files changed"], "label": "switch to the Files changed tab" },
+    { "cmd": ["wait", "--url", "tab=diff"], "label": "diff tab is active in the URL" },
+    { "cmd": ["wait", "--text", "Smart Diff · grouped by role"], "label": "Smart Diff (not the flat viewer) is the default order" },
+    { "cmd": ["wait", "--text", "CORE"], "label": "the Core group heading renders (CSS-uppercased)" },
+    { "cmd": ["wait", "--text", "WIRING"], "label": "the Wiring group heading renders (CSS-uppercased)" },
+    { "cmd": ["wait", "--text", "BOILERPLATE"], "label": "the Boilerplate group heading renders (CSS-uppercased)" },
+    { "cmd": ["wait", "--text", "package-lock.json"], "label": "the seeded lock file is present" },
+    {
+      "cmd": ["get", "count", "text=This PR is large"],
+      "label": "the split banner is absent (too_big is false for the seeded PR)",
+      "assert": { "stdoutIncludes": "0" }
+    },
+    {
+      "cmd": ["get", "count", "text=No diff text available (binary or unfetched patch)."],
+      "label": "package-lock.json's diff body is NOT rendered — only the 5 non-boilerplate, non-finding, patch-less files show this placeholder (package-lock.json and README.md, both boilerplate, stay collapsed; src/config.ts and src/api/users.ts have real patch text, not this placeholder)",
+      "assert": { "stdoutIncludes": "5" }
+    },
+    { "cmd": ["find", "nth", "1", "text=1 findings", "click"], "label": "click src/config.ts's finding badge (the second '1 findings' badge on the page, by DOM order)" },
+    { "cmd": ["wait", "--text", "stripeSecretKey"], "label": "src/config.ts's CRITICAL finding line is now visible" }
+  ]
+}

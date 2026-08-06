@@ -39,3 +39,8 @@ Conventions:
   endpoints, the five sources and their caps, the computed confidence tiers,
   what lands in `pr_intent`, the `intent` prompt slot and the deterministic
   scope gate's exact drop rule.
+- [`smart-diff.md`](smart-diff.md) — grouping a PR's changed files into
+  `core`/`wiring`/`boilerplate`, the deterministic ordering and split
+  suggestion, the on-demand per-file summary endpoint, and what lands in
+  `pr_file_summary`. Client half:
+  [`client/specs/smart-diff-display.md`](../../client/specs/smart-diff-display.md).
