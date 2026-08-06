@@ -22,16 +22,24 @@ export const s = {
     gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))",
     gap: 18,
   } satisfies CSSProperties,
+  /** Both column headings: icon + uppercase label on one line. The colour is
+   *  the variant below, so the two headings stay identical in everything else. */
   listHeading: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
     fontSize: 11,
+    fontWeight: 600,
     letterSpacing: 0.6,
     textTransform: "uppercase",
-    color: "var(--text-secondary)",
-    marginBottom: 6,
+    marginBottom: 8,
   } satisfies CSSProperties,
+  inScopeHeading: { color: "var(--ok)" } satisfies CSSProperties,
+  outOfScopeHeading: { color: "var(--text-muted)" } satisfies CSSProperties,
   list: {
     margin: 0,
     paddingLeft: 16,
+    listStyleType: "disc",
     fontSize: 13,
     color: "var(--text-secondary)",
     lineHeight: 1.6,

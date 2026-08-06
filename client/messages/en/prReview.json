@@ -118,6 +118,7 @@
   "intent": {
     "title": "Intent",
     "loadError": "Could not load the intent for this PR.",
+    "deriveError": "Could not derive the intent for this PR.",
     "retry": "Retry",
     "empty": "No intent derived yet.",
     "derive": "Derive intent",

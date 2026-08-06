@@ -107,6 +107,47 @@ describe("IntentCard", () => {
     }
   });
 
+  /** GET succeeds (`record`, or a 404 for the empty state); POST fails. */
+  function stubFetchWithFailingDerive(record: unknown, status: number, message: string) {
+    const fetchMock = vi.fn(async (_url: string, init?: RequestInit) =>
+      init?.method === "POST"
+        ? { ok: false, status, statusText: "Error", json: async () => ({ error: { code: "e", message } }) }
+        : {
+            ok: record !== null,
+            status: record !== null ? 200 : 404,
+            statusText: "OK",
+            json: async () => record ?? { error: { code: "not_found", message: "none" } },
+          },
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    return fetchMock;
+  }
+
+  it("surfaces a failed derivation from the empty state instead of looking like a no-op", async () => {
+    // The button re-enables as soon as the mutation settles, so with nothing
+    // rendered a failure is indistinguishable from a click that did nothing.
+    stubFetchWithFailingDerive(null, 500, "classifier unavailable");
+    renderCard(<IntentCard prId="pr1" headSha="sha-1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /derive intent/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("classifier unavailable");
+  });
+
+  it("shows the server's own message when a re-derive conflicts with one already running", async () => {
+    // 409 is reachable in normal use: a review batch derives the intent for the
+    // same PR while the user clicks Refresh.
+    stubFetchWithFailingDerive(RECORD, 409, "An intent derivation is already running for this pull request");
+    renderCard(<IntentCard prId="pr1" headSha="sha-1" />);
+
+    fireEvent.click(await screen.findByRole("button", { name: /refresh/i }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/already running/i);
+    // The card keeps showing the record it already had — a failed refresh
+    // must not blank out a perfectly good intent.
+    expect(screen.getByText(/Add rate limiting to public API endpoints/)).toBeInTheDocument();
+  });
+
   it("says the intent is stale when the PR head moved, and a re-derive refreshes it", async () => {
     // The re-derive returns a record whose head_sha now matches the PR's
     // current head, so a successful re-derive is observable as the stale

@@ -2,7 +2,7 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { SectionLabel, Button, Skeleton } from "@devdigest/ui";
+import { SectionLabel, Button, Skeleton, Icon } from "@devdigest/ui";
 import { usePrIntent, useDeriveIntent } from "@/lib/hooks/intent";
 import { ApiError } from "@/lib/api";
 import { isStale, sourceLine } from "./helpers";
@@ -24,6 +24,18 @@ export function IntentCard({ prId, headSha }: IntentCardProps) {
   const t = useTranslations("prReview");
   const { data, isLoading, isError, error, refetch, isFetching } = usePrIntent(prId);
   const derive = useDeriveIntent(prId);
+
+  // A failed derivation has to say so. The button re-enables the moment the
+  // mutation settles, so without this a 409 ("a derivation is already running",
+  // which a concurrent review batch really does produce) or a 500 looks exactly
+  // like a click that did nothing — and the user clicks again. The server's own
+  // message is the useful one for an ApiError, same as the load-error branch
+  // below; the catalogue string is only for a failure that carries none.
+  const deriveError = derive.isError
+    ? derive.error instanceof ApiError
+      ? derive.error.message
+      : t("intent.deriveError")
+    : null;
 
   if (isLoading) {
     // Matches the card's own footprint (border/padding/heading) rather than
@@ -59,6 +71,11 @@ export function IntentCard({ prId, headSha }: IntentCardProps) {
       <section style={s.card}>
         <SectionLabel icon="Target">{t("intent.title")}</SectionLabel>
         <div style={s.meta}>{t("intent.empty")}</div>
+        {deriveError && (
+          <div style={s.warning} role="alert">
+            {deriveError}
+          </div>
+        )}
         <Button onClick={() => derive.mutate()} disabled={derive.isPending}>
           {derive.isPending ? t("intent.deriving") : t("intent.derive")}
         </Button>
@@ -77,7 +94,10 @@ export function IntentCard({ prId, headSha }: IntentCardProps) {
 
       <div style={s.columns}>
         <div>
-          <div style={s.listHeading}>{t("intent.inScope")}</div>
+          <div style={{ ...s.listHeading, ...s.inScopeHeading }}>
+            <Icon.Check size={12} />
+            {t("intent.inScope")}
+          </div>
           {data.in_scope.length > 0 ? (
             <ul style={s.list}>
               {data.in_scope.map((item) => (
@@ -89,7 +109,10 @@ export function IntentCard({ prId, headSha }: IntentCardProps) {
           )}
         </div>
         <div>
-          <div style={s.listHeading}>{t("intent.outOfScope")}</div>
+          <div style={{ ...s.listHeading, ...s.outOfScopeHeading }}>
+            <Icon.X size={12} />
+            {t("intent.outOfScope")}
+          </div>
           {data.out_of_scope.length > 0 ? (
             <ul style={s.list}>
               {data.out_of_scope.map((item) => (
@@ -111,6 +134,12 @@ export function IntentCard({ prId, headSha }: IntentCardProps) {
       )}
 
       {stale && <div style={s.warning}>{t("intent.stale")}</div>}
+
+      {deriveError && (
+        <div style={s.warning} role="alert">
+          {deriveError}
+        </div>
+      )}
 
       <div style={s.meta}>
         <span style={s.badge} title={t(`intent.confidenceHint.${data.confidence}`)}>
