@@ -121,13 +121,13 @@ export function splitSuggestion(files: FileStat[]): SmartDiff['split_suggestion'
 
 **Skills:** `typescript-expert`.
 
-- [ ] **Step 1: Write the failing tests** — table-driven over the acceptance rows. Minimum cases, importing every threshold from `constants.ts`:
+- [x] **Step 1: Write the failing tests** — table-driven over the acceptance rows. Minimum cases, importing every threshold from `constants.ts`:
   - `classifyPath`: `pnpm-lock.yaml`→boilerplate, `dist/index.js`→boilerplate (not wiring — evaluation order), `src/__snapshots__/a.snap`, `assets/logo.png`, `README.md`, `docs/guide.md`, `server/src/db/migrations/0001_x.sql`→boilerplate; `scripts/query.sql`→core; `src/index.ts`, `src/server.ts`, `src/config.ts`, `vitest.config.ts`, `package.json`, `.github/workflows/ci.yml`→wiring; `src/api/users.ts`, `src/api/users.test.ts`→core.
   - `groupFiles`: three-role fixture asserting group order, present-only groups, the three-key sort incl. path tiebreak (two identical-stat files), marks/`finding_lines` projection equality, empty-marks array when no findings.
   - `splitSuggestion`: `total_lines` includes boilerplate; `too_big` on each threshold independently (401 lines / 21 files); a >`SPLIT_LINES_MAX` PR across ≥3 prefixes yields prefix splits ordered by size with no boilerplate member; 6 prefixes → 4 splits + `everything else` holding the rest; one-prefix large PR → `[]`; small PR → `too_big: false`, `[]`.
-- [ ] **Step 2: Run to verify failure** — `cd server && pnpm exec vitest run test/smart-diff-classify.test.ts`. Expected: FAIL (module not found).
-- [ ] **Step 3: Implement** `constants.ts` + `helpers.ts` against the contract above.
-- [ ] **Step 4: Verify** — the test file PASSes; `pnpm typecheck`.
+- [x] **Step 2: Run to verify failure** — `cd server && pnpm exec vitest run test/smart-diff-classify.test.ts`. Expected: FAIL (module not found).
+- [x] **Step 3: Implement** `constants.ts` + `helpers.ts` against the contract above.
+- [x] **Step 4: Verify** — the test file PASSes; `pnpm typecheck`.
 - [ ] **Step 5: Commit** — `feat(smart-diff): pure path classifier, deterministic ordering and split arithmetic`.
 
 ---
