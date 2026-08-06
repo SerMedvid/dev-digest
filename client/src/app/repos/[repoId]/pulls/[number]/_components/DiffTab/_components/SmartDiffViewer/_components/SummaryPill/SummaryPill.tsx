@@ -6,6 +6,7 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { notify } from "@/lib/toast";
+import { ApiError } from "@/lib/api";
 import { s } from "./styles";
 
 interface SummaryPillProps {
@@ -32,10 +33,20 @@ export function SummaryPill({ path, onSummarize }: SummaryPillProps) {
     try {
       await onSummarize(path);
     } catch (err) {
-      // Same toast pattern DiffTab's own comment-post failure uses — the
-      // summary endpoint has no i18n error catalogue entry of its own,
-      // just like that one doesn't.
-      notify.error(err instanceof Error ? err.message : "Couldn't summarize this file.");
+      // A file whose diff was never fetched or stored (GitHub omits `patch`
+      // for large/binary files; most seeded rows have none) 404s server-side
+      // before any model call — the honest message is that there's nothing to
+      // summarize, not a generic failure. Every other failure keeps the same
+      // toast pattern DiffTab's own comment-post failure uses — the summary
+      // endpoint has no broader i18n error catalogue of its own, just like
+      // that one doesn't.
+      const message =
+        err instanceof ApiError && err.status === 404
+          ? t("smartDiff.noStoredDiff")
+          : err instanceof Error
+            ? err.message
+            : "Couldn't summarize this file.";
+      notify.error(message);
     } finally {
       setPending(false);
     }

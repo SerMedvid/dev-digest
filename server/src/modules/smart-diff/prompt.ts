@@ -42,14 +42,17 @@ function truncatedPatch(patch: string): string {
 }
 
 /**
- * Assembles the two-message call. The patch is author-controlled, so it is
- * the only thing wrapped — the file path and the instruction stay trusted
- * and outside the wrap, exactly as `classifyIntent` keeps its instruction
- * outside `wrapUntrusted('hunk-headers', …)`.
+ * Assembles the two-message call. The patch is not the only author-controlled
+ * input: `path` comes straight off GitHub's PR-files API, and a PR author
+ * fully controls what a committed path contains — git permits any byte except
+ * NUL and `/` in a path component, including newlines and prompt-like text.
+ * Both are wrapped as untrusted; only the fixed instruction and the trusted
+ * "File:" label stay outside, exactly as `classifyIntent` keeps its
+ * instruction outside `wrapUntrusted('hunk-headers', …)`.
  */
 export function buildFileSummaryPrompt(path: string, patch: string): ChatMessage[] {
   const system = `${SYSTEM_PROMPT}\n\n${INJECTION_GUARD}`;
-  const user = `File: ${path}\n\n${wrapUntrusted('diff', truncatedPatch(patch))}`;
+  const user = `File:\n${wrapUntrusted('path', path)}\n\n${wrapUntrusted('diff', truncatedPatch(patch))}`;
   return [
     { role: 'system', content: system },
     { role: 'user', content: user },

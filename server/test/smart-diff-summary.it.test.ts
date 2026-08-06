@@ -132,6 +132,10 @@ d('POST /pulls/:id/smart-diff/summary (Testcontainers pg)', () => {
         .where(eq(t.prFileSummary.prId, prId));
       expect(rows).toHaveLength(1);
       expect(rows[0]!.summary).toBe('Adds a token-bucket limiter.');
+      // The response's `created_at` must be a faithful read of the persisted
+      // row, not a separately-computed `new Date()` that can drift from it by
+      // milliseconds.
+      expect(body.created_at).toBe(rows[0]!.createdAt.toISOString());
 
       expect(structuredCalls()).toHaveLength(1);
     });
@@ -206,6 +210,83 @@ d('POST /pulls/:id/smart-diff/summary (Testcontainers pg)', () => {
         payload: { path: 'src/service.ts' },
       });
       expect(res.statusCode).toBe(404);
+    });
+  });
+
+  describe('refuses a file with no stored patch, before any model call', () => {
+    let app: Awaited<ReturnType<typeof buildApp>>;
+    let llm: MockLLMProvider;
+    let prId: string;
+
+    beforeAll(async () => {
+      // If this guard regressed, the schema fixture below is what the model
+      // would return — proving the refusal, not a lucky schema mismatch, is
+      // what stops the call.
+      llm = new MockLLMProvider('openai', {
+        structuredBySchema: { FileSummary: { summary: 'should never be produced' } },
+      });
+      app = await buildApp({
+        config: config(),
+        db: pg.handle.db,
+        overrides: {
+          llm: { openrouter: llm },
+          git: new MockGitClient(),
+          github: new MockGitHubClient(),
+        },
+      });
+
+      const name = `smart-diff-summary-nopatch-${repoSeq++}`;
+      const [repo] = await pg.handle.db
+        .insert(t.repos)
+        .values({ workspaceId, owner: 'acme', name, fullName: `acme/${name}` })
+        .returning();
+      const [pr] = await pg.handle.db
+        .insert(t.pullRequests)
+        .values({
+          workspaceId,
+          repoId: repo!.id,
+          number: 1,
+          title: 'No-patch fixture',
+          author: 'marisa.koch',
+          branch: 'feat/no-patch-fixture',
+          base: 'main',
+          headSha: 'sha-1',
+          additions: 92,
+          deletions: 24,
+          filesCount: 1,
+          status: 'open',
+        })
+        .returning();
+      // Mirrors GitHub omitting `patch` for large/binary files, and the
+      // fresh-install seed's `patch: null` on most rows.
+      await pg.handle.db.insert(t.prFiles).values({
+        prId: pr!.id,
+        path: 'package-lock.json',
+        additions: 92,
+        deletions: 24,
+        patch: null,
+      });
+      prId = pr!.id;
+    });
+    afterAll(async () => {
+      await app?.close();
+    });
+
+    it('404s, never calls the model, and persists no row', async () => {
+      const res = await app.inject({
+        method: 'POST',
+        url: `/pulls/${prId}/smart-diff/summary`,
+        payload: { path: 'package-lock.json' },
+      });
+      expect(res.statusCode).toBe(404);
+
+      expect(llm.calls.filter((c) => c.method === 'completeStructured')).toHaveLength(0);
+
+      const rows = await pg.handle.db
+        .select()
+        .from(t.prFileSummary)
+        .where(eq(t.prFileSummary.prId, prId));
+      expect(rows).toHaveLength(0);
     });
   });
 

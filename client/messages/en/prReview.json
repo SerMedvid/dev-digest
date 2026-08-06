@@ -68,7 +68,8 @@
     "orderOriginal": "Original order",
     "summarize": "✨ Summarize",
     "summarizing": "Summarizing…",
-    "whatThisDoes": "What this does:"
+    "whatThisDoes": "What this does:",
+    "noStoredDiff": "There's no diff to summarize for this file."
   },
   "list": {
     "breadcrumb": "Pull Requests",

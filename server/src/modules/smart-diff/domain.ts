@@ -68,8 +68,13 @@ export interface UpsertSummaryInput {
  */
 export interface SmartDiffSummaryPort {
   summariesForPr(prId: string): Promise<PrFileSummaryRow[]>;
-  /** onConflictDoUpdate on (prId, path) — replaces the row wholesale, `createdAt` included. */
-  upsertSummary(prId: string, rec: UpsertSummaryInput): Promise<void>;
+  /**
+   * onConflictDoUpdate on (prId, path) — replaces the row wholesale,
+   * `createdAt` included. Returns the persisted `createdAt` so a caller
+   * building a response from this write doesn't have to (and can't drift
+   * from) a second, separately-computed timestamp.
+   */
+  upsertSummary(prId: string, rec: UpsertSummaryInput): Promise<Date>;
   /** The workspace's Settings choice for `file_summary`, or undefined when unset. */
   featureModelChoice(workspaceId: string): Promise<{ provider: string; model: string } | undefined>;
 }

@@ -30,9 +30,12 @@ export class SmartDiffRepository implements SmartDiffSummaryPort {
   /**
    * Replaces the (prId, path) row wholesale, `createdAt` included: a
    * re-derivation describes one new derivation, not the first one ever made
-   * for this file (mirrors `IntentRepository.upsertIntent`'s note).
+   * for this file (mirrors `IntentRepository.upsertIntent`'s note). Returns
+   * the persisted `createdAt` so the caller's response is a faithful read of
+   * the row rather than a second, separately-computed `new Date()` that can
+   * differ from it by milliseconds.
    */
-  async upsertSummary(prId: string, rec: UpsertSummaryInput): Promise<void> {
+  async upsertSummary(prId: string, rec: UpsertSummaryInput): Promise<Date> {
     const values = {
       headSha: rec.headSha,
       summary: rec.summary,
@@ -40,13 +43,15 @@ export class SmartDiffRepository implements SmartDiffSummaryPort {
       model: rec.model,
       createdAt: new Date(),
     };
-    await this.db
+    const [row] = await this.db
       .insert(t.prFileSummary)
       .values({ prId, path: rec.path, ...values })
       .onConflictDoUpdate({
         target: [t.prFileSummary.prId, t.prFileSummary.path],
         set: values,
-      });
+      })
+      .returning({ createdAt: t.prFileSummary.createdAt });
+    return row!.createdAt;
   }
 
   /**

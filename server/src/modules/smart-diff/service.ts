@@ -1,8 +1,14 @@
-import type { FindingMark, PrFileSummaryRecord, SmartDiff } from '@devdigest/shared';
+import { Severity, type FindingMark, type PrFileSummaryRecord, type SmartDiff } from '@devdigest/shared';
 import { ConflictError, NotFoundError } from '../../platform/errors.js';
 import { MAX_SUMMARY_CHARS } from './constants.js';
 import { groupFiles, splitSuggestion, type FileStat } from './helpers.js';
 import type { FileSummaryModelPort, SmartDiffStorePort, SmartDiffSummaryPort } from './domain.js';
+
+/** Mirrors `review.repo.ts`'s `KNOWN_SEVERITIES`: an unrecognised value is a
+ *  live possibility (a stored `text` column, not a DB-level enum), and this
+ *  guard drops the mark rather than letting an unvalidated string reach the
+ *  wire under `FindingMark['severity']`'s type. */
+const KNOWN_SEVERITIES = new Set<string>(Severity.options);
 
 /** The narrow half of the platform logger — never the platform object itself. */
 export interface Logger {
@@ -71,6 +77,7 @@ export class SmartDiffService {
       // rendered, and inventing a group entry for it would put a file in the
       // diff that the diff does not contain.
       if (!filePaths.has(f.file)) continue;
+      if (!KNOWN_SEVERITIES.has(f.severity)) continue;
       const mark: FindingMark = {
         line: f.startLine,
         severity: f.severity as FindingMark['severity'],
@@ -118,6 +125,14 @@ export class SmartDiffService {
     const file = files.find((f) => f.path === path);
     if (!file) throw new NotFoundError('File not part of this pull request');
 
+    // A file with no stored patch has nothing to summarise — GitHub omits
+    // `patch` for large and binary files, and a fresh install's seed leaves it
+    // null on most rows (§4's degradation table). Refusing BEFORE any model
+    // call, exactly like the check above, is the only way to stop a
+    // structured-output call from inventing a plausible-sounding sentence for
+    // a diff it was never shown, then persisting it as if it were genuine.
+    if (!file.patch) throw new NotFoundError('This file has no stored diff to summarize');
+
     // A row keyed to the pull's CURRENT head is safe to serve with no model
     // call — one describing a different commit would not be (mirrors `get()`'s
     // summaryByPath filter).
@@ -147,7 +162,7 @@ export class SmartDiffService {
       const out = await model.summarize(path, patch);
       const summary = out.summary.slice(0, MAX_SUMMARY_CHARS);
 
-      await this.deps.repo.upsertSummary(prId, {
+      const createdAt = await this.deps.repo.upsertSummary(prId, {
         path,
         headSha: pull.headSha,
         summary,
@@ -174,7 +189,7 @@ export class SmartDiffService {
         summary,
         provider: model.provider,
         model: model.model,
-        created_at: new Date().toISOString(),
+        created_at: createdAt.toISOString(),
       };
     } finally {
       this.inFlight.delete(key);

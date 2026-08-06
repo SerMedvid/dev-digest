@@ -36,7 +36,7 @@ function deps(over: Partial<SmartDiffServiceDeps> = {}): SmartDiffServiceDeps {
     },
     repo: {
       summariesForPr: async () => [],
-      upsertSummary: async () => {},
+      upsertSummary: async () => new Date(),
       featureModelChoice: async () => undefined,
     },
     model: async () => ({
@@ -74,6 +74,63 @@ describe('SmartDiffService.get degradation (hermetic)', () => {
       }
     }
     expect(warnings).toHaveLength(1);
+  });
+});
+
+describe('SmartDiffService.summarize refuses a file with no stored patch (hermetic)', () => {
+  it('rejects before any model call and persists nothing — both a null and a missing patch', async () => {
+    let modelResolved = 0;
+    let summarizeCalls = 0;
+    let upserted = false;
+    const store: SmartDiffStorePort = {
+      getPull: async () => ({ id: 'pr-1', headSha: 'sha-1' }),
+      getPrFiles: async () => [
+        // GitHub omits `patch` for large/binary files (`undefined`); a fresh
+        // install's seed stores `null` for the same reason — both must refuse.
+        { path: 'package-lock.json', additions: 92, deletions: 24, patch: null },
+        { path: 'README.md', additions: 1, deletions: 0 },
+      ],
+      findingsForPull: async () => [],
+    };
+    const service = new SmartDiffService(
+      deps({
+        store,
+        repo: {
+          summariesForPr: async () => [],
+          upsertSummary: async () => {
+            upserted = true;
+            return new Date();
+          },
+          featureModelChoice: async () => undefined,
+        },
+        model: async () => {
+          modelResolved += 1;
+          return {
+            provider: 'openrouter',
+            model: 'google/gemini-2.5-flash-lite',
+            summarize: async () => {
+              summarizeCalls += 1;
+              return { summary: 'should never be produced' };
+            },
+          };
+        },
+      }),
+    );
+
+    await expect(service.summarize('ws-1', 'pr-1', 'package-lock.json')).rejects.toMatchObject({
+      code: 'not_found',
+      statusCode: 404,
+    });
+    await expect(service.summarize('ws-1', 'pr-1', 'README.md')).rejects.toMatchObject({
+      code: 'not_found',
+      statusCode: 404,
+    });
+
+    // The refusal happens before `deps.model` is even resolved, let alone
+    // `summarize()` called on it — this is a guard, not a post-hoc discard.
+    expect(modelResolved).toBe(0);
+    expect(summarizeCalls).toBe(0);
+    expect(upserted).toBe(false);
   });
 });
 

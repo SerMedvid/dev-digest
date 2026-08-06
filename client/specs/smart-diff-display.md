@@ -130,10 +130,11 @@ never triggered on render, on scroll, or on group expand.
 | 4 | Clicking a finding badge expands its file and scrolls to the first marked line | `SmartDiffViewer.test.tsx:190-203` |
 | 5 | Clicking a line's severity chip navigates to the finding (`?tab=findings&finding=`) | `SmartDiffViewer.test.tsx:204-214` |
 | 6 | The ✨ pill: posts `{ path }`, shows a pending label, then renders the sentence on success | `SmartDiffViewer.test.tsx:215-241` |
-| 7 | The ✨ pill: toasts the error and returns to idle on failure, persisting nothing | `SmartDiffViewer.test.tsx:242-257` |
-| 8 | `?order=original` renders the flat `DiffViewer`, with `SmartDiffViewer`'s own caption absent | `SmartDiffViewer.test.tsx:258-` ("DiffTab order toggle") |
+| 7 | The ✨ pill: toasts the error and returns to idle on failure, persisting nothing | `SmartDiffViewer.test.tsx:242-255` |
+| 7a | The ✨ pill: a "no stored patch" 404 surfaces the client's own honest `smartDiff.noStoredDiff` message, not the raw server text | `SmartDiffViewer.test.tsx:257-277` |
+| 8 | `?order=original` renders the flat `DiffViewer`, with `SmartDiffViewer`'s own caption absent | `SmartDiffViewer.test.tsx:280-` ("DiffTab order toggle") |
 | 9 | Group labels render in their CSS-uppercased form (`CORE`/`WIRING`/`BOILERPLATE`) — a locator note, not new behaviour | [`GroupSection/styles.ts:11-17`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/DiffTab/_components/SmartDiffViewer/_components/GroupSection/styles.ts) (`textTransform: "uppercase"`) |
-| 10 | The seeded PR renders all three groups, `package-lock.json` present but collapsed, and a badge click on `src/config.ts` reveals its CRITICAL line — a real browser, no model key | [`e2e/specs/09-pr-smart-diff.flow.json`](../../e2e/specs/09-pr-smart-diff.flow.json) — written, and every selector individually proven against a static fixture mirroring the real DOM shape, but the flow has **not** been observed passing end to end in this environment (a pre-existing, out-of-scope Windows bug in `e2e/run.ts` plus a session-local Docker outage — full account in `.superpowers/sdd/2026-08-06-smart-diff/task-9-report.md`). Treat this row as **not yet verified** |
+| 10 | The seeded PR renders all three groups, `package-lock.json` present but collapsed, and clicking it genuinely expands it (a click-caused state change, not a load-time fact) — a real browser, no model key | [`e2e/specs/09-pr-smart-diff.flow.json`](../../e2e/specs/09-pr-smart-diff.flow.json) — written, and every selector individually proven against static fixtures (both a correct and a deliberately-broken behaviour state) mirroring the real DOM shape, but the flow has **not** been observed passing end to end in this environment (a pre-existing, out-of-scope Windows bug in `e2e/run.ts` plus a session-local Docker outage — full account in `.superpowers/sdd/2026-08-06-smart-diff/task-9-report.md` and the final fix report). This row no longer claims e2e coverage of the finding-badge click specifically (acceptance item 4 above) — neither seeded boilerplate file carries a finding, so a badge click cannot be exercised against a currently-collapsed file without changing the seed; that interaction stays covered by `SmartDiffViewer.test.tsx` alone. Treat this row as **not yet verified** |
 
 ## 6. Known gaps
 
@@ -159,8 +160,10 @@ never triggered on render, on scroll, or on group expand.
   [`server/specs/smart-diff.md`](../../server/specs/smart-diff.md) §7 for the
   full note — recorded there since it is a cross-cutting risk, not purely a
   display concern.
-- `SummaryPill`'s generic-error toast (`"Couldn't summarize this file."`) and
-  `SmartDiffViewer`'s `ErrorState` title (`"Couldn't load Smart Diff"`) are
+- `SummaryPill`'s generic-error toast (`"Couldn't summarize this file."`, the
+  fallback for any failure other than the specific "no stored patch" 404,
+  which now has its own `smartDiff.noStoredDiff` catalogue entry) and
+  `SmartDiffViewer`'s `ErrorState` title (`"Couldn't load Smart Diff"`) remain
   hardcoded strings rather than `smartDiff.*` message-catalogue entries — both
   mirror an existing hardcoded precedent already on this same page. See
   `server/specs/smart-diff.md` §7.

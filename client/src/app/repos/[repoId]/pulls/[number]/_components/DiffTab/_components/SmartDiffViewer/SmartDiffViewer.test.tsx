@@ -253,6 +253,28 @@ describe("SmartDiffViewer", () => {
     // Back to idle — the pending label is gone and the button is clickable again.
     expect(within(header).getByText("✨ Summarize")).toBeInTheDocument();
   });
+
+  it("summary pill: surfaces the honest 'no diff to summarize' message on a 404, not the raw server text", async () => {
+    stubFetch({
+      postStatus: 404,
+      // The server's own message for this case ("This file has no stored diff
+      // to summarize") is deliberately NOT what should reach the toast — the
+      // client owns its own i18n-catalogued copy for this specific case.
+      postErrorMessage: "This file has no stored diff to summarize",
+    });
+    renderViewer(<SmartDiffViewer prId="pr1" files={FILES} onOpenFinding={vi.fn()} />, {
+      retry: false,
+    });
+
+    await screen.findByText("src/api/users.ts");
+    const header = screen.getByText("src/api/users.ts").closest("div")!;
+    fireEvent.click(within(header).getByText("✨ Summarize"));
+
+    expect(
+      await screen.findByText("There's no diff to summarize for this file."),
+    ).toBeInTheDocument();
+    expect(within(header).getByText("✨ Summarize")).toBeInTheDocument();
+  });
 });
 
 describe("DiffTab order toggle", () => {
