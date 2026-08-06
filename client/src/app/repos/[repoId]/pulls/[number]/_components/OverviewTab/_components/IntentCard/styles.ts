@@ -60,7 +60,9 @@ export const s = {
     lineHeight: 1.6,
   } satisfies CSSProperties,
   badge: {
-    borderRadius: 999,
+    // 5, not a full pill — the radius the `Badge` primitive uses everywhere
+    // else in the app, so this reads as the same species of chip.
+    borderRadius: 5,
     padding: "2px 8px",
     fontSize: 11,
     textTransform: "uppercase",
@@ -79,6 +81,9 @@ export const s = {
   warning: {
     margin: 0,
     paddingLeft: 16,
+    // Same restatement as `list` above — preflight strips `ul` markers, and
+    // this style is worn by the missing-context list as well as a plain div.
+    listStyleType: "disc",
     fontSize: 12,
     color: "var(--warn)",
     lineHeight: 1.5,
