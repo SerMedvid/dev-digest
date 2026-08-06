@@ -9,6 +9,7 @@
  * without Docker.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { and, eq } from 'drizzle-orm';
 import { startPg, dockerAvailable, type PgFixture } from './helpers/pg.js';
 import { buildApp } from '../src/app.js';
 import { loadConfig } from '../src/platform/config.js';
@@ -210,6 +211,87 @@ d('smart-diff endpoints (Testcontainers pg)', () => {
   it('422s a non-uuid id', async () => {
     const res = await app.inject({ method: 'GET', url: '/pulls/not-a-uuid/smart-diff' });
     expect(res.statusCode).toBe(422);
+  });
+
+  /**
+   * The seeded demo PR (design §8, acceptance #1/#13): a fresh `pnpm db:seed`
+   * must yield the full nine-file diff across all three groups, including a
+   * lock file to demonstrate criterion 1 and patch text so a finding badge
+   * has a line to scroll to.
+   */
+  describe('seeded PR #482 (acme/payments-api, the design §8 demo diff)', () => {
+    async function getSeededPrId(): Promise<string> {
+      const [repo] = await pg.handle.db
+        .select()
+        .from(t.repos)
+        .where(
+          and(eq(t.repos.workspaceId, workspaceId), eq(t.repos.fullName, 'acme/payments-api')),
+        );
+      const [pr] = await pg.handle.db
+        .select()
+        .from(t.pullRequests)
+        .where(and(eq(t.pullRequests.repoId, repo!.id), eq(t.pullRequests.number, 482)));
+      return pr!.id;
+    }
+
+    it('groups the nine seeded files 3 core / 4 wiring / 2 boilerplate, lock file boilerplate', async () => {
+      const prId = await getSeededPrId();
+
+      const res = await app.inject({ method: 'GET', url: `/pulls/${prId}/smart-diff` });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      expect(body.groups.map((g: { role: string }) => g.role)).toEqual([
+        'core',
+        'wiring',
+        'boilerplate',
+      ]);
+      const core = body.groups.find((g: { role: string }) => g.role === 'core');
+      const wiring = body.groups.find((g: { role: string }) => g.role === 'wiring');
+      const boilerplate = body.groups.find((g: { role: string }) => g.role === 'boilerplate');
+      expect(core.files).toHaveLength(3);
+      expect(wiring.files).toHaveLength(4);
+      expect(boilerplate.files).toHaveLength(2);
+      expect(boilerplate.files.map((f: { path: string }) => f.path)).toContain(
+        'package-lock.json',
+      );
+
+      expect(body.split_suggestion).toMatchObject({ too_big: false, total_lines: 285 });
+
+      // src/config.ts is `wiring` (matches the WIRING_CONFIG_PATTERNS `config.*`
+      // rule) and carries the seeded CRITICAL — its mark must cite the finding's
+      // startLine (12), the exact line the seeded patch text renders it on.
+      const configFile = wiring.files.find(
+        (f: { path: string }) => f.path === 'src/config.ts',
+      );
+      expect(configFile).toBeDefined();
+      expect(
+        configFile.finding_marks.map((m: { line: number; severity: string }) => m.line),
+      ).toContain(12);
+      expect(
+        configFile.finding_marks.some(
+          (m: { severity: string }) => m.severity === 'CRITICAL',
+        ),
+      ).toBe(true);
+    });
+
+    it('stays at nine files after a repeat seed() call (no duplication, no loss)', async () => {
+      // beforeAll already ran seed() once; this is the second run against the
+      // same rows. pr_files has no (pr_id, path) unique index, so this is the
+      // one thing that actually proves the delete-and-replace guard works.
+      await seed(pg.handle.db);
+
+      const prId = await getSeededPrId();
+      const res = await app.inject({ method: 'GET', url: `/pulls/${prId}/smart-diff` });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      const totalFiles = body.groups.reduce(
+        (n: number, g: { files: unknown[] }) => n + g.files.length,
+        0,
+      );
+      expect(totalFiles).toBe(9);
+    });
   });
 });
 
