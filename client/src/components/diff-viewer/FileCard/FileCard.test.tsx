@@ -54,9 +54,13 @@ describe("FileCard", () => {
     const marks: FindingMark[] = [{ line: 3, severity: "CRITICAL", finding_id: "f1" }];
     render(wrap(<FileCard file={FILE} marks={marks} onMarkClick={onMarkClick} />));
 
-    const chip = screen.getByRole("button", { name: /critical/i });
+    // A CRITICAL mark is labelled for the reviewer, not for the pipeline.
+    const chip = screen.getByRole("button", { name: /blocker/i });
     fireEvent.click(chip);
     expect(onMarkClick).toHaveBeenCalledWith("f1");
+
+    // The chip is a sibling of the code text, never nested inside it.
+    expect(screen.getByText("const c = 4;")).not.toContainElement(chip);
   });
 
   it("picks the highest-severity mark when two findings land on the same line, regardless of array order", () => {
@@ -89,17 +93,27 @@ describe("FileCard", () => {
     expect(scrollSpy).toHaveBeenCalledTimes(1);
   });
 
-  it("renders headerExtra after the +/- stat and preBody above the lines when open", () => {
+  it("puts pathAdornment beside the path, headerExtra before the +/- stat, and preBody above the lines", () => {
     render(
       wrap(
         <FileCard
           file={FILE}
+          pathAdornment={<span>Dot</span>}
           headerExtra={<span>Extra</span>}
           preBody={<div>What this does: does a thing</div>}
         />,
       ),
     );
-    expect(screen.getByText("Extra")).toBeInTheDocument();
     expect(screen.getByText("What this does: does a thing")).toBeInTheDocument();
+
+    // The adornment shares the path's own wrapper — it reads as part of the
+    // file's name, not as one more control in the right-hand cluster.
+    const pathWrap = screen.getByText("src/config.ts").parentElement!;
+    expect(pathWrap).toContainElement(screen.getByText("Dot"));
+
+    // …and the stat follows headerExtra, not the other way round.
+    const extra = screen.getByText("Extra");
+    const stat = screen.getByText("+2").parentElement!;
+    expect(extra.compareDocumentPosition(stat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

@@ -63,6 +63,7 @@ export function FileCard({
   marks,
   onMarkClick,
   scrollToLine,
+  pathAdornment,
   headerExtra,
   preBody,
 }: {
@@ -79,7 +80,11 @@ export function FileCard({
   /** New-side line number to scroll into view once, while open. Fires at most
       once per distinct value — see the scroll effect below. */
   scrollToLine?: number | null;
-  /** Rendered in the header, after the +/- stat (the Smart Diff summary pill). */
+  /** Rendered in the header immediately after the path (the Smart Diff finding
+      dot), so a file's own marker reads as part of its name rather than as one
+      more control in the right-hand cluster. */
+  pathAdornment?: React.ReactNode;
+  /** Rendered in the header, before the +/- stat (the Smart Diff summary pill). */
   headerExtra?: React.ReactNode;
   /** Rendered above the lines, only while open (the Smart Diff "What this does" line). */
   preBody?: React.ReactNode;
@@ -135,14 +140,17 @@ export function FileCard({
       <div onClick={toggle} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />
-        <span className="mono" style={s.filePath}>
-          {file.path}
-        </span>
+        <div style={s.pathWrap}>
+          <span className="mono" style={s.filePath}>
+            {file.path}
+          </span>
+          {pathAdornment}
+        </div>
+        {headerExtra}
         <span className="mono tnum" style={s.fileStat}>
           <span style={s.addText}>+{file.additions}</span>{" "}
           <span style={s.delText}>−{file.deletions}</span>
         </span>
-        {headerExtra}
         {commentCount > 0 && (
           <span
             style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 12, color: "var(--text-muted)" }}

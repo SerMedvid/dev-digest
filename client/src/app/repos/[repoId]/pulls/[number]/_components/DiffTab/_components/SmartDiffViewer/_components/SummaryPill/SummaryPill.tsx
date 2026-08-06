@@ -1,10 +1,11 @@
-/* SummaryPill — the ✨ per-file "what does this do?" button, rendered into
+/* SummaryPill — the per-file "what does this do?" button, rendered into
    FileCard's `headerExtra` slot. An explicit click, never automatic: viewing
    Smart Diff must never call a model (design §5, §6.1). */
 "use client";
 
 import React from "react";
 import { useTranslations } from "next-intl";
+import { Icon } from "@devdigest/ui";
 import { notify } from "@/lib/toast";
 import { ApiError } from "@/lib/api";
 import { s } from "./styles";
@@ -53,7 +54,11 @@ export function SummaryPill({ path, onSummarize }: SummaryPillProps) {
   };
 
   return (
+    // The sparkle is the design system's lucide `Sparkles`, the same icon the
+    // agents page badges an AI-backed thing with — not an emoji in the message
+    // catalogue, which renders at the mercy of the platform's emoji font.
     <button type="button" onClick={handleClick} disabled={pending} style={s.pill}>
+      <Icon.Sparkles size={12} />
       {pending ? t("smartDiff.summarizing") : t("smartDiff.summarize")}
     </button>
   );

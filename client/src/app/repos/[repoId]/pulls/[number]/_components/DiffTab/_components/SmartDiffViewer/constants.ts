@@ -15,6 +15,14 @@ export const GROUP_DESC_KEY: Record<SmartDiffRole, string> = {
   boilerplate: "boilerplateDesc",
 };
 
+/** Colour token for a role's heading bullet — the same three-step "substance →
+ *  wiring → mechanical" ramp the group order itself expresses. */
+export const GROUP_DOT_COLOR: Record<SmartDiffRole, string> = {
+  core: "var(--accent)",
+  wiring: "var(--warn)",
+  boilerplate: "var(--info)",
+};
+
 /**
  * Mirrors `components/diff-viewer`'s own `AUTO_EXPAND_MAX_LINES` — design
  * §6.2 rule 3 ("otherwise today's `AUTO_EXPAND_MAX_LINES` applies unchanged")

@@ -25,7 +25,6 @@ interface SmartDiffViewerProps {
 }
 
 export function SmartDiffViewer({ prId, files, onOpenFinding }: SmartDiffViewerProps) {
-  const t = useTranslations("prReview");
   const tShell = useTranslations("shell");
   const { data, isLoading, isError, error, refetch } = useSmartDiff(prId);
   const summarize = useFileSummary(prId);
@@ -105,7 +104,6 @@ export function SmartDiffViewer({ prId, files, onOpenFinding }: SmartDiffViewerP
 
   return (
     <div style={s.wrap}>
-      <div style={s.caption}>{t("smartDiff.groupedByRole")}</div>
       {data.split_suggestion.too_big && (
         <SplitBanner
           totalLines={data.split_suggestion.total_lines}

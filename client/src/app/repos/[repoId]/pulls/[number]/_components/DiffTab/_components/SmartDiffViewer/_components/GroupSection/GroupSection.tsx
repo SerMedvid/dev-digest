@@ -5,18 +5,19 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
+import { Icon } from "@devdigest/ui";
 import { FileCard } from "@/components/diff-viewer";
 import type { SmartDiffRole } from "@devdigest/shared";
-import { GROUP_LABEL_KEY, GROUP_DESC_KEY } from "../../constants";
+import { GROUP_LABEL_KEY, GROUP_DESC_KEY, GROUP_DOT_COLOR } from "../../constants";
 import {
   findingCountFor,
   firstFindingLine,
-  groupFindingLineCount,
+  worstSeverityFor,
   type JoinedFile,
   type ScrollTarget,
 } from "../../helpers";
 import { SummaryPill } from "../SummaryPill";
-import { s } from "./styles";
+import { s, findingDotFor } from "./styles";
 
 interface GroupSectionProps {
   role: SmartDiffRole;
@@ -44,19 +45,14 @@ export function GroupSection({
   scrollTarget,
 }: GroupSectionProps) {
   const t = useTranslations("prReview");
-  const findingLineCount = groupFindingLineCount(files.map((f) => f.smart));
 
   return (
     <section style={s.group}>
       <div style={s.heading}>
+        <span style={{ ...s.dot, background: GROUP_DOT_COLOR[role] }} />
         <span style={s.label}>{t(`smartDiff.${GROUP_LABEL_KEY[role]}`)}</span>
         <span style={s.desc}>{t(`smartDiff.${GROUP_DESC_KEY[role]}`)}</span>
-      </div>
-      <div style={s.meta}>
-        <span>{t("smartDiff.filesCount", { count: files.length })}</span>
-        {findingLineCount > 0 && (
-          <span>{t("smartDiff.findingLines", { count: findingLineCount })}</span>
-        )}
+        <span style={s.count}>{t("smartDiff.filesCount", { count: files.length })}</span>
       </div>
       <div style={s.list}>
         {files.map(({ smart, file }) => {
@@ -76,27 +72,35 @@ export function GroupSection({
               marks={smart.finding_marks ?? undefined}
               onMarkClick={onMarkClick}
               scrollToLine={isTarget ? scrollTarget.line : undefined}
+              pathAdornment={
+                line != null && (
+                  // The dot carries no visible count — its accessible name
+                  // does, so the click target keeps naming what it opens.
+                  <button
+                    type="button"
+                    title={t("smartDiff.findingsBadge", { count: findingCountFor(smart) })}
+                    aria-label={t("smartDiff.findingsBadge", { count: findingCountFor(smart) })}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onBadgeClick(file.path, line);
+                    }}
+                    style={findingDotFor(worstSeverityFor(smart))}
+                  />
+                )
+              }
               headerExtra={
                 <span style={s.headerExtra}>
-                  {line != null && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onBadgeClick(file.path, line);
-                      }}
-                      style={s.badge}
-                    >
-                      {t("smartDiff.findingsBadge", { count: findingCountFor(smart) })}
-                    </button>
-                  )}
                   <SummaryPill path={file.path} onSummarize={onSummarize} />
                 </span>
               }
               preBody={
                 smart.pseudocode_summary ? (
                   <div style={s.preBody}>
-                    <strong>{t("smartDiff.whatThisDoes")}</strong> {smart.pseudocode_summary}
+                    <Icon.Sparkles size={12} style={s.preBodyIcon} />
+                    <span>
+                      <strong style={s.preBodyLabel}>{t("smartDiff.whatThisDoes")}</strong>{" "}
+                      {smart.pseudocode_summary}
+                    </span>
                   </div>
                 ) : undefined
               }

@@ -39,5 +39,5 @@ Conventions:
   the finding itself on the PR detail page. Client-only; no server half.
 - [`smart-diff-display.md`](smart-diff-display.md) — the Files changed tab's
   default rendering: files grouped by role, findings marked inline, collapse
-  precedence, the order toggle, and the on-demand ✨ per-file summary. Server
+  precedence, the order toggle, and the on-demand per-file summary. Server
   half: [`server/specs/smart-diff.md`](../../server/specs/smart-diff.md).

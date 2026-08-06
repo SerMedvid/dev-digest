@@ -2,7 +2,9 @@ import type { CSSProperties } from "react";
 
 export const s = {
   banner: {
-    border: "1px solid var(--warn)",
+    // Tinted fill, no outline — the house badge/callout language (see the
+    // agents page): the colour carries the severity, the border added nothing
+    // but weight.
     background: "var(--warn-bg)",
     borderRadius: 8,
     padding: "14px 16px",

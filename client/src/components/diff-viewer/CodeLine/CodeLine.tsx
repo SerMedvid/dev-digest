@@ -3,10 +3,13 @@
 "use client";
 
 import React from "react";
-import type { FindingMark } from "@devdigest/shared";
+import { useTranslations } from "next-intl";
+import { Icon } from "@devdigest/ui";
+import type { FindingMark, Severity } from "@devdigest/shared";
 import { commentTargetFor, type CommentThread, type DiffCommentApi, cs } from "../comments";
 import { type Line } from "../helpers";
 import { s, lineRowFor, lineSignFor, markChipFor } from "../styles";
+import { SEVERITY_LABEL_KEY, SEVERITY_ICON } from "./constants";
 import { CommentThreadView } from "../CommentThreadView";
 import { InlineComposer } from "../InlineComposer";
 
@@ -30,8 +33,10 @@ export function CodeLine({
       only, to scroll it into view without a DOM query. */
   ref?: React.Ref<HTMLDivElement>;
 }) {
+  const t = useTranslations("shell");
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
+  const severityLabelFor = (severity: Severity) => t(SEVERITY_LABEL_KEY[severity]);
 
   if (ln.kind === "hunk") {
     return (
@@ -52,7 +57,7 @@ export function CodeLine({
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
     >
-      <div style={lineRowFor(ln.kind)}>
+      <div style={lineRowFor(ln.kind, mark?.severity)}>
         <span className="mono tnum" style={{ ...s.lineNo, position: "relative" }}>
           {showAdd && target && (
             <button
@@ -71,17 +76,26 @@ export function CodeLine({
           {sign}
         </span>
         <span className="mono" style={s.lineText}>
-          {mark && (
-            <button
-              type="button"
-              title={`${mark.severity} finding`}
-              aria-label={`${mark.severity} finding`}
-              onClick={() => onMarkClick?.(mark.finding_id)}
-              style={markChipFor(mark.severity)}
-            />
-          )}
           {ln.text || " "}
         </span>
+        {mark && (
+          // A sibling of the code text, never a child of it: an interactive
+          // control nested inside the running text span made a screen reader
+          // announce the chip's name interleaved with the code
+          // (client/specs/smart-diff-display.md §6, now closed).
+          <button
+            type="button"
+            title={severityLabelFor(mark.severity)}
+            aria-label={t("diffViewer.severityFinding", {
+              severity: severityLabelFor(mark.severity),
+            })}
+            onClick={() => onMarkClick?.(mark.finding_id)}
+            style={markChipFor(mark.severity)}
+          >
+            {React.createElement(Icon[SEVERITY_ICON[mark.severity]], { size: 11 })}
+            {severityLabelFor(mark.severity)}
+          </button>
+        )}
       </div>
 
       {commenting &&

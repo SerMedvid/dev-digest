@@ -150,6 +150,12 @@ function renderViewer(ui: React.ReactElement, { retry = false }: { retry?: boole
   );
 }
 
+/** A file's header row — the element carrying its dot, pill and stat. The path
+ *  itself sits one level deeper, inside the header's path wrapper. */
+function headerOf(path: string): HTMLElement {
+  return screen.getByText(path).parentElement!.parentElement!;
+}
+
 describe("SmartDiffViewer", () => {
   it("renders all three groups, in fixed order, with their labels and file counts", async () => {
     stubFetch();
@@ -157,7 +163,7 @@ describe("SmartDiffViewer", () => {
       <SmartDiffViewer prId="pr1" files={FILES} onOpenFinding={vi.fn()} />,
     );
 
-    await screen.findByText("Core");
+    await screen.findByText("Core logic");
     expect(screen.getByText("Wiring")).toBeInTheDocument();
     expect(screen.getByText("Boilerplate")).toBeInTheDocument();
     // 2 core files, 1 wiring file, 1 boilerplate file.
@@ -165,7 +171,7 @@ describe("SmartDiffViewer", () => {
     expect(screen.getAllByText("1 files")).toHaveLength(2);
 
     const text = container.textContent ?? "";
-    expect(text.indexOf("Core")).toBeLessThan(text.indexOf("Wiring"));
+    expect(text.indexOf("Core logic")).toBeLessThan(text.indexOf("Wiring"));
     expect(text.indexOf("Wiring")).toBeLessThan(text.indexOf("Boilerplate"));
   });
 
@@ -176,26 +182,26 @@ describe("SmartDiffViewer", () => {
     expect(await screen.findByText("const limiter = new Map();")).toBeInTheDocument();
   });
 
-  it("keeps a finding-bearing boilerplate file collapsed, but still shows its badge (§6.2 rule 1)", async () => {
+  it("keeps a finding-bearing boilerplate file collapsed, but still shows its dot (§6.2 rule 1)", async () => {
     stubFetch();
     renderViewer(<SmartDiffViewer prId="pr1" files={FILES} onOpenFinding={vi.fn()} />);
 
     await screen.findByText("package-lock.json");
     expect(screen.queryByText('"packages": {}')).not.toBeInTheDocument();
 
-    const header = screen.getByText("package-lock.json").closest("div")!;
-    expect(within(header).getByText("1 findings")).toBeInTheDocument();
+    // The dot shows no count — it *is* named by one, which is what keeps the
+    // marker meaningful to a screen reader now that the pill is gone.
+    expect(within(headerOf("package-lock.json")).getByLabelText("1 findings")).toBeInTheDocument();
   });
 
-  it("expands the boilerplate file and scrolls to its first marked line when its badge is clicked", async () => {
+  it("expands the boilerplate file and scrolls to its first marked line when its dot is clicked", async () => {
     const scrollSpy = vi.fn();
     Element.prototype.scrollIntoView = scrollSpy;
     stubFetch();
     renderViewer(<SmartDiffViewer prId="pr1" files={FILES} onOpenFinding={vi.fn()} />);
 
     await screen.findByText("package-lock.json");
-    const header = screen.getByText("package-lock.json").closest("div")!;
-    fireEvent.click(within(header).getByText("1 findings"));
+    fireEvent.click(within(headerOf("package-lock.json")).getByLabelText("1 findings"));
 
     await waitFor(() => expect(screen.getByText('"packages": {}')).toBeInTheDocument());
     expect(scrollSpy).toHaveBeenCalled();
@@ -207,7 +213,9 @@ describe("SmartDiffViewer", () => {
     renderViewer(<SmartDiffViewer prId="pr1" files={FILES} onOpenFinding={onOpenFinding} />);
 
     await screen.findByText("const limiter = new Map();");
-    fireEvent.click(screen.getByRole("button", { name: /critical finding/i }));
+    // CRITICAL renders to the reviewer as "blocker" — the chip is named by
+    // what it shows, not by the pipeline's own severity vocabulary.
+    fireEvent.click(screen.getByRole("button", { name: /blocker finding/i }));
 
     expect(onOpenFinding).toHaveBeenCalledWith("f1");
   });
@@ -217,8 +225,8 @@ describe("SmartDiffViewer", () => {
     renderViewer(<SmartDiffViewer prId="pr1" files={FILES} onOpenFinding={vi.fn()} />);
 
     await screen.findByText("src/api/users.ts");
-    const header = screen.getByText("src/api/users.ts").closest("div")!;
-    const pill = within(header).getByText("✨ Summarize");
+    const header = headerOf("src/api/users.ts");
+    const pill = within(header).getByText("summary");
     fireEvent.click(pill);
 
     // Synchronous state update — no await needed before this assertion.
@@ -246,12 +254,12 @@ describe("SmartDiffViewer", () => {
     });
 
     await screen.findByText("src/api/users.ts");
-    const header = screen.getByText("src/api/users.ts").closest("div")!;
-    fireEvent.click(within(header).getByText("✨ Summarize"));
+    const header = headerOf("src/api/users.ts");
+    fireEvent.click(within(header).getByText("summary"));
 
     expect(await screen.findByText("provider unavailable")).toBeInTheDocument();
     // Back to idle — the pending label is gone and the button is clickable again.
-    expect(within(header).getByText("✨ Summarize")).toBeInTheDocument();
+    expect(within(header).getByText("summary")).toBeInTheDocument();
   });
 
   it("summary pill: surfaces the honest 'no diff to summarize' message on a 404, not the raw server text", async () => {
@@ -267,13 +275,13 @@ describe("SmartDiffViewer", () => {
     });
 
     await screen.findByText("src/api/users.ts");
-    const header = screen.getByText("src/api/users.ts").closest("div")!;
-    fireEvent.click(within(header).getByText("✨ Summarize"));
+    const header = headerOf("src/api/users.ts");
+    fireEvent.click(within(header).getByText("summary"));
 
     expect(
       await screen.findByText("There's no diff to summarize for this file."),
     ).toBeInTheDocument();
-    expect(within(header).getByText("✨ Summarize")).toBeInTheDocument();
+    expect(within(header).getByText("summary")).toBeInTheDocument();
   });
 });
 
@@ -310,6 +318,10 @@ describe("DiffTab order toggle", () => {
     );
 
     expect(await screen.findByText("src/config.ts")).toBeInTheDocument();
-    expect(screen.queryByText("Smart Diff · grouped by role")).not.toBeInTheDocument();
+    // The section label falls back to the plain "Files changed" caption, and
+    // no role group renders at all.
+    expect(screen.queryByText("Reviewer-ordered diff")).not.toBeInTheDocument();
+    expect(screen.getByText("Files changed")).toBeInTheDocument();
+    expect(screen.queryByText("Core logic")).not.toBeInTheDocument();
   });
 });

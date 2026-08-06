@@ -8,6 +8,7 @@ import { SmartDiffViewer } from "./_components/SmartDiffViewer";
 import { usePrComments, useCreatePrComment } from "@/lib/hooks/reviews";
 import { notify } from "@/lib/toast";
 import type { PrFile } from "@devdigest/shared";
+import { s } from "./styles";
 
 interface DiffTabProps {
   prId: string | null;
@@ -43,6 +44,20 @@ export function DiffTab({
 
   const commentCount = comments?.length ?? 0;
 
+  // The PR-level +/− total, summed from the same rows the viewer renders, so
+  // the stat line can never claim lines no file below it accounts for.
+  const totals = React.useMemo(
+    () =>
+      files.reduce(
+        (acc, f) => ({
+          add: acc.add + (f.additions ?? 0),
+          del: acc.del + (f.deletions ?? 0),
+        }),
+        { add: 0, del: 0 },
+      ),
+    [files],
+  );
+
   const commenting: DiffCommentApi = {
     comments: comments ?? [],
     canComment: !!canComment && !!prId,
@@ -65,30 +80,34 @@ export function DiffTab({
       <SectionLabel
         icon="Code"
         right={
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ display: "flex", gap: 6 }}>
-              <Button kind="tertiary" size="sm" active={!isOriginal} onClick={() => onSetOrder(null)}>
-                {t("smartDiff.orderSmart")}
-              </Button>
-              <Button kind="tertiary" size="sm" active={isOriginal} onClick={() => onSetOrder("original")}>
-                {t("smartDiff.orderOriginal")}
-              </Button>
-            </div>
-            {commentCount > 0 && (
-              <Button
-                kind="ghost"
-                size="sm"
-                icon={showComments ? "EyeOff" : "Eye"}
-                onClick={() => setShowComments((v) => !v)}
-              >
-                {showComments ? "Hide comments" : "Show comments"} ({commentCount})
-              </Button>
-            )}
-          </div>
+          commentCount > 0 && (
+            <Button
+              kind="ghost"
+              size="sm"
+              icon={showComments ? "EyeOff" : "Eye"}
+              onClick={() => setShowComments((v) => !v)}
+            >
+              {showComments ? "Hide comments" : "Show comments"} ({commentCount})
+            </Button>
+          )
         }
       >
-        Files changed · {filesCount} files
+        {isOriginal ? t("smartDiff.filesChanged") : t("smartDiff.caption")}
       </SectionLabel>
+      <div style={s.subheader}>
+        <span className="tnum" style={s.stats}>
+          {t("smartDiff.filesCount", { count: filesCount })} ·{" "}
+          <span style={s.add}>+{totals.add}</span> <span style={s.del}>−{totals.del}</span>
+        </span>
+        <div style={s.orderToggle}>
+          <Button kind="tertiary" size="sm" active={!isOriginal} onClick={() => onSetOrder(null)}>
+            {t("smartDiff.orderSmart")}
+          </Button>
+          <Button kind="tertiary" size="sm" active={isOriginal} onClick={() => onSetOrder("original")}>
+            {t("smartDiff.orderOriginal")}
+          </Button>
+        </div>
+      </div>
       {isOriginal ? (
         <DiffViewer files={files} commenting={commenting} />
       ) : (

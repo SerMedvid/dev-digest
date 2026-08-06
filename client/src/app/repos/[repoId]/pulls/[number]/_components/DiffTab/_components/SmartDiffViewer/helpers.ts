@@ -1,7 +1,8 @@
 /** Pure helpers for SmartDiffViewer: joining SmartDiff's grouped files with
  *  the PR's own patch text, and the §6.2 collapse precedence. */
 import type { PrFile } from "@/lib/types";
-import type { SmartDiffGroup, SmartDiffRole, SmartDiffFile } from "@devdigest/shared";
+import type { SmartDiffGroup, SmartDiffRole, SmartDiffFile, Severity } from "@devdigest/shared";
+import { SEVERITY_RANK } from "@/components/diff-viewer";
 import { AUTO_EXPAND_MAX_LINES } from "./constants";
 
 export interface JoinedFile {
@@ -52,7 +53,7 @@ export function joinFilesWithGroups(groups: SmartDiffGroup[], files: PrFile[]): 
 
 /**
  * Collapse precedence, design §6.2, evaluated in this order:
- * 1. `boilerplate` starts collapsed — even carrying a finding. Its badge
+ * 1. `boilerplate` starts collapsed — even carrying a finding. Its dot
  *    still shows, and clicking it expands the file.
  * 2. Otherwise a file with at least one finding starts expanded, whatever
  *    its size.
@@ -84,15 +85,25 @@ export function firstFindingLine(smart: SmartDiffFile): number | undefined {
   return smart.finding_lines.length > 0 ? smart.finding_lines[0] : undefined;
 }
 
-/** Total finding count across a group's files, for the badge and the
- *  `findingLines` meta line — the raw (non-deduplicated) mark count where
- *  it's known, else the deduplicated line count. */
+/** How many findings a file carries, for its dot's accessible name — the raw
+ *  (non-deduplicated) mark count where it's known, else the deduplicated line
+ *  count. */
 export function findingCountFor(smart: SmartDiffFile): number {
   return smart.finding_marks?.length ?? smart.finding_lines.length;
 }
 
-/** Sum of each file's finding count, for a group's `{count} finding-lines`
- *  caption. */
-export function groupFindingLineCount(files: SmartDiffFile[]): number {
-  return files.reduce((sum, f) => sum + f.finding_lines.length, 0);
+/**
+ * The severity a file's finding dot is coloured by — the worst one marking it,
+ * picked with the same precedence `FileCard` uses to choose between two marks
+ * on one line. Falls back to `WARNING` when the file is known to carry findings
+ * (`finding_lines`) but the server sent no `finding_marks` to read a severity
+ * from: colouring it as the worst case would overstate, as the mildest would
+ * understate, and the middle step is the honest default.
+ */
+export function worstSeverityFor(smart: SmartDiffFile): Severity {
+  let best: Severity | undefined;
+  for (const m of smart.finding_marks ?? []) {
+    if (!best || SEVERITY_RANK[m.severity] < SEVERITY_RANK[best]) best = m.severity;
+  }
+  return best ?? "WARNING";
 }

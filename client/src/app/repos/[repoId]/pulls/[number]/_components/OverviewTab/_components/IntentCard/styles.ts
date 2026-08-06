@@ -60,7 +60,6 @@ export const s = {
     lineHeight: 1.6,
   } satisfies CSSProperties,
   badge: {
-    border: "1px solid var(--border)",
     borderRadius: 999,
     padding: "2px 8px",
     fontSize: 11,
@@ -104,13 +103,14 @@ export const s = {
  * with no description — not a failure, and not something to alarm the user
  * about. `--crit` is reserved for things that actually went wrong.
  *
- * Each variant restates the full `border` shorthand rather than adding a
- * `borderColor` longhand on top of the base's shorthand: a re-derive can move
- * the confidence between levels, and React warns (and can mis-apply) when a
- * shorthand and its longhand swap places across renders.
+ * Tinted fill and no outline, matching the `Badge` primitive the agents page
+ * uses — the tint alone carries the level. (The variants used to restate a
+ * full `border` shorthand each, to keep a shorthand and its longhand from
+ * swapping places across a re-derive; with no border on either the base or the
+ * variants, there is nothing left to collide.)
  */
 export const badgeConfidence: Record<IntentConfidence, CSSProperties> = {
-  high: { color: "var(--ok)", background: "var(--ok-bg)", border: "1px solid var(--ok)" },
-  medium: { color: "var(--warn)", background: "var(--warn-bg)", border: "1px solid var(--warn)" },
-  low: { color: "var(--info)", background: "var(--info-bg)", border: "1px solid var(--info)" },
+  high: { color: "var(--ok)", background: "var(--ok-bg)" },
+  medium: { color: "var(--warn)", background: "var(--warn-bg)" },
+  low: { color: "var(--info)", background: "var(--info-bg)" },
 };
