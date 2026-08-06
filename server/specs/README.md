@@ -35,3 +35,7 @@ Conventions:
   roll-up + top-6 preview embedded in the pulls list endpoint (non-dismissed
   only, one query per page, null-not-zeros degradation). Client half:
   [`client/specs/findings-counters-display.md`](../../client/specs/findings-counters-display.md).
+- [`intent.md`](intent.md) — deriving what a PR is trying to do: the two
+  endpoints, the five sources and their caps, the computed confidence tiers,
+  what lands in `pr_intent`, the `intent` prompt slot and the deterministic
+  scope gate's exact drop rule.

@@ -57,9 +57,11 @@ Change any of these and the UI starts contradicting itself:
   line range intersects a real hunk for that file
   ([`grounding.ts`](src/grounding.ts)). Kinds in `FULL_FILE_KINDS` only need the
   file to be present. Dropped findings are returned with reasons — never silently.
-- **`score` is recomputed from the *grounded* findings**
-  (`scoreFromFindings`: CRITICAL −35, WARNING −12, SUGGESTION −3). The model's
-  self-reported score is discarded. Don't reintroduce it.
+- **`score` is recomputed from the *grounded and scoped* findings**
+  (`scoreFromFindings`: CRITICAL −35, WARNING −12, SUGGESTION −3). Since L03 the
+  intent scope gate ([`scope.ts`](src/scope.ts)) runs after grounding and before
+  scoring, so the score always matches the findings the user actually sees. The
+  model's self-reported score is discarded. Don't reintroduce it.
 - **`verdict` is passed through from the model** — currently the one number/field
   that can disagree with the findings beneath it. That's known, and it's why the
   verdict conventions in `docs/agent-prompts/` are load-bearing. Deriving it

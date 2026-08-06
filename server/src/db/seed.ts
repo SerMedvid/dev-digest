@@ -179,6 +179,40 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     ]);
   }
 
+  // ---- derived intent for the demo PR (L03) ----
+  // Outside the `if (!pr)` block on purpose: a DB seeded before the intent layer
+  // existed already has PR #482, and would otherwise never acquire a card.
+  //
+  // `head_sha` is read off the seeded row rather than restated, so the card can
+  // never render as stale on a fresh install. `low` confidence with an empty
+  // missing-context list is the honest state for a seeded row: nothing was
+  // fetched, so the only sources are the title, the description and the changed
+  // files. `provider`/`model` say `seed` for the same reason — no model ran.
+  await db
+    .insert(t.prIntent)
+    .values({
+      prId: pr!.id,
+      intent:
+        'Add rate limiting to public API endpoints to prevent abuse from unauthenticated clients.',
+      inScope: [
+        'Add middleware for rate limiting',
+        'Apply to /api/public/* routes',
+        'Return 429 with Retry-After header',
+      ],
+      outOfScope: [
+        'Authentication changes',
+        'Adding new endpoints',
+        'Logging / observability for the limiter',
+      ],
+      headSha: pr!.headSha,
+      confidence: 'low',
+      sources: ['title', 'description', 'hunk_headers'],
+      missingContext: [],
+      provider: 'seed',
+      model: 'seed',
+    })
+    .onConflictDoNothing();
+
   // ---- built-in agents (the four starter presets) ----
   // Prompt bodies live in ./seed-prompts.ts (mirrored in docs/agent-prompts/*.md).
   // This block must stay ahead of the skills block below: the link pass resolves

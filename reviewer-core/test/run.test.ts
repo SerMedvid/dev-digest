@@ -161,6 +161,57 @@ describe('reviewPullRequest (engine)', () => {
     expect(poisoned.tokensIn).toBeGreaterThan(0);
   });
 
+  it('scores from the findings that survive the scope gate', async () => {
+    // Two findings: one droppable out-of-scope style nit, one real CRITICAL.
+    const llm = new MockLLMProvider('openai', {
+      structured: {
+        verdict: 'request_changes',
+        summary: 's',
+        score: 50,
+        findings: [
+          {
+            id: 'nit',
+            severity: 'SUGGESTION',
+            category: 'style',
+            title: 'Rename this',
+            file: 'src/config.ts',
+            start_line: 11,
+            end_line: 11,
+            rationale: 'r',
+            confidence: 0.4,
+            out_of_scope: true,
+          },
+          {
+            id: 'crit',
+            severity: 'CRITICAL',
+            category: 'security',
+            title: 'Secret committed',
+            file: 'src/config.ts',
+            start_line: 11,
+            end_line: 11,
+            rationale: 'r',
+            confidence: 0.9,
+            out_of_scope: true,
+          },
+        ],
+      },
+    });
+    const diff = await new MockGitClient().diff();
+
+    const outcome = await reviewPullRequest({
+      systemPrompt: 'p',
+      model: 'm',
+      diff,
+      llm,
+      intent: 'Add rate limiting\n\nIn scope:\n- middleware',
+    });
+
+    expect(outcome.review.findings.map((f) => f.id)).toEqual(['crit']);
+    expect(outcome.scopeDropped).toHaveLength(1);
+    // CRITICAL only: 100 − 35.
+    expect(outcome.review.score).toBe(65);
+  });
+
   it('forwards sessionId to every LLM call (OpenRouter session grouping)', async () => {
     const seen: (string | undefined)[] = [];
     const recorder: LLMProvider = {

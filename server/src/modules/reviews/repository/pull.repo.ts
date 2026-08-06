@@ -1,7 +1,7 @@
 import { and, eq } from 'drizzle-orm';
 import type { Db } from '../../../db/client.js';
 import * as t from '../../../db/schema.js';
-import type { Intent } from '@devdigest/shared';
+import type { Intent, IntentConfidence } from '@devdigest/shared';
 import type { PullRow } from '../../../db/rows.js';
 
 // ---- PR lookup (workspace-scoped) -----------------------------------------
@@ -46,23 +46,61 @@ export async function markReviewed(db: Db, prId: string, sha: string): Promise<v
 
 // ---- intent ---------------------------------------------------------------
 
-export async function upsertIntent(db: Db, prId: string, intent: Intent): Promise<void> {
-  await db
-    .insert(t.prIntent)
-    .values({
-      prId,
-      intent: intent.intent,
-      inScope: intent.in_scope,
-      outOfScope: intent.out_of_scope,
-    })
-    .onConflictDoUpdate({
-      target: t.prIntent.prId,
-      set: { intent: intent.intent, inScope: intent.in_scope, outOfScope: intent.out_of_scope },
-    });
+export interface IntentUpsert {
+  intent: Intent;
+  /** The head commit this intent was derived against. */
+  headSha: string;
+  confidence: IntentConfidence;
+  sources: string[];
+  missingContext: string[];
+  provider: string;
+  model: string;
 }
 
-export async function getIntent(db: Db, prId: string): Promise<Intent | undefined> {
+export interface StoredIntent extends Intent {
+  headSha: string;
+  confidence: IntentConfidence;
+  sources: string[];
+  missingContext: string[];
+  provider: string;
+  model: string;
+  createdAt: Date;
+}
+
+export async function upsertIntent(db: Db, prId: string, rec: IntentUpsert): Promise<void> {
+  const values = {
+    intent: rec.intent.intent,
+    inScope: rec.intent.in_scope,
+    outOfScope: rec.intent.out_of_scope,
+    headSha: rec.headSha,
+    confidence: rec.confidence,
+    sources: rec.sources,
+    missingContext: rec.missingContext,
+    provider: rec.provider,
+    model: rec.model,
+    // Re-derivation replaces the record wholesale, timestamp included: the row
+    // describes one derivation, not the first one ever made for this PR.
+    createdAt: new Date(),
+  };
+  await db
+    .insert(t.prIntent)
+    .values({ prId, ...values })
+    .onConflictDoUpdate({ target: t.prIntent.prId, set: values });
+}
+
+export async function getIntent(db: Db, prId: string): Promise<StoredIntent | undefined> {
   const [row] = await db.select().from(t.prIntent).where(eq(t.prIntent.prId, prId));
   if (!row) return undefined;
-  return { intent: row.intent, in_scope: row.inScope, out_of_scope: row.outOfScope };
+  return {
+    intent: row.intent,
+    in_scope: row.inScope,
+    out_of_scope: row.outOfScope,
+    headSha: row.headSha,
+    confidence: row.confidence as IntentConfidence,
+    sources: row.sources,
+    missingContext: row.missingContext,
+    provider: row.provider,
+    model: row.model,
+    createdAt: row.createdAt,
+  };
 }

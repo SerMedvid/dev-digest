@@ -56,8 +56,25 @@ export const ReviewRunResponse = z.object({
 });
 export type ReviewRunResponse = z.infer<typeof ReviewRunResponse>;
 
-/** Intent persisted for a PR (the Intent plus the pr_id it scopes). */
-export const PrIntentRecord = Intent.extend({ pr_id: z.string() });
+/** How much evidence the intent rests on. Computed in code from the sources
+    that actually arrived — never self-reported by the model. */
+export const IntentConfidence = z.enum(['high', 'medium', 'low']);
+export type IntentConfidence = z.infer<typeof IntentConfidence>;
+
+/** Intent persisted for a PR: the model's three fields plus the evidence trail. */
+export const PrIntentRecord = Intent.extend({
+  pr_id: z.string(),
+  /** The head commit this intent was derived against; the cache key. */
+  head_sha: z.string(),
+  confidence: IntentConfidence,
+  /** Labels of the sources that composed the prompt, e.g. 'issue#471'. */
+  sources: z.array(z.string()),
+  /** Referenced material we tried and failed to retrieve. Never invented over. */
+  missing_context: z.array(z.string()),
+  provider: z.string(),
+  model: z.string(),
+  created_at: z.string(),
+});
 export type PrIntentRecord = z.infer<typeof PrIntentRecord>;
 
 /** Smart-diff response for a PR (the SmartDiff). */

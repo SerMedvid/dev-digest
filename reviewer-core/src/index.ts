@@ -22,6 +22,9 @@ export {
 // Citation grounding — the mandatory mechanical gate for diff findings.
 export { groundFindings, groundingSummary, type GroundingResult } from './grounding.js';
 
+// Intent scope gate — the deterministic half of the Intent Layer.
+export { scopeFindings, scopeSummary, type ScopeResult } from './scope.js';
+
 // Structured-output helpers (Zod → JSON Schema + parse-with-repair).
 export {
   toJsonSchema,
@@ -57,3 +60,15 @@ export {
 // The single OpenAI-compatible structured provider (OpenRouter), shared by the
 // CI runner and the server's openrouter path. Owns session grouping + guards.
 export { OpenRouterProvider, type OpenRouterProviderOptions } from './llm/openrouter.js';
+
+// Intent layer — cheap classifier input (file-level diff topology, never content).
+export { hunkHeaderDigest } from './intent/hunk-digest.js';
+
+// Intent layer — the classifier call + the reviewer-facing renderer.
+export { classifyIntent, renderIntent } from './intent/classify.js';
+export type {
+  IntentSource,
+  ClassifyIntentInput,
+  ClassifyIntentResult,
+} from './intent/classify.js';
+export { INTENT_SYSTEM_PROMPT, INTENT_USE_RULE } from './intent/prompt.js';

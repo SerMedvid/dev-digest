@@ -114,5 +114,37 @@
     "openBreakdown": "Show findings breakdown",
     "goToFinding": "Go to this finding in its agent run",
     "openInPr": "Open this file in the pull request on GitHub"
+  },
+  "intent": {
+    "title": "Intent",
+    "loadError": "Could not load the intent for this PR.",
+    "deriveError": "Could not derive the intent for this PR.",
+    "retry": "Retry",
+    "empty": "No intent derived yet.",
+    "derive": "Derive intent",
+    "deriving": "Deriving…",
+    "refresh": "Refresh",
+    "reDerive": "Re-derive",
+    "inScope": "In scope",
+    "outOfScope": "Out of scope",
+    "noneSpecified": "None specified.",
+    "stale": "This PR changed since the intent was derived.",
+    "confidenceLabel": "{level} confidence",
+    "from": "from: {sources}",
+    "confidence": {
+      "high": "high",
+      "medium": "medium",
+      "low": "low"
+    },
+    "confidenceHint": {
+      "high": "derived from a description plus a linked ticket or document",
+      "medium": "derived from a single source, or with material missing",
+      "low": "derived from the title, file list and hunk headers only"
+    },
+    "source": {
+      "title": "title",
+      "description": "description",
+      "hunk_headers": "changed files"
+    }
   }
 }

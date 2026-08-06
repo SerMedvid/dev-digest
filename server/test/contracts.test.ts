@@ -3,6 +3,8 @@ import {
   Review,
   Finding,
   Intent,
+  IntentConfidence,
+  PrIntentRecord,
   BlastRadius,
   Risks,
   PrHistory,
@@ -107,6 +109,43 @@ describe('AI contracts parse fixtures', () => {
         ],
       }),
     ).not.toThrow();
+  });
+
+  it('PrIntentRecord carries evidence and a computed confidence', () => {
+    const rec = PrIntentRecord.parse({
+      intent: 'Add rate limiting to public API endpoints',
+      in_scope: ['Add middleware for rate limiting'],
+      out_of_scope: ['Authentication changes'],
+      pr_id: 'p1',
+      head_sha: 'a1b2c3d4',
+      confidence: 'medium',
+      sources: ['title', 'description', 'hunk_headers'],
+      missing_context: ['issue #7 could not be fetched: 404'],
+      provider: 'openrouter',
+      model: 'google/gemini-2.5-flash-lite',
+      created_at: '2026-08-05T00:00:00Z',
+    });
+    expect(rec.confidence).toBe('medium');
+    expect(rec.sources).toHaveLength(3);
+    // The MODEL's schema stays at three fields — confidence is not askable.
+    expect(Object.keys(Intent.shape).sort()).toEqual(['in_scope', 'intent', 'out_of_scope']);
+    expect(IntentConfidence.options).toEqual(['high', 'medium', 'low']);
+  });
+
+  it('Finding carries an optional out_of_scope marker', () => {
+    const base = {
+      id: 'f1',
+      severity: 'CRITICAL',
+      category: 'security',
+      title: 'Hardcoded key',
+      file: 'src/config.ts',
+      start_line: 12,
+      end_line: 12,
+      rationale: 'x',
+      confidence: 0.9,
+    };
+    expect(Finding.parse(base).out_of_scope ?? false).toBe(false);
+    expect(Finding.parse({ ...base, out_of_scope: true }).out_of_scope).toBe(true);
   });
 
   it('SmartDiff (data.jsx DIFF)', () => {

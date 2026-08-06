@@ -211,6 +211,19 @@ an entry can age — verify before relying on one.
 
 ## Recurring errors & fixes
 
+- **2026-08-05** — An `.it.test.ts` that awaits
+  [`waitForPrRuns`](test/helpers/runs.ts) and then reads `GET /runs/:id/trace`
+  is racing, and 404s intermittently — the more agents in the batch, the more
+  often. `runOneAgent` calls `completeAgentRun` (which writes the terminal
+  status the helper polls for) at `run-executor.ts:295` and only saves the trace
+  45 lines later at `:340`, so the helper can return while the last run's
+  `run_traces` row does not exist yet. Existing single-agent tests hide it
+  because the gap is one `await`. To assert on a run's *log*, read the
+  replay-first SSE buffer instead (`GET /runs/:id/events`): it is in memory,
+  complete the moment the events were emitted, and is the very source
+  `runLog.logFor` persists into the trace — so it proves the same thing without
+  the window. (`test/intent-review.it.test.ts:161`)
+
 - **2026-08-03** — `pnpm db:generate` **blocks on an interactive prompt** when
   one migration both drops a column and adds columns to the same table: drizzle-kit
   asks "created or renamed from another column?" once per added column. It reads

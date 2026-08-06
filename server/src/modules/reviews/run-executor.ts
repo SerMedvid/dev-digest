@@ -1,6 +1,6 @@
 import type { Container } from '../../platform/container.js';
 import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
-import { reviewPullRequest, countBlockers } from '@devdigest/reviewer-core';
+import { reviewPullRequest, countBlockers, renderIntent, hunkHeaderDigest } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
@@ -96,7 +96,7 @@ export class ReviewRunExecutor {
 
     let diff: UnifiedDiff;
     try {
-      diff = await runLog.step('Loading PR diff', () => loadDiff(this.container, this.repo, workspaceId, pull, repo), {
+      diff = await runLog.step('Loading PR diff', () => loadDiff(this.container.git, this.repo, workspaceId, pull, repo), {
         kind: 'tool',
       });
     } catch (err) {
@@ -106,6 +106,46 @@ export class ReviewRunExecutor {
     }
     runLog.info(`Diff ready — ${diff.files.length} changed file(s); starting ${jobs.length} agent run(s)`);
 
+    // ---- Intent (L03) — derived ONCE for the batch, before the agent loop ----
+    // On the fanned-out logger, so every target run's buffer (and therefore its
+    // persisted trace) records it. Best-effort: a failure omits the prompt
+    // section, exactly like repo-intel enrichment — it never fails the review.
+    //
+    // `ensureFresh` is contractually throw-free, so nothing here should reach
+    // the catch. It is wrapped anyway, exactly like `loadDiff` above: this
+    // whole method is invoked as `void executeRuns(...).catch(log)`, so an
+    // escaping throw would leave every queued run stuck `running` with no
+    // trace row — the one failure server/CLAUDE.md says must never happen.
+    let intentText: string | undefined;
+    let intentRecord: Awaited<ReturnType<typeof this.container.intentService.ensureFresh>>;
+    try {
+      intentRecord = await runLog.step(
+        'Deriving PR intent',
+        () =>
+          this.container.intentService.ensureFresh(workspaceId, pull.id, pull.headSha, {
+            onLog: (msg, data) => runLog.tool(msg, data),
+            // The diff is already in hand from the step above. Without this the
+            // intent's diff port runs `loadDiff` — a git subprocess, or a read
+            // of every stored `pr_files` patch — a second time for this batch.
+            hunkDigest: hunkHeaderDigest(diff),
+          }),
+        { kind: 'tool' },
+      );
+    } catch (err) {
+      runLog.error(`Failed to derive PR intent: ${(err as Error).message}`);
+      await failAll(`Failed to derive PR intent: ${(err as Error).message}`);
+      return;
+    }
+    if (intentRecord) {
+      intentText = renderIntent(intentRecord);
+      runLog.info(
+        `Intent: ${intentRecord.confidence} confidence from ${intentRecord.sources.length} source(s)`,
+        { confidence: intentRecord.confidence, sources: intentRecord.sources, model: intentRecord.model },
+      );
+    } else {
+      runLog.info('No PR intent available — reviewing without the intent section');
+    }
+
     for (const { agent, runId } of jobs) {
       const agentStart = Date.now();
       logger?.info(
@@ -113,7 +153,16 @@ export class ReviewRunExecutor {
         `review: agent "${agent.name}" started (${agent.provider}/${agent.model})`,
       );
       try {
-        const outcome = await this.runOneAgent(workspaceId, pull, repo, diff, agent, runId, runLog);
+        const outcome = await this.runOneAgent(
+          workspaceId,
+          pull,
+          repo,
+          diff,
+          intentText,
+          agent,
+          runId,
+          runLog,
+        );
         logger?.info(
           {
             runId,
@@ -142,6 +191,8 @@ export class ReviewRunExecutor {
     pull: PullRow,
     repo: typeof schema.repos.$inferSelect,
     diff: UnifiedDiff,
+    /** Rendered PR intent from the batch pre-work; undefined when derivation failed. */
+    intentText: string | undefined,
     agent: AgentRow,
     runId: string,
     parentLog: RunLogger,
@@ -209,6 +260,8 @@ export class ReviewRunExecutor {
         ...(callersDigest ? { callers: callersDigest } : {}),
         // T3 — repo skeleton, same omit-when-empty contract.
         ...(repoMap ? { repoMap } : {}),
+        // L03 — derived intent, same omit-when-empty contract as repoMap/callers.
+        ...(intentText ? { intent: intentText } : {}),
         // Reusable skill bodies. Trusted instructions (manual source only), so
         // they are NOT delimiter-wrapped; assemblePrompt omits the section when
         // the array is empty.

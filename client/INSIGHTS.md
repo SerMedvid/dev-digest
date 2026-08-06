@@ -42,6 +42,21 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-06** — Every PR-detail tab takes `prId: string | null`
+  (`OverviewTab`, `FindingsTab`, `DiffTab`, and `IntentCard` under it), so a
+  null-`prId` branch inside one reads as a live user-facing path. It is
+  **unreachable**. [`page.tsx`](src/app/repos/[repoId]/pulls/[number]/page.tsx)
+  resolves `prId` from the pulls list with `?? null`, hands it to
+  `usePullDetail`, which is `enabled: prId != null`
+  ([`src/lib/hooks/core.ts:118`](src/lib/hooks/core.ts)) — so `pr` stays
+  `undefined` and the `if (isError || !pr)` guard returns `ErrorState` before any
+  tab mounts. The nullable prop is defensive typing, not a state the UI reaches.
+  Worth knowing because a code review (human or model) will otherwise report
+  "clicking this button posts to `/pulls/null/…`" as a real bug, and the fix it
+  proposes — validating at the page level — is already there. Check the guard
+  before treating any null-id branch in these tabs as reachable.
+  (`src/app/repos/[repoId]/pulls/[number]/page.tsx:114`)
+
 - **2026-08-03** — Two more vendored components that fix their own shape, same
   family as the `Textarea`/`FormField` entry below.
   [`EmptyState`](src/vendor/ui/primitives/EmptyState.tsx) takes **no children** —

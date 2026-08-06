@@ -1,0 +1,26 @@
+{
+  "name": "PR overview shows the seeded derived intent",
+  "description": "From PR #482, stay on the default Overview tab and confirm the IntentCard renders the SEEDED pr_intent row (server/src/db/seed.ts): the statement, both scope lists, the computed confidence badge and the source line. Exercises IntentCard + usePrIntent → GET /pulls/:id/intent. Read-only seeded data: the flow never clicks 'Derive intent'/'Refresh', because a live classification needs a model key and e2e runs without one. The card must NOT be labelled stale — the seed writes the PR's own head_sha — which is asserted twice: the stale banner is absent, and the action button still reads 'Refresh' rather than 'Re-derive'. Text is matched in its RENDERED case: the card's headings are uppercased by CSS text-transform, and agent-browser matches innerText. Assumes a freshly-seeded DB where acme/payments-api (PR #482) is the first repo — guaranteed by e2e-web.yml; run locally via the hermetic stack (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["wait", "--text", "Add rate limiting to public API endpoints"], "label": "seeded PR title row is visible" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+    { "cmd": ["wait", "--text", "INTENT"], "label": "the Intent card renders on the default Overview tab" },
+    { "cmd": ["wait", "--text", "“Add rate limiting to public API endpoints to prevent abuse from unauthenticated clients.”"], "label": "the seeded intent statement renders (the curly quotes are the card's, not the description box's)" },
+    { "cmd": ["wait", "--text", "IN SCOPE"], "label": "the in-scope list is labelled" },
+    { "cmd": ["wait", "--text", "Return 429 with Retry-After header"], "label": "a seeded in-scope item renders" },
+    { "cmd": ["wait", "--text", "OUT OF SCOPE"], "label": "the out-of-scope list is labelled" },
+    { "cmd": ["wait", "--text", "Logging / observability for the limiter"], "label": "a seeded out-of-scope item renders" },
+    { "cmd": ["wait", "--text", "LOW CONFIDENCE"], "label": "the computed confidence badge renders" },
+    { "cmd": ["wait", "--text", "from: title · description · changed files"], "label": "the source line names the evidence the intent rests on" },
+    {
+      "cmd": ["get", "count", "text=This PR changed since the intent was derived."],
+      "label": "the card is NOT labelled stale",
+      "assert": { "stdoutIncludes": "0" }
+    },
+    { "cmd": ["wait", "--text", "Refresh"], "label": "the action button reads Refresh, not Re-derive — corroborating not-stale" }
+  ]
+}

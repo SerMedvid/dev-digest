@@ -33,12 +33,22 @@ flowchart TD
   SETTINGS["/settings/:section<br/>API keys · models"]
 
   PULLS -->|"GET /repos/:id/pulls · /repos/:id/index-state"| API
-  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments<br/>POST /pulls/:id/review · /findings/:id/(accept|dismiss)"| API
+  PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent<br/>POST /pulls/:id/review · /pulls/:id/intent · /findings/:id/(accept|dismiss)"| API
   AGENTS -->|"/agents · /agents/:id · /agents/:id/skills"| API
   SKILLS -->|"/skills · /skills/:id · /skills/:id/(stats|versions)"| API
   CONV -->|"GET/POST /repos/:id/conventions(/extract|/skill-draft|/skill)<br/>PATCH /conventions/:id"| API
   SETTINGS -->|"/settings · /providers"| API
 ```
+
+The PR detail route's **Overview** tab opens with the `IntentCard`: what the
+system thinks the PR is for, its in/out-of-scope lists, the computed confidence
+badge and the sources it was derived from — above the review results, so the
+understanding can be checked before a review is spent on it. It reads
+`GET /pulls/:id/intent` (a 404 is the "not derived yet" empty state, not an
+error) and re-derives through `POST /pulls/:id/intent`, both via
+`src/lib/hooks/intent.ts`. When the stored `head_sha` no longer matches the PR's,
+the card says so and the button becomes **Re-derive**. Server contract:
+[`../server/specs/intent.md`](../server/specs/intent.md).
 
 Cross-cutting chrome lives in `src/components/app-shell` (nav, breadcrumbs,
 `g`-then-key shortcuts). Pages are thin; feature logic sits in colocated

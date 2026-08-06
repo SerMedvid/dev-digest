@@ -56,6 +56,18 @@ export const Finding = z.object({
   suggestion: z.string().nullish(), // markdown
   confidence: z.number().min(0).max(1),
   kind: FindingKind.nullish(),
+  /**
+   * True when the finding is about something this PR did not set out to change.
+   * Set by the reviewer model when an intent was supplied; consumed by the
+   * deterministic scope gate, which may only drop SUGGESTION-level
+   * style/perf/test noise. Absent when no intent was in the prompt.
+   */
+  out_of_scope: z
+    .boolean()
+    .nullish()
+    .describe(
+      'True only if this finding concerns something outside the stated scope of the PR. Report the finding either way — never omit a defect because it is out of scope.',
+    ),
   // Lethal-trifecta variant fields (present only when kind === 'lethal_trifecta')
   trifecta_components: z.array(TrifectaComponent).nullish(),
   evidence: z.array(TrifectaEvidence).nullish(),
