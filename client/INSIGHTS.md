@@ -42,6 +42,22 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-06** — Tailwind 4's **preflight is active**, and it silently removes
+  two defaults the inline-`CSSProperties` tier (entry below) is otherwise
+  assumed to inherit: `ul`/`ol` get `list-style: none`, and **every `svg` gets
+  `display: block`**. Both fail quietly and identically — a `<ul>` renders as
+  bare indented lines that read as one run-on paragraph, and an icon placed in
+  running text takes a whole line to itself — and neither is visible to
+  `tsc` or to a jsdom test, which asserts text and never layout. So a list in a
+  `styles.ts` must restate `listStyleType: "disc"` (`IntentCard`'s `list` did;
+  `SplitBanner`'s didn't, and shipped marker-less), and an icon beside text
+  needs a flex container rather than being an inline sibling. This is also why
+  icons inside `Badge`/`Button` always look right — those primitives are
+  `inline-flex`, so their `svg` is a flex item and the `display: block` never
+  bites. Suspect preflight first when a hand-rolled row looks wrong in a way
+  the styles don't explain.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/_components/SmartDiffViewer/_components/SplitBanner/styles.ts:23`)
+
 - **2026-08-06** — [`CLAUDE.md`](CLAUDE.md) says "Tailwind classes live in
   `styles.ts`", but **every** component under
   `src/app/repos/[repoId]/pulls/[number]/_components/` instead exports an `s`
