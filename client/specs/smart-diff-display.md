@@ -133,10 +133,25 @@ never triggered on render, on scroll, or on group expand.
 | 7 | The ✨ pill: toasts the error and returns to idle on failure, persisting nothing | `SmartDiffViewer.test.tsx:242-257` |
 | 8 | `?order=original` renders the flat `DiffViewer`, with `SmartDiffViewer`'s own caption absent | `SmartDiffViewer.test.tsx:258-` ("DiffTab order toggle") |
 | 9 | Group labels render in their CSS-uppercased form (`CORE`/`WIRING`/`BOILERPLATE`) — a locator note, not new behaviour | [`GroupSection/styles.ts:11-17`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/DiffTab/_components/SmartDiffViewer/_components/GroupSection/styles.ts) (`textTransform: "uppercase"`) |
-| 10 | The seeded PR renders all three groups, `package-lock.json` present but collapsed, and a badge click on `src/config.ts` reveals its CRITICAL line — a real browser, no model key | [`e2e/specs/09-pr-smart-diff.flow.json`](../../e2e/specs/09-pr-smart-diff.flow.json) |
+| 10 | The seeded PR renders all three groups, `package-lock.json` present but collapsed, and a badge click on `src/config.ts` reveals its CRITICAL line — a real browser, no model key | [`e2e/specs/09-pr-smart-diff.flow.json`](../../e2e/specs/09-pr-smart-diff.flow.json) — written, and every selector individually proven against a static fixture mirroring the real DOM shape, but the flow has **not** been observed passing end to end in this environment (a pre-existing, out-of-scope Windows bug in `e2e/run.ts` plus a session-local Docker outage — full account in `.superpowers/sdd/2026-08-06-smart-diff/task-9-report.md`). Treat this row as **not yet verified** |
 
 ## 6. Known gaps
 
+- **`CodeLine`'s severity-mark chip nests a `<button>` inside a `<span>`.**
+  [`CodeLine.tsx:73-83`](../src/components/diff-viewer/CodeLine/CodeLine.tsx)
+  renders `<span className="mono" style={s.lineText}>{mark && <button
+  .../>}{ln.text}</span>` — an interactive control as a child of an inline
+  text span, mixed directly into the running code text rather than kept in a
+  clearly separate element. A screen reader's linearised reading of the line
+  can announce the chip's accessible name (e.g. `"CRITICAL finding"`)
+  interleaved with the code text instead of as a distinct control, and the
+  nesting is invalid enough to be worth fixing on its own terms, independent
+  of any Smart Diff behaviour. Not introduced by this task — the mark chip
+  itself is Task 7's (`marks`/`onMarkClick` on `CodeLine`) — but this is the
+  first spec that documents it; a fix (e.g. moving the button out of the text
+  span, or replacing the span with a `<span>`-wrapping `<span>` structure that
+  keeps the button a sibling rather than a nested child) is a `diff-viewer`
+  change outside this task's file scope.
 - `AUTO_EXPAND_MAX_LINES` is duplicated locally
   ([`constants.ts`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/DiffTab/_components/SmartDiffViewer/constants.ts))
   rather than imported from `components/diff-viewer/constants.ts`, which does

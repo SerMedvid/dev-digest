@@ -175,7 +175,7 @@ represented honestly rather than with a one-item list pretending to be a plan
 > bounds granularity on a deep tree.
 
 Covered by
-[`smart-diff-classify.test.ts:126-256`](../test/smart-diff-classify.test.ts)
+[`smart-diff-classify.test.ts:126-255`](../test/smart-diff-classify.test.ts)
 (both thresholds independently, the fewer-than-two-splits rule, the cap +
 remainder, and the root-file case).
 
@@ -235,8 +235,8 @@ The house rule: degrade visibly, never fail the read.
 
 | # | Item | Covered by |
 |---|---|---|
-| 1 | A lock file is always `boilerplate` and starts collapsed | [`smart-diff-classify.test.ts`](../test/smart-diff-classify.test.ts), [`SmartDiffViewer.test.tsx`](../../client/src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/DiffTab/_components/SmartDiffViewer/SmartDiffViewer.test.tsx), [`e2e/specs/09-pr-smart-diff.flow.json`](../../e2e/specs/09-pr-smart-diff.flow.json) |
-| 2 | Finding badges are clickable and land on the right place in the diff | `SmartDiffViewer.test.tsx`, `09-pr-smart-diff.flow.json` |
+| 1 | A lock file is always `boilerplate` and starts collapsed | [`smart-diff-classify.test.ts`](../test/smart-diff-classify.test.ts), [`SmartDiffViewer.test.tsx`](../../client/src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/DiffTab/_components/SmartDiffViewer/SmartDiffViewer.test.tsx) — both hermetic, both green. [`e2e/specs/09-pr-smart-diff.flow.json`](../../e2e/specs/09-pr-smart-diff.flow.json) is written and its selectors are individually proven against a static fixture mirroring the real DOM shape, but the flow itself has **not** been observed passing end to end (blocked in this environment by a pre-existing, out-of-scope Windows bug in `e2e/run.ts` plus a session-local Docker outage — see `task-9-report.md`); treat its coverage of this row as **not yet verified**, not as corroboration |
+| 2 | Finding badges are clickable and land on the right place in the diff | `SmartDiffViewer.test.tsx` (hermetic, green). `09-pr-smart-diff.flow.json` exercises this but is **not yet verified** end to end — same caveat as row 1 |
 | 3 | Viewing Smart Diff makes no model call | [`smart-diff-routes.it.test.ts:79-80`](../test/smart-diff-routes.it.test.ts) — asserted against the LLM mock's call count, not read from a log |
 | 4 | Every threshold and pattern lives in constants | [`modules/smart-diff/constants.ts`](../src/modules/smart-diff/constants.ts); `smart-diff-classify.test.ts` imports rather than restates them |
 | 5 | Grouping and ordering work before any review has run | [`smart-diff-routes.it.test.ts:165`](../test/smart-diff-routes.it.test.ts) |
@@ -247,7 +247,7 @@ The house rule: degrade visibly, never fail the read.
 | 10 | Settings → Models lists the file-summary feature and the model it reports is the one that ran | [`smart-diff-summary.it.test.ts:296-306`](../test/smart-diff-summary.it.test.ts) (workspace-choice case) plus `FEATURE_MODELS`' generic Settings rendering ([`platform.ts:85-93`](../src/vendor/shared/contracts/platform.ts)) |
 | 11 | `?order=original` renders exactly today's flat viewer | `SmartDiffViewer.test.tsx` ("DiffTab order toggle") |
 | 12 | Both vendor copies of the three contract edits agree; both packages type-check | [`test/contracts.test.ts`](../test/contracts.test.ts) + the typecheck gates |
-| 13 | A fresh `pnpm db:seed` yields nine files across three groups, summing to +247 −38 | [`smart-diff-routes.it.test.ts:237-306`](../test/smart-diff-routes.it.test.ts), `09-pr-smart-diff.flow.json` |
+| 13 | A fresh `pnpm db:seed` yields nine files across three groups, summing to +247 −38 | [`smart-diff-routes.it.test.ts:237-294`](../test/smart-diff-routes.it.test.ts) (hermetic-DB coverage, green). `09-pr-smart-diff.flow.json` exercises the same fact live but is **not yet verified** — see row 1 |
 
 ## 6. Seed
 
@@ -294,9 +294,38 @@ which reruns `seed()` a second time and asserts the count stays at nine.
 ## 7. Known gaps
 
 Shipped short of a strict reading of the plan's own global constraints, or of
-the design, in two narrow places — recorded here rather than silently folded
-into the acceptance table:
+the design, in four places — recorded here rather than silently folded into
+the acceptance table (a fifth, client-only item — `CodeLine`'s mark chip
+nesting a `<button>` inside a `<span>` — is recorded in
+[`client/specs/smart-diff-display.md`](../../client/specs/smart-diff-display.md)
+§6, not here):
 
+- **A file with no stored patch gets an invented summary, persisted as if
+  genuine.** `SmartDiffService.summarize`
+  ([`service.ts:145`](../src/modules/smart-diff/service.ts)) sends
+  `file.patch ?? ''` to the model rather than refusing the call when there is
+  no patch to summarise. The model is not told the patch is empty — the
+  system prompt only says "you are given only this file's patch"
+  ([`prompt.ts:29-35`](../src/modules/smart-diff/prompt.ts)) — so a
+  structured-output call with an empty user-content diff block still returns
+  a plausible-sounding sentence, which `summarize()` then caches and serves
+  exactly like a real summary, with no marker distinguishing it. This is
+  reachable on a fresh install: seven of the nine seeded files carry
+  `patch: null` (§6), so clicking ✨ on any of them today produces and
+  persists a fabricated description. The fix is either a 4xx before the model
+  call (mirroring the `path`-not-in-PR 404 check right above it) or an
+  explicit "no patch available" instruction the model is told to echo rather
+  than paper over — neither is implemented.
+- **The summary cache-hit path scans, not looks up.**
+  `SmartDiffRepository.summariesForPr` returns every row for the PR
+  ([`repository.ts:16-28`](../src/modules/smart-diff/repository.ts)), and
+  both `get()` and `summarize()` filter the result in application code
+  (`service.ts:86-90`, `service.ts:124-125`) rather than querying
+  `WHERE pr_id = ? AND path = ?` directly for the one row a request actually
+  needs. Correct today (every seeded PR has a handful of files), but it reads
+  the whole PR's summary set on every single-file cache check, which is
+  `O(files)` work for an `O(1)` lookup and would show up first on a PR with
+  many already-summarised files.
 - **`AUTO_EXPAND_MAX_LINES` (200) is duplicated on the client**, not imported
   from `components/diff-viewer/constants.ts`, in
   [`SmartDiffViewer/constants.ts`](../../client/src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/DiffTab/_components/SmartDiffViewer/constants.ts).
