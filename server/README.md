@@ -70,6 +70,7 @@ flowchart TB
   end
   subgraph Review["Review & runs"]
     reviews["reviews<br/>/pulls/:id/review · /reviews · /findings/:id/(accept|dismiss)<br/>/runs/:id/(events|trace)"]
+    intent["intent<br/>GET/POST /pulls/:id/intent"]
   end
   subgraph Agents["Agents & skills"]
     agents["agents<br/>/agents · /agents/:id · /agents/:id/skills"]
@@ -87,6 +88,15 @@ flowchart TB
   end
   HEALTH["/health (liveness) · /health/ready (DB ping → 200/503)"]
 ```
+
+`GET /pulls/:id/intent` serves the stored `pr_intent` record (404 until one
+exists); `POST` derives it synchronously (409 while one is in flight). A review
+run derives it automatically before the agent loop and reuses it while
+`head_sha` is unchanged. The `review_intent` entry in the `FEATURE_MODELS`
+registry is now **consumed**, not just displayed on Settings → Models: it is the
+model the classifier actually calls, with the registry's `defaultModel` as the
+fallback when the workspace has chosen nothing. Full contract, caps, confidence
+tiers and degradation paths: [`specs/intent.md`](specs/intent.md).
 
 ## Environment
 

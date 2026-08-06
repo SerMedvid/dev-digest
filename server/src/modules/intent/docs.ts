@@ -22,6 +22,15 @@ import type { DocsPort } from './ports.js';
  * so it falls through to the ordinary `readFile` attempt below and is reported
  * as "not found", same as always.
  *
+ * The two checks compare against DIFFERENT roots on purpose. The lexical one
+ * uses the unresolved root, so `..` is refused before any filesystem call. The
+ * symlink one uses the realpath'd root, because a resolved target may only be
+ * compared with a resolved root: when an ancestor of the clone directory is
+ * itself a link (macOS `/var` → `/private/var`, a linked checkout, a Windows
+ * junction) every real path lies under the resolved root and none under the
+ * unresolved one — an asymmetric comparison there rejects every document in
+ * the clone as "outside the repository".
+ *
  * Nothing here throws. A path we will not read becomes a `missing` entry, which
  * is what stops the classifier from being told a document exists when it does not.
  */
@@ -34,6 +43,11 @@ export class CloneDocReader implements DocsPort {
     const missing: string[] = [];
     const root = resolve(clonePath);
     const rootWithSep = root.endsWith(sep) ? root : root + sep;
+    // Resolved once per call, not per path: the root does not move mid-read.
+    // A root that cannot be resolved (no clone on disk) falls back to the
+    // lexical one, and every path under it then reports "not found" as before.
+    const realRoot = await realpath(root).catch(() => root);
+    const realRootWithSep = realRoot.endsWith(sep) ? realRoot : realRoot + sep;
 
     for (const rel of relPaths.slice(0, MAX_DOCS)) {
       // Resolve-and-confine BEFORE inspecting the extension: an escaping path
@@ -49,10 +63,11 @@ export class CloneDocReader implements DocsPort {
         continue;
       }
       // Symlink guard: re-check the REAL (symlink-resolved) path against the
-      // same root. A nonexistent path fails realpath too — that's not an
-      // escape, so it falls through to readFile and reports "not found".
+      // REAL root — like with like. A nonexistent path fails realpath too —
+      // that's not an escape, so it falls through to readFile and reports
+      // "not found".
       const real = await realpath(abs).catch(() => null);
-      if (real !== null && !real.startsWith(rootWithSep)) {
+      if (real !== null && !real.startsWith(realRootWithSep)) {
         missing.push(`${rel} was not read: path resolves outside the repository`);
         continue;
       }

@@ -53,11 +53,18 @@ export class IntentService {
     try {
       const existing = await this.get(workspaceId, prId);
       if (existing && existing.head_sha === headSha) {
-        opts.onLog?.('Reusing the stored PR intent (head unchanged)', {
-          confidence: existing.confidence,
-          sources: existing.sources,
-          model: existing.model,
-        });
+        // Guarded on its own, like the recovery path below: `onLog` is
+        // run-executor's run-log writer, and a throwing log sink must not
+        // discard an already-derived record and report "no intent".
+        try {
+          opts.onLog?.('Reusing the stored PR intent (head unchanged)', {
+            confidence: existing.confidence,
+            sources: existing.sources,
+            model: existing.model,
+          });
+        } catch {
+          /* a logging sink must never be the thing that drops a valid record */
+        }
         return existing;
       }
       return await this.derive(workspaceId, prId, opts);
@@ -146,7 +153,13 @@ export class IntentService {
 
       const model = await this.deps.model(workspaceId);
       const sourceLabels = [...sources.map((s) => s.label), 'hunk_headers'];
-      const promptChars = sources.reduce((n, s) => n + s.content.length, 0) + hunkDigest.length;
+      // `missing_context` is part of the prompt and it is author-shaped (paths
+      // out of the PR body, provider error text), so it counts towards both
+      // sizes. Leaving it out let a prompt bloated by exactly the attacker-fed
+      // half log as a small one.
+      const missingText = missingContext.join('\n');
+      const promptChars =
+        sources.reduce((n, s) => n + s.content.length, 0) + hunkDigest.length + missingText.length;
 
       opts.onLog?.('Classifying PR intent', {
         provider: model.provider,
@@ -154,7 +167,9 @@ export class IntentService {
         sources: sourceLabels,
         missing_context: missingContext,
         chars_in: promptChars,
-        est_tokens_in: this.deps.tokenCount(`${sources.map((s) => s.content).join('\n')}\n${hunkDigest}`),
+        est_tokens_in: this.deps.tokenCount(
+          `${sources.map((s) => s.content).join('\n')}\n${hunkDigest}\n${missingText}`,
+        ),
       });
 
       const out = await model.classify({

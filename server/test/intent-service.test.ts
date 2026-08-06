@@ -123,6 +123,23 @@ describe('IntentService.derive', () => {
     ]);
   });
 
+  it('counts the missing context in the logged prompt size', async () => {
+    // `missing_context` is part of the prompt and it is the author-shaped part.
+    // Excluding it let a prompt bloated by exactly that half log as a small one.
+    const onLog = vi.fn();
+    const filler = 'x'.repeat(4_000);
+    await new IntentService(
+      deps({
+        docs: { read: async () => ({ found: [], missing: [`docs/${filler}.md was not read`] }) },
+      }),
+    ).derive('w1', 'pr1', { onLog });
+
+    const call = onLog.mock.calls.find((c) => c[0] === 'Classifying PR intent')!;
+    const data = call[1] as { chars_in: number; est_tokens_in: number };
+    expect(data.chars_in).toBeGreaterThan(4_000);
+    expect(data.est_tokens_in).toBeGreaterThan(4_000);
+  });
+
   it('never sends diff bodies — only the hunk digest', async () => {
     const classify = vi.fn(async () => ({
       intent: { intent: 'x', in_scope: [], out_of_scope: [] },
@@ -190,6 +207,30 @@ describe('IntentService.ensureFresh', () => {
       model: 'm',
     });
     const rec = await new IntentService(d).ensureFresh('w1', 'pr1', 'sha-1');
+    expect(rec?.intent).toBe('cached');
+    expect(classify).not.toHaveBeenCalled();
+  });
+
+  it('still returns the cached record when the run-log writer throws', async () => {
+    // The cache HIT path logs too, and `onLog` is run-executor's run-log
+    // writer. A throwing sink there used to discard a valid, already-derived
+    // record and report "no intent" to the review.
+    const classify = vi.fn();
+    const d = deps({ model: async () => ({ provider: 'p', model: 'm', classify: classify as never }) });
+    await d.store.put('pr1', {
+      intent: { intent: 'cached', in_scope: [], out_of_scope: [] },
+      headSha: 'sha-1',
+      confidence: 'medium',
+      sources: ['title'],
+      missingContext: [],
+      provider: 'p',
+      model: 'm',
+    });
+    const rec = await new IntentService(d).ensureFresh('w1', 'pr1', 'sha-1', {
+      onLog: () => {
+        throw new Error('log sink is down');
+      },
+    });
     expect(rec?.intent).toBe('cached');
     expect(classify).not.toHaveBeenCalled();
   });

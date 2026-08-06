@@ -9,7 +9,7 @@ import type {
 import { Review as ReviewSchema } from '@devdigest/shared';
 import { assemblePrompt } from '../prompt.js';
 import { groundFindings, groundingSummary } from '../grounding.js';
-import { scopeFindings } from '../scope.js';
+import { scopeFindings, scopeSummary } from '../scope.js';
 import { reduceReviews, scoreFromFindings, sliceDiff } from './reduce.js';
 
 /**
@@ -200,7 +200,8 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     `Reduced to ${merged.findings.length} finding(s); verdict=${merged.verdict}, score=${merged.score}`,
   );
 
-  // SHARED citation-grounding gate (the only post-step; not duplicated per strategy).
+  // SHARED citation-grounding gate — the first of two post-steps (the intent
+  // scope gate below is the second); neither is duplicated per strategy.
   const ground = groundFindings(merged.findings, input.diff);
   const grounding = groundingSummary(ground);
   for (const d of ground.dropped) {
@@ -215,7 +216,7 @@ export async function reviewPullRequest(input: ReviewInput): Promise<ReviewOutco
     emit('info', `scope dropped "${d.finding.title}": ${d.reason}`);
   }
   if (scoped.dropped.length > 0) {
-    emit('result', `Intent scope: ${scoped.dropped.length} out-of-scope suggestion(s) filtered`);
+    emit('result', `Intent scope: ${scopeSummary(scoped)}`);
   }
 
   return {

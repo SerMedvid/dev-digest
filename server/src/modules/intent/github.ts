@@ -1,7 +1,18 @@
 import type { GitHubClient } from '@devdigest/shared';
-import { MAX_ISSUES, MAX_ISSUE_BYTES } from './constants.js';
+import { MAX_ERROR_CHARS, MAX_ISSUES, MAX_ISSUE_BYTES } from './constants.js';
 import type { IntentDoc } from './domain.js';
 import type { IssuePort } from './ports.js';
+
+/**
+ * A `missing` note ends up in the classifier prompt, so the provider's error
+ * text is flattened and capped before it goes in: a GitHub client can put a
+ * whole response body (which can echo request content back) into `.message`.
+ */
+function errorNote(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  const flat = raw.replace(/\s+/g, ' ').trim();
+  return flat.length > MAX_ERROR_CHARS ? `${flat.slice(0, MAX_ERROR_CHARS)}…` : flat;
+}
 
 /**
  * Driven adapter for linked-issue bodies. Best-effort by construction: a token
@@ -22,11 +33,10 @@ export class GitHubIssueReader implements IssuePort {
     try {
       client = await this.gh();
     } catch (err) {
+      const note = errorNote(err);
       return {
         found: [],
-        missing: numbers.map(
-          (n) => `issue #${n} could not be fetched: ${(err as Error).message}`,
-        ),
+        missing: numbers.map((n) => `issue #${n} could not be fetched: ${note}`),
       };
     }
 
@@ -38,7 +48,7 @@ export class GitHubIssueReader implements IssuePort {
         const body = [issue.title, issue.body ?? ''].filter(Boolean).join('\n\n');
         found.push({ label: `issue#${n}`, content: body.slice(0, MAX_ISSUE_BYTES) });
       } catch (err) {
-        missing.push(`issue #${n} could not be fetched: ${(err as Error).message}`);
+        missing.push(`issue #${n} could not be fetched: ${errorNote(err)}`);
       }
     }
     for (const n of numbers.slice(MAX_ISSUES)) {

@@ -66,6 +66,48 @@ describe('docReferences', () => {
       ),
     ).toEqual([]);
   });
+
+  // Every reference past MAX_DOCS becomes a `missing_context` entry, i.e.
+  // author-controlled text in the classifier prompt, in the stored row and on
+  // the card. The count has to be bounded where the references are produced.
+  it('caps how many references one body can contribute', () => {
+    const body = Array.from({ length: 500 }, (_, i) => `docs/plans/p${i}.md`).join(' ');
+    const refs = docReferences(body, 'acme', 'payments-api');
+    expect(refs).toHaveLength(10);
+    expect(refs[0]).toBe('docs/plans/p0.md');
+  });
+
+  it('ignores a reference too long to be a path anyone committed', () => {
+    const padded = `docs/${'a'.repeat(400)}.md`;
+    expect(docReferences(`${padded} and docs/real.md`, 'acme', 'payments-api')).toEqual([
+      'docs/real.md',
+    ]);
+  });
+
+  // The blob-URL capture used to be `[^\s)\]]+\.md`, which let `<`, `>`, `"`,
+  // `:` and `=` through — a crafted URL became a bare prompt line naming a
+  // payload. It is now restricted to the same charset a bare path may use.
+  it('does not lift markup out of a blob URL', () => {
+    expect(
+      docReferences(
+        'https://github.com/acme/payments-api/blob/main/docs/<script>alert(1)</script>.md',
+        'acme',
+        'payments-api',
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe('linkedIssueNumbers / crossRepoIssueRefs caps', () => {
+  it('caps the issue numbers one body can contribute', () => {
+    const body = Array.from({ length: 50 }, (_, i) => `Closes #${i + 1}`).join('\n');
+    expect(linkedIssueNumbers(body)).toHaveLength(10);
+  });
+
+  it('caps the cross-repo references one body can contribute', () => {
+    const body = Array.from({ length: 50 }, (_, i) => `Fixes octo-org/repo${i}#1`).join('\n');
+    expect(crossRepoIssueRefs(body)).toHaveLength(10);
+  });
 });
 
 describe('computeConfidence', () => {

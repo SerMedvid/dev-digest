@@ -110,15 +110,28 @@ export class ReviewRunExecutor {
     // On the fanned-out logger, so every target run's buffer (and therefore its
     // persisted trace) records it. Best-effort: a failure omits the prompt
     // section, exactly like repo-intel enrichment — it never fails the review.
+    //
+    // `ensureFresh` is contractually throw-free, so nothing here should reach
+    // the catch. It is wrapped anyway, exactly like `loadDiff` above: this
+    // whole method is invoked as `void executeRuns(...).catch(log)`, so an
+    // escaping throw would leave every queued run stuck `running` with no
+    // trace row — the one failure server/CLAUDE.md says must never happen.
     let intentText: string | undefined;
-    const intentRecord = await runLog.step(
-      'Deriving PR intent',
-      () =>
-        this.container.intentService.ensureFresh(workspaceId, pull.id, pull.headSha, {
-          onLog: (msg, data) => runLog.tool(msg, data),
-        }),
-      { kind: 'tool' },
-    );
+    let intentRecord: Awaited<ReturnType<typeof this.container.intentService.ensureFresh>>;
+    try {
+      intentRecord = await runLog.step(
+        'Deriving PR intent',
+        () =>
+          this.container.intentService.ensureFresh(workspaceId, pull.id, pull.headSha, {
+            onLog: (msg, data) => runLog.tool(msg, data),
+          }),
+        { kind: 'tool' },
+      );
+    } catch (err) {
+      runLog.error(`Failed to derive PR intent: ${(err as Error).message}`);
+      await failAll(`Failed to derive PR intent: ${(err as Error).message}`);
+      return;
+    }
     if (intentRecord) {
       intentText = renderIntent(intentRecord);
       runLog.info(

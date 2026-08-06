@@ -27,6 +27,28 @@ async function symlinkSupported(): Promise<boolean> {
 const canSymlink = await symlinkSupported();
 const symlinkIt = canSymlink ? it : it.skip;
 
+/**
+ * A DIRECTORY link, probed separately: Windows creates junctions without
+ * elevation (`type: 'junction'`), which is exactly what makes the
+ * clone-root-behind-a-link case testable on every platform this repo runs on —
+ * on POSIX the type argument is ignored and an ordinary symlink is created.
+ */
+async function dirLinkSupported(): Promise<boolean> {
+  const dir = await mkdtemp(join(tmpdir(), 'intent-docs-dirlink-probe-'));
+  try {
+    await mkdir(join(dir, 'target'), { recursive: true });
+    await symlink(join(dir, 'target'), join(dir, 'link'), 'junction');
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+const canDirLink = await dirLinkSupported();
+const dirLinkIt = canDirLink ? it : it.skip;
+
 describe('CloneDocReader', () => {
   let clone: string;
   let outsideDir: string | undefined;
@@ -77,6 +99,48 @@ describe('CloneDocReader', () => {
     const many = Array.from({ length: 10 }, (_, i) => `docs/plans/d${i}.md`);
     const { missing } = await new CloneDocReader().read(clone, ['package.json', ...many]);
     expect(missing.some((m) => m.includes('not a markdown file'))).toBe(true);
+  });
+
+  /**
+   * The root itself reached through a link — the case that silently rejected
+   * EVERY document when the lexical root and the realpath'd target were
+   * compared against each other. Not hypothetical: on macOS `os.tmpdir()` is
+   * `/var/folders/…` and `/var` is a symlink, so the very first test above
+   * fails there without the fix. Reproduced deterministically here with a
+   * junction (Windows) / symlink (POSIX) in front of the clone directory, so
+   * the regression is caught on all three platforms rather than only macOS.
+   */
+  dirLinkIt('reads a document when the clone root is reached through a link', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'intent-docs-linkroot-'));
+    const linkedRoot = join(parent, 'clone-link');
+    try {
+      await symlink(clone, linkedRoot, 'junction');
+      const { found, missing } = await new CloneDocReader().read(linkedRoot, [
+        'docs/plans/rate-limit.md',
+      ]);
+      expect(missing).toEqual([]);
+      expect(found).toHaveLength(1);
+      expect(found[0]!.content).toContain('Add a limiter');
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
+  });
+
+  dirLinkIt('still refuses an escape when the root is reached through a link', async () => {
+    const parent = await mkdtemp(join(tmpdir(), 'intent-docs-linkroot-escape-'));
+    const linkedRoot = join(parent, 'clone-link');
+    try {
+      await symlink(clone, linkedRoot, 'junction');
+      const { found, missing } = await new CloneDocReader().read(linkedRoot, [
+        '../../../etc/passwd',
+        'docs/../../outside.md',
+      ]);
+      expect(found).toEqual([]);
+      expect(missing).toHaveLength(2);
+      for (const m of missing) expect(m).toContain('outside the repository');
+    } finally {
+      await rm(parent, { recursive: true, force: true });
+    }
   });
 
   // Skipped when the environment can't create symlinks (e.g. unelevated

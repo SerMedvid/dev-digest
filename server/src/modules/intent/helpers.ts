@@ -1,4 +1,5 @@
 import type { IntentConfidence } from '@devdigest/shared';
+import { MAX_REFERENCES, MAX_REF_CHARS } from './constants.js';
 
 /**
  * Pure transforms for the intent module (no I/O, no `this`).
@@ -6,6 +7,11 @@ import type { IntentConfidence } from '@devdigest/shared';
  * The keyword list is GitHub's documented set — close/closes/closed,
  * fix/fixes/fixed, resolve/resolves/resolved — case-insensitive with an optional
  * colon. The pre-existing regex in the GitHub adapter matched three of the nine.
+ *
+ * Every extractor here is capped at `MAX_REFERENCES`. What it returns is not
+ * only what gets fetched — a surplus reference becomes a `missing_context`
+ * entry, which is author-controlled text on a paid model call, so the count has
+ * to be bounded at the source and not only where it is rendered.
  */
 const CLOSING_KEYWORDS = '(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)';
 const SAME_REPO_ISSUE = new RegExp(`\\b${CLOSING_KEYWORDS}\\b:?\\s*#(\\d+)`, 'gi');
@@ -22,6 +28,7 @@ export function linkedIssueNumbers(body: string | null | undefined): number[] {
   for (const m of body.matchAll(SAME_REPO_ISSUE)) {
     const n = Number(m[1]);
     if (Number.isFinite(n) && !out.includes(n)) out.push(n);
+    if (out.length >= MAX_REFERENCES) break;
   }
   return out;
 }
@@ -35,7 +42,8 @@ export function crossRepoIssueRefs(body: string | null | undefined): string[] {
   if (!body) return [];
   const out: string[] = [];
   for (const m of body.matchAll(CROSS_REPO_ISSUE)) {
-    if (m[1] && !out.includes(m[1])) out.push(m[1]);
+    if (m[1] && m[1].length <= MAX_REF_CHARS && !out.includes(m[1])) out.push(m[1]);
+    if (out.length >= MAX_REFERENCES) break;
   }
   return out;
 }
@@ -44,6 +52,12 @@ export function crossRepoIssueRefs(body: string | null | undefined): string[] {
  * Markdown documents referenced by the PR body, as repo-relative paths. A
  * same-repo `blob` URL is reduced to its path; another repository's URL is
  * ignored entirely (we only have this repo's clone).
+ *
+ * The blob-URL capture is restricted to the same characters a bare path may use
+ * (`MD_PATH`'s charset). The wider `[^\s)\]]+` it used before let angle
+ * brackets, quotes, colons and `=` through, and an unreadable path is echoed
+ * verbatim into `missing_context` — i.e. into the prompt. Bounding the charset,
+ * the count and the length keeps that echo to something path-shaped.
  */
 export function docReferences(
   body: string | null | undefined,
@@ -53,19 +67,19 @@ export function docReferences(
   if (!body) return [];
   const out: string[] = [];
   const blobUrl = new RegExp(
-    `https?://github\\.com/${escapeRe(owner)}/${escapeRe(repo)}/blob/[^/\\s]+/([^\\s)\\]]+\\.md)`,
+    `https?://github\\.com/${escapeRe(owner)}/${escapeRe(repo)}/blob/[^/\\s]+/((?:[\\w.-]+/)*[\\w.-]+\\.md)\\b`,
     'gi',
   );
+  const add = (ref: string | undefined): void => {
+    if (!ref || ref.length > MAX_REF_CHARS || out.includes(ref)) return;
+    if (out.length < MAX_REFERENCES) out.push(ref);
+  };
   // Strip every github.com URL before scanning for bare paths, so another
   // repository's blob URL cannot contribute its path fragment.
   let rest = body;
-  for (const m of body.matchAll(blobUrl)) {
-    if (m[1] && !out.includes(m[1])) out.push(m[1]);
-  }
+  for (const m of body.matchAll(blobUrl)) add(m[1]);
   rest = rest.replace(/https?:\/\/\S+/g, ' ');
-  for (const m of rest.matchAll(MD_PATH)) {
-    if (m[1] && !out.includes(m[1])) out.push(m[1]);
-  }
+  for (const m of rest.matchAll(MD_PATH)) add(m[1]);
   return out;
 }
 

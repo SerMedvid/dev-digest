@@ -217,9 +217,58 @@ d('intent in the review path (Testcontainers pg)', () => {
     // visible, with its marker.
     const reviews = await app.inject({ method: 'GET', url: `/pulls/${prId}/reviews` });
     const findings = reviews.json()[0].findings;
-    expect(findings.map((f: { title: string }) => f.title)).toContain('Stripe secret committed');
+    const titles = findings.map((f: { title: string }) => f.title);
+    expect(titles).toContain('Stripe secret committed');
+    // …and the gate really ran: the droppable nit is gone. Without this the
+    // assertion above would pass just as well with the gate disarmed, which is
+    // the exact failure this adversarial case exists to catch.
+    expect(titles).not.toContain('Prefer const');
     expect(findings.find((f: { title: string }) => f.title === 'Stripe secret committed').out_of_scope).toBe(
       true,
     );
+  });
+
+  /**
+   * Spec §7's second known gap: nothing asserted what the run log does NOT
+   * contain. It matters more now that `missing_context` is derived from
+   * attacker-controlled body text and flows into `runLog.tool(...)`.
+   *
+   * The prompt legitimately carries source content (that is what
+   * `prompt_assembly` is), so this asserts on the LOG only — the SSE stream,
+   * which carries each event's `data`, and the persisted `run_traces.log`.
+   */
+  it('logs labels, counts and model ids — never a source’s content', async () => {
+    const marker = 'MARKER-PLAINTEXT-BODY-CONTENT';
+    await pg.handle.db
+      .update(t.pullRequests)
+      .set({ body: `${marker}. Closes #471. Implements docs/plans/rate-limit.md`, headSha: 'head-log' })
+      .where(eq(t.pullRequests.id, prId));
+
+    const res = await app.inject({ method: 'POST', url: `/pulls/${prId}/review`, payload: { all: true } });
+    const runIds: string[] = res.json().runs.map((r: { run_id: string }) => r.run_id);
+    expectedRuns += runIds.length;
+    await waitForPrRuns(pg.handle.db, prId, { expected: expectedRuns });
+
+    // The derivation really happened on this run (otherwise the assertion below
+    // is vacuous), and it really saw the body and the issue.
+    const intent = await app.inject({ method: 'GET', url: `/pulls/${prId}/intent` });
+    expect(intent.json().sources).toEqual(expect.arrayContaining(['description', 'issue#471']));
+
+    // 'mock issue' is MockGitHubClient's issue BODY; 'sk_live' is a diff body
+    // line from MockGitClient — both reached the classifier, neither may reach
+    // a log line.
+    const forbidden = [marker, 'mock issue', 'sk_live'];
+    for (const runId of runIds) {
+      const sse = await app.inject({ method: 'GET', url: `/runs/${runId}/events` });
+      expect(sse.payload).toContain('Deriving PR intent');
+      for (const needle of forbidden) expect(sse.payload).not.toContain(needle);
+
+      const [row] = await pg.handle.db
+        .select()
+        .from(t.runTraces)
+        .where(eq(t.runTraces.runId, runId));
+      const log = JSON.stringify((row!.trace as { log: unknown }).log);
+      for (const needle of forbidden) expect(log).not.toContain(needle);
+    }
   });
 });
