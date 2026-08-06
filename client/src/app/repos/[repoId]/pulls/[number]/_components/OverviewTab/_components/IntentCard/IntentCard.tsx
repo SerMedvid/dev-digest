@@ -6,7 +6,7 @@ import { SectionLabel, Button, Skeleton, Icon } from "@devdigest/ui";
 import { usePrIntent, useDeriveIntent } from "@/lib/hooks/intent";
 import { ApiError } from "@/lib/api";
 import { isStale, sourceLine } from "./helpers";
-import { s } from "./styles";
+import { s, badgeConfidence } from "./styles";
 
 interface IntentCardProps {
   prId: string | null;
@@ -88,7 +88,37 @@ export function IntentCard({ prId, headSha }: IntentCardProps) {
 
   return (
     <section style={s.card}>
-      <SectionLabel icon="Target">{t("intent.title")}</SectionLabel>
+      {/* The action rides in the heading's `right` slot, same as DiffTab's —
+          it is the card's one action, and at the bottom it sat behind a
+          variable-length list of sources and had to be hunted for. */}
+      <SectionLabel
+        icon="Target"
+        right={
+          <Button
+            kind="ghost"
+            size="sm"
+            icon="RefreshCw"
+            onClick={() => derive.mutate()}
+            disabled={derive.isPending}
+          >
+            {derive.isPending
+              ? t("intent.deriving")
+              : stale
+                ? t("intent.reDerive")
+                : t("intent.refresh")}
+          </Button>
+        }
+      >
+        {t("intent.title")}
+      </SectionLabel>
+
+      {/* Directly under the button that produces it. At the foot of the card it
+          would be a screen away from the control the user just clicked. */}
+      {deriveError && (
+        <div style={s.warning} role="alert">
+          {deriveError}
+        </div>
+      )}
 
       <p style={s.statement}>“{data.intent}”</p>
 
@@ -135,14 +165,15 @@ export function IntentCard({ prId, headSha }: IntentCardProps) {
 
       {stale && <div style={s.warning}>{t("intent.stale")}</div>}
 
-      {deriveError && (
-        <div style={s.warning} role="alert">
-          {deriveError}
-        </div>
-      )}
-
       <div style={s.meta}>
-        <span style={s.badge} title={t(`intent.confidenceHint.${data.confidence}`)}>
+        {/* The colour is redundant with the label, never a replacement for it —
+            the design system's own rule for severity badges (WCAG AA: never
+            colour alone), and the reason the level stays spelled out. */}
+        <span
+          style={{ ...s.badge, ...badgeConfidence[data.confidence] }}
+          title={t(`intent.confidenceHint.${data.confidence}`)}
+        >
+          <span style={s.badgeDot} />
           {t("intent.confidenceLabel", { level: confidenceLevel })}
         </span>
         <span>
@@ -151,13 +182,6 @@ export function IntentCard({ prId, headSha }: IntentCardProps) {
           })}
         </span>
         <span>{data.model}</span>
-        <Button onClick={() => derive.mutate()} disabled={derive.isPending}>
-          {derive.isPending
-            ? t("intent.deriving")
-            : stale
-              ? t("intent.reDerive")
-              : t("intent.refresh")}
-        </Button>
       </div>
     </section>
   );
