@@ -42,6 +42,21 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-06** — [`CLAUDE.md`](CLAUDE.md) says "Tailwind classes live in
+  `styles.ts`", but **every** component under
+  `src/app/repos/[repoId]/pulls/[number]/_components/` instead exports an `s`
+  object of `CSSProperties` and applies it with `style={s.x}` — `IntentCard`,
+  `FindingCard`, `VerdictBanner`, `RunStatus`, `PrDetailHeader`, and
+  `src/components/diff-viewer/styles.ts` too. Nothing enforces either form, so a
+  new component in that tier that follows the written rule reads as foreign next
+  to its siblings, and a reviewer will flag whichever one you pick. Match the
+  neighbours you are sitting among rather than the doc, and expect this to need
+  re-deciding only if `CLAUDE.md` is corrected. Practical consequence for tests
+  and e2e: with no class names or `data-testid`s anywhere in this tier, the only
+  locators available are roles, visible text, and positional CSS — which is why
+  the Smart Diff e2e flow ended up on `nth-of-type` chains.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/IntentCard/styles.ts`)
+
 - **2026-08-06** — Every PR-detail tab takes `prId: string | null`
   (`OverviewTab`, `FindingsTab`, `DiffTab`, and `IntentCard` under it), so a
   null-`prId` branch inside one reads as a live user-facing path. It is
