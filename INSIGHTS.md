@@ -83,6 +83,30 @@ an entry can age — verify before relying on one.
 
 ## Recurring errors & fixes
 
+- **2026-08-06** — A *fabricated* secret in fixture data still blocks the push if
+  it is **shaped** like a real one. [`server/src/db/seed.ts`](server/src/db/seed.ts)'s
+  demo diff carried `sk_live_` + 40 alphanumerics, and GitHub push protection
+  matched it as a Stripe key and rejected the whole branch. Two consequences.
+  Push protection scans **every commit in the push**, not the tip — so fixing it
+  forward does not unblock; the offending commit has to be amended at its source
+  and everything after it replayed (`git checkout --detach <sha>` → edit →
+  `git add` → `git commit --amend` → `git rebase --onto <new> <old> <branch>`).
+  And the repo's *other* fake keys pass precisely because they are not key-shaped
+  (`sk_live_xxx` in [`server/src/adapters/mocks.ts`](server/src/adapters/mocks.ts),
+  `sk_live_leak` in the reviewer-core tests, `sk_live_...` in
+  `client/messages/en/eval.json`). Since this app's whole domain is diffs that
+  leak secrets, fixtures will keep wanting one: give it the recognisable
+  **prefix** and never a realistic body. (`server/src/db/seed.ts:38`)
+
+- **2026-08-06** — Same class as the CRLF entry below, different mechanism:
+  `powershell -File script.ps1` reads the script as the **ANSI codepage**, so
+  non-ASCII written into that script arrives mangled — an em dash in a comment
+  landed as `вЂ”` in the source. It type-checks, tests green, and is invisible
+  unless you read the diff, and a second PowerShell pass trying to repair it
+  mangles the repair the same way. This repo's prose uses `—` throughout, so any
+  script-driven edit to a comment or doc hits it. Make text edits with the Edit
+  tool, or keep the script strictly ASCII. (`server/src/db/seed.ts:31`)
+
 - **2026-08-03** — There is **no `.gitattributes`**, so nothing normalises line
   endings: any edit made by a tool that rewrites a whole file with platform
   defaults (Python's `io.open(..., 'w')` on Windows translates `\n` to `\r\n`)

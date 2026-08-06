@@ -20,6 +20,36 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-06** — **Corrects the 2026-08-05 "negative UI assertion" entry under
+  _What works_: `get count "text=<string>"` does not work, and its `0` is
+  meaningless.** `get count` takes a **CSS selector** (`agent-browser get --help`:
+  `count <selector>`); `text=` is only an engine for the separate
+  `find text <value>` subcommand. So `text=…` matches nothing and prints `0`
+  whether the element is present or absent — the assertion **cannot fail**.
+  Verified on agent-browser 0.33.2 against a static fixture where the string was
+  visibly present twice: `get count "text=1 findings"` → `0`, and
+  `find nth 1 "text=1 findings"` errors. The consequence is live:
+  [`specs/08-pr-intent.flow.json`](specs/08-pr-intent.flow.json)'s "the card is
+  NOT labelled stale" step has never been capable of failing, and
+  `../server/specs/intent.md`'s acceptance table cites it as coverage. To assert
+  absence, count a **real CSS selector** and — because the app ships no
+  ids/classes/testids — prove the selector discriminates by running it against a
+  static HTML fixture in both states (present and absent) before trusting it.
+  (`specs/09-pr-smart-diff.flow.json`, `specs/08-pr-intent.flow.json:20`)
+
+- **2026-08-06** — An e2e assertion can be *valid* and still prove nothing, and
+  the collapse rules are where that bites. Flow `09` clicked a finding badge and
+  then waited for the revealed line — but `src/config.ts` is `wiring` **with** a
+  finding, so `SmartDiffViewer`'s collapse rule 2 had already expanded it at first
+  paint and the line was in the DOM before the click. Before asserting that an
+  interaction reveals something, confirm the thing is **not already visible in the
+  initial render** for that fixture's data; on this page that means checking the
+  file's role and finding count against
+  `../client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/_components/SmartDiffViewer/helpers.ts`.
+  Note no seeded boilerplate file carries a finding, so the badge-reveal path
+  cannot be covered e2e on the current seed at all.
+  (`specs/09-pr-smart-diff.flow.json`)
+
 - **2026-08-05** — Flows `04` and `05` do `find text "Add rate limiting…" click`
   with no `wait --text` on that row first, so locally they fail at "open the PR
   row" while `02` (which does wait) passes on the identical click. Any new flow

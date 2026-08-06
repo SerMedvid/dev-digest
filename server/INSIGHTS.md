@@ -120,6 +120,29 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-06** — `GET /pulls/:id` **deletes and re-inserts every `pr_files` row
+  on each request** (and the same for `pr_commits`), so nothing per-file can be
+  cached on that table: a column added there is silently wiped by the next page
+  load, with no error to notice. Any per-file derived data needs its own table
+  keyed `(pr_id, path)` — `pr_file_summary` is one, and it carries `head_sha` as
+  its freshness key for the same reason `pr_intent` does. Also note the row's
+  `patch` is `f.patch ?? null`: GitHub omits `patch` for large and binary files,
+  so a **patch-less row is normal**, not corruption, and any feature that reads
+  `pr_files.patch` must handle it rather than coercing to `''`.
+  (`src/modules/pulls/routes.ts:217`)
+
+- **2026-08-06** — `findings` carries **one row per finding**, so several findings
+  can cite the same `file` + `start_line` — two agents in one batch flagging the
+  same line is the normal case, not an edge case, and nothing dedupes it. Any
+  per-line UI or projection must therefore *select* deterministically (worst
+  severity) rather than take the first match, and any "lines" projection must
+  dedupe explicitly. `SmartDiff` splits this deliberately: `finding_marks` is
+  one-per-finding while `finding_lines` is the sorted-unique projection of it,
+  derived in one place so they cannot drift. A consumer that assumes
+  `finding_marks` is already unique per line silently drops findings.
+  (`src/modules/smart-diff/service.ts:80`,
+  `src/modules/reviews/repository/review.repo.ts:60`)
+
 - **2026-08-03** — The seeded demo repo has `clone_path: null`
   ([`src/db/seed.ts`](src/db/seed.ts)), so any `*.it.test.ts` for a feature that
   reads the clone takes the "no clone on disk" degradation branch and never
@@ -210,6 +233,17 @@ an entry can age — verify before relying on one.
   (`src/modules/reviews/run-executor.ts:213`)
 
 ## Recurring errors & fixes
+
+- **2026-08-06** — The hermetic/integration lane split excludes by **filename, not
+  by `describe`**, so a Docker-free block placed inside an `*.it.test.ts` file
+  **never runs in the fast lane** — `--exclude '**/*.it.test.ts'` drops the whole
+  file. The symptom is a regression guard that looks present in review, passes
+  when you run its file directly, and is silently absent from every normal
+  `pnpm test` run. A hermetic case belongs in its own non-`.it.` file
+  (`test/smart-diff-service.test.ts` is one); the only thing that decides which
+  lane a case runs in is the filename it sits in. Confirming it landed is one
+  command: the hermetic lane's file count should go up.
+  (`test/smart-diff-service.test.ts`)
 
 - **2026-08-05** — An `.it.test.ts` that awaits
   [`waitForPrRuns`](test/helpers/runs.ts) and then reads `GET /runs/:id/trace`

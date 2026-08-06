@@ -15,6 +15,68 @@ import { SEED_AGENT_SKILLS, SEED_SKILLS } from './seed-skills.js';
 const DEFAULT_PROVIDER = 'openrouter' as const;
 const DEFAULT_MODEL = 'deepseek/deepseek-v4-flash';
 
+// ---- PR #482's full nine-file diff (Smart Diff seed, design §8) ----
+//
+// `src/config.ts` and `src/api/users.ts` carry the seeded findings below, so
+// they get real unified-diff `patch` text whose hunk header places the cited
+// line at the finding's `startLine`/`endLine` (read off the findings block
+// itself, not restated here) — otherwise there is no rendered line for a
+// finding badge to scroll to. The other seven rows keep `patch: null`, which
+// is the honest, common case (see the module's degradation table).
+
+/**
+ * Puts the Stripe key add-line at new-file line 12, matching the CRITICAL finding.
+ * The token is deliberately NOT Stripe-shaped: a realistic `sk_live_` + 24-or-more
+ * alphanumerics body is what GitHub push protection matches on, and it rejects
+ * every push of the branch carrying it. Keep the value on one line — the hunk
+ * header above and the finding's `Line 12` citation both depend on the count.
+ */
+const CONFIG_TS_PATCH =
+  '@@ -10,2 +10,6 @@\n' +
+  "   port: process.env.PORT || 3000,\n" +
+  "   host: process.env.HOST || 'localhost',\n" +
+  "+  stripeSecretKey: 'sk_live_EXAMPLE_NOT_A_REAL_KEY',\n" +
+  '+  rateLimitWindowMs: 60_000,\n' +
+  '+  rateLimitMax: 100,\n' +
+  "+  retryAfterHeader: 'Retry-After',";
+
+/** Spans new-file lines 45-52, matching the WARNING finding's start/end. */
+const USERS_TS_PATCH =
+  '@@ -44,4 +44,9 @@\n' +
+  ' export async function listUsersWithOrders(ids: string[]) {\n' +
+  '-  const rows = await db.query.users.findMany({ where: inArray(users.id, ids) });\n' +
+  '-  return rows;\n' +
+  '+  const result: UserWithOrders[] = [];\n' +
+  '+  for (const id of ids) {\n' +
+  '+    const user = await db.query.users.findFirst({ where: eq(users.id, id) });\n' +
+  '+    const orders = await db.query.orders.findMany({ where: eq(orders.userId, id) });\n' +
+  '+    result.push({ ...user, orders });\n' +
+  '+  }\n' +
+  '+  return result;\n' +
+  ' }';
+
+/**
+ * The design §8 table verbatim. Sums to +247 -38 across 9 files — exactly
+ * what the `pull_requests` row already claims and what `total_lines: 285` in
+ * `server/test/contracts.test.ts` asserts.
+ */
+const SMART_DIFF_SEED_FILES: ReadonlyArray<{
+  path: string;
+  additions: number;
+  deletions: number;
+  patch: string | null;
+}> = [
+  { path: 'src/middleware/ratelimit.ts', additions: 84, deletions: 0, patch: null },
+  { path: 'src/api/public/webhooks.ts', additions: 31, deletions: 6, patch: null },
+  { path: 'src/api/users.ts', additions: 7, deletions: 2, patch: USERS_TS_PATCH },
+  { path: 'src/api/public/index.ts', additions: 12, deletions: 2, patch: null },
+  { path: 'src/server.ts', additions: 8, deletions: 1, patch: null },
+  { path: 'src/config.ts', additions: 4, deletions: 0, patch: CONFIG_TS_PATCH },
+  { path: 'package.json', additions: 3, deletions: 1, patch: null },
+  { path: 'package-lock.json', additions: 92, deletions: 24, patch: null },
+  { path: 'README.md', additions: 6, deletions: 2, patch: null },
+];
+
 /**
  * Seed the starter's demo data. Idempotent: re-running upserts the default
  * workspace/user and the demo fixtures.
@@ -120,14 +182,6 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       })
       .returning();
 
-    // pr_files (subset)
-    await db.insert(t.prFiles).values([
-      { prId: pr!.id, path: 'src/middleware/ratelimit.ts', additions: 84, deletions: 0 },
-      { prId: pr!.id, path: 'src/api/public/webhooks.ts', additions: 31, deletions: 6 },
-      { prId: pr!.id, path: 'src/config.ts', additions: 4, deletions: 0 },
-      { prId: pr!.id, path: 'src/api/users.ts', additions: 7, deletions: 2 },
-    ]);
-
     // pr_commits
     await db.insert(t.prCommits).values({
       prId: pr!.id,
@@ -177,6 +231,27 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
         confidence: 0.86,
       },
     ]);
+  }
+
+  // ---- pr_files: the full nine-file diff (Smart Diff seed, design §8) ----
+  // Outside the `if (!pr)` block on purpose, same reasoning as the derived
+  // intent block below (server/specs/intent.md §6): a DB seeded before this
+  // row set existed already has PR #482, and would otherwise keep the four
+  // files it was created with forever.
+  //
+  // `pr_files` has no unique index on `(pr_id, path)`, so
+  // `onConflictDoNothing`/`onConflictDoUpdate` cannot dedupe it — replacing
+  // the full set when fewer than all nine rows exist is what keeps a repeat
+  // `seed()` call idempotent instead of accumulating duplicates.
+  const existingPrFiles = await db
+    .select({ id: t.prFiles.id })
+    .from(t.prFiles)
+    .where(eq(t.prFiles.prId, pr!.id));
+  if (existingPrFiles.length < SMART_DIFF_SEED_FILES.length) {
+    await db.delete(t.prFiles).where(eq(t.prFiles.prId, pr!.id));
+    await db
+      .insert(t.prFiles)
+      .values(SMART_DIFF_SEED_FILES.map((f) => ({ prId: pr!.id, ...f })));
   }
 
   // ---- derived intent for the demo PR (L03) ----

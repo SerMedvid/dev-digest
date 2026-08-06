@@ -63,12 +63,23 @@ export default function PRDetailPage() {
   // run that produced this finding and scroll to it. Kept in the URL after it
   // lands, like ?trace=, so the link stays shareable and survives a reload.
   const targetFindingId = search.get("finding");
-  const setParam = (key: string, val: string | null) => {
+  // `?order=` for the Files changed tab — "original" falls back to today's
+  // flat DiffViewer, anything else (including absent) is SmartDiffViewer.
+  const order = search.get("order");
+  // setParam is a thin wrapper over setParams: most callers change one param,
+  // but a Smart Diff finding-chip click needs to land on the Findings tab AND
+  // name the finding in one navigation — two separate setParam calls would
+  // each build their URLSearchParams from the same stale `search` and the
+  // second replace would silently drop the first's change.
+  const setParams = (updates: Record<string, string | null>) => {
     const sp = new URLSearchParams(search.toString());
-    if (val == null) sp.delete(key);
-    else sp.set(key, val);
+    for (const [key, val] of Object.entries(updates)) {
+      if (val == null) sp.delete(key);
+      else sp.set(key, val);
+    }
     router.replace(`/repos/${repoId}/pulls/${number}${sp.toString() ? `?${sp.toString()}` : ""}`);
   };
+  const setParam = (key: string, val: string | null) => setParams({ [key]: val });
   const setTab = (t: string) => setParam("tab", t);
 
   // Reviews come newest-first; each is its own run (grouped into accordions).
@@ -175,6 +186,9 @@ export default function PRDetailPage() {
             filesCount={pr.files_count}
             files={pr.files}
             canComment={pr.status === "open"}
+            order={order}
+            onSetOrder={(val) => setParam("order", val)}
+            onOpenFinding={(id) => setParams({ tab: "findings", finding: id })}
           />
         )}
       </div>

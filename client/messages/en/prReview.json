@@ -51,14 +51,25 @@
     "blockers": " · {count} blockers"
   },
   "smartDiff": {
-    "coreLabel": "Core",
+    "coreLabel": "Core logic",
     "wiringLabel": "Wiring",
     "boilerplateLabel": "Boilerplate",
+    "coreDesc": "The substance of the change — review closely",
+    "wiringDesc": "Hooks the core into the app",
+    "boilerplateDesc": "Generated / mechanical — skim",
     "largeTitle": "This PR is large ({lines} changed lines)",
     "largeBody": "Consider splitting it into smaller, focused PRs for easier review:",
+    "splitFiles": "{name} — {count} files",
     "filesCount": "{count} files",
-    "findingLines": "{count} finding-lines",
-    "groupedByRole": "Smart Diff · grouped by role"
+    "findingsBadge": "{count} findings",
+    "caption": "Reviewer-ordered diff",
+    "filesChanged": "Files changed",
+    "orderSmart": "Smart order",
+    "orderOriginal": "Original order",
+    "summarize": "summary",
+    "summarizing": "Summarizing…",
+    "whatThisDoes": "What this does:",
+    "noStoredDiff": "There's no diff to summarize for this file."
   },
   "list": {
     "breadcrumb": "Pull Requests",

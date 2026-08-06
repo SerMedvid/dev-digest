@@ -1,5 +1,16 @@
 import { sql } from 'drizzle-orm';
-import { pgTable, uuid, text, integer, index, jsonb, timestamp, doublePrecision, boolean } from 'drizzle-orm/pg-core';
+import {
+  pgTable,
+  uuid,
+  text,
+  integer,
+  index,
+  jsonb,
+  timestamp,
+  doublePrecision,
+  boolean,
+  primaryKey,
+} from 'drizzle-orm/pg-core';
 import { now } from './_shared';
 import { workspaces } from './core';
 import { pullRequests } from './pulls';
@@ -81,3 +92,30 @@ export const prBrief = pgTable('pr_brief', {
     .references(() => pullRequests.id, { onDelete: 'cascade' }),
   json: jsonb('json').notNull(),
 });
+
+/**
+ * On-demand LLM summary of one changed file within a PR, keyed on (pr_id, path).
+ *
+ * Can't live as a column on `pr_files`: `GET /pulls/:id`
+ * (server/src/modules/pulls/routes.ts) deletes and re-inserts every `pr_files`
+ * row on each request to refresh from GitHub, so anything stored there is
+ * destroyed by the next page load. This table is separate and keyed by
+ * `head_sha` so a summary survives that churn and is only recomputed when the
+ * file's content at HEAD has actually changed.
+ */
+export const prFileSummary = pgTable(
+  'pr_file_summary',
+  {
+    prId: uuid('pr_id')
+      .notNull()
+      .references(() => pullRequests.id, { onDelete: 'cascade' }),
+    path: text('path').notNull(),
+    /** Head commit this summary was derived against — the cache key. */
+    headSha: text('head_sha').notNull(),
+    summary: text('summary').notNull(),
+    provider: text('provider').notNull(),
+    model: text('model').notNull(),
+    createdAt: now(),
+  },
+  (t) => ({ pk: primaryKey({ columns: [t.prId, t.path] }) }),
+);
