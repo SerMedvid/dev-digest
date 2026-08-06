@@ -3,9 +3,10 @@
 "use client";
 
 import React from "react";
+import type { FindingMark } from "@devdigest/shared";
 import { commentTargetFor, type CommentThread, type DiffCommentApi, cs } from "../comments";
 import { type Line } from "../helpers";
-import { s, lineRowFor, lineSignFor } from "../styles";
+import { s, lineRowFor, lineSignFor, markChipFor } from "../styles";
 import { CommentThreadView } from "../CommentThreadView";
 import { InlineComposer } from "../InlineComposer";
 
@@ -14,11 +15,20 @@ export function CodeLine({
   path,
   threads,
   commenting,
+  mark,
+  onMarkClick,
+  ref,
 }: {
   ln: Line;
   path: string;
   threads: CommentThread[];
   commenting?: DiffCommentApi;
+  /** A finding anchored to this line (Smart Diff); absent renders nothing new. */
+  mark?: FindingMark;
+  onMarkClick?: (findingId: string) => void;
+  /** React 19 ref-as-prop — FileCard attaches this to its scroll-target line
+      only, to scroll it into view without a DOM query. */
+  ref?: React.Ref<HTMLDivElement>;
 }) {
   const [hover, setHover] = React.useState(false);
   const [composing, setComposing] = React.useState(false);
@@ -37,6 +47,7 @@ export function CodeLine({
 
   return (
     <div
+      ref={ref}
       style={cs.rowWrap}
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
@@ -60,6 +71,15 @@ export function CodeLine({
           {sign}
         </span>
         <span className="mono" style={s.lineText}>
+          {mark && (
+            <button
+              type="button"
+              title={`${mark.severity} finding`}
+              aria-label={`${mark.severity} finding`}
+              onClick={() => onMarkClick?.(mark.finding_id)}
+              style={markChipFor(mark.severity)}
+            />
+          )}
           {ln.text || " "}
         </span>
       </div>

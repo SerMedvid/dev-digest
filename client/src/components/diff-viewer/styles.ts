@@ -1,5 +1,15 @@
 import type { CSSProperties } from "react";
+import type { Severity } from "@devdigest/shared";
 import type { Line } from "./helpers";
+
+/** Severity → CSS colour token, matching FindingCard's mapping
+    (`app/repos/[repoId]/pulls/[number]/_components/FindingCard/constants.ts`) —
+    same variable names, defined in `src/vendor/ui/styles.css`. */
+const MARK_COLOR: Record<Severity, string> = {
+  CRITICAL: "var(--crit)",
+  WARNING: "var(--warn)",
+  SUGGESTION: "var(--sugg)",
+};
 
 /** Co-located styles for the DiffViewer (extracted from inline styles). */
 export const s = {
@@ -88,5 +98,27 @@ export function lineSignFor(kind: Line["kind"]): CSSProperties {
     textAlign: "center",
     color: kind === "add" ? "var(--code-add-text)" : kind === "del" ? "var(--code-del-text)" : "var(--text-muted)",
     flexShrink: 0,
+  };
+}
+
+/** The clickable severity chip a finding mark renders on its anchored line. */
+export function markChipFor(severity: Severity): CSSProperties {
+  return {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: 16,
+    height: 16,
+    borderRadius: "50%",
+    border: "none",
+    background: MARK_COLOR[severity] ?? "var(--text-muted)",
+    color: "#fff",
+    fontSize: 10,
+    fontWeight: 700,
+    lineHeight: 1,
+    cursor: "pointer",
+    flexShrink: 0,
+    marginRight: 6,
+    padding: 0,
   };
 }
