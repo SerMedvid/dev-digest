@@ -80,3 +80,16 @@ export type PrIntentRecord = z.infer<typeof PrIntentRecord>;
 /** Smart-diff response for a PR (the SmartDiff). */
 export const SmartDiffResponse = SmartDiff;
 export type SmartDiffResponse = z.infer<typeof SmartDiffResponse>;
+
+/** Per-file summary persisted for a PR: one on-demand summary of one changed file. */
+export const PrFileSummaryRecord = z.object({
+  pr_id: z.string(),
+  path: z.string(),
+  /** The head commit this summary was derived against; the cache key. */
+  head_sha: z.string(),
+  summary: z.string(),
+  provider: z.string(),
+  model: z.string(),
+  created_at: z.string(),
+});
+export type PrFileSummaryRecord = z.infer<typeof PrFileSummaryRecord>;

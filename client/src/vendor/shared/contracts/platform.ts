@@ -18,6 +18,7 @@ export const FeatureModelId = z.enum([
   'risk_brief',
   'conformance',
   'conventions',
+  'file_summary',
 ]);
 export type FeatureModelId = z.infer<typeof FeatureModelId>;
 
@@ -80,6 +81,15 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     // Two cheap calls over a bounded sample — the same model onboarding uses.
     defaultProvider: 'openrouter',
     defaultModel: 'deepseek/deepseek-v4-flash',
+  },
+  {
+    id: 'file_summary',
+    label: 'PR Review · File summary',
+    description: 'Summarises one changed file on demand.',
+    // Flash-class: one bounded call per file, triggered on demand from the
+    // Files-changed view — same reasoning as review_intent.
+    defaultProvider: 'openrouter',
+    defaultModel: 'google/gemini-2.5-flash-lite',
   },
 ];
 

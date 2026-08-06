@@ -5,6 +5,7 @@ import {
   Intent,
   IntentConfidence,
   PrIntentRecord,
+  PrFileSummaryRecord,
   BlastRadius,
   Risks,
   PrHistory,
@@ -22,6 +23,7 @@ import {
   SkillVersion,
   SkillStats,
   SkillWithUsage,
+  FeatureModelId,
 } from '@devdigest/shared';
 
 /**
@@ -159,6 +161,57 @@ describe('AI contracts parse fixtures', () => {
       split_suggestion: { too_big: false, total_lines: 285, proposed_splits: [] },
     });
     expect(d.groups[0]!.role).toBe('core');
+  });
+
+  it('SmartDiff carries finding_marks and round-trips them', () => {
+    const d = SmartDiff.parse({
+      groups: [
+        {
+          role: 'core',
+          files: [
+            {
+              path: 'a.ts',
+              additions: 84,
+              deletions: 0,
+              finding_lines: [28],
+              finding_marks: [{ line: 28, severity: 'WARNING', finding_id: 'f1' }],
+            },
+          ],
+        },
+      ],
+      split_suggestion: { too_big: false, total_lines: 285, proposed_splits: [] },
+    });
+    expect(d.groups[0]!.files[0]!.finding_marks).toEqual([
+      { line: 28, severity: 'WARNING', finding_id: 'f1' },
+    ]);
+  });
+
+  it('PrFileSummaryRecord parses a full record and rejects a missing summary', () => {
+    const rec = PrFileSummaryRecord.parse({
+      pr_id: 'p1',
+      path: 'src/api/public/webhooks.ts',
+      head_sha: 'a1b2c3d4',
+      summary: 'Adds a signature check before dispatching the webhook payload.',
+      provider: 'openrouter',
+      model: 'google/gemini-2.5-flash-lite',
+      created_at: '2026-08-05T00:00:00Z',
+    });
+    expect(rec.summary).toContain('signature check');
+
+    expect(() =>
+      PrFileSummaryRecord.parse({
+        pr_id: 'p1',
+        path: 'src/api/public/webhooks.ts',
+        head_sha: 'a1b2c3d4',
+        provider: 'openrouter',
+        model: 'google/gemini-2.5-flash-lite',
+        created_at: '2026-08-05T00:00:00Z',
+      }),
+    ).toThrow();
+  });
+
+  it('FeatureModelId accepts file_summary', () => {
+    expect(FeatureModelId.parse('file_summary')).toBe('file_summary');
   });
 
   it('Conformance / Onboarding / EvalRun / MemoryItem', () => {

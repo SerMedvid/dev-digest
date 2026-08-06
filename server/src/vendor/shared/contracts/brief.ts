@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { Severity } from './findings.js';
 
 /**
  * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
@@ -81,12 +82,26 @@ export type PrHistory = z.infer<typeof PrHistory>;
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
 export type SmartDiffRole = z.infer<typeof SmartDiffRole>;
 
+/** One finding's placement on the diff, for rendering an inline marker. */
+export const FindingMark = z.object({
+  line: z.number().int(),
+  severity: Severity,
+  finding_id: z.string(),
+});
+export type FindingMark = z.infer<typeof FindingMark>;
+
 export const SmartDiffFile = z.object({
   path: z.string(),
   pseudocode_summary: z.string().nullish(),
   additions: z.number().int(),
   deletions: z.number().int(),
   finding_lines: z.array(z.number().int()),
+  // The producer always sends an array (empty when there are no findings);
+  // `nullish` exists only so the already-committed `SmartDiff` fixture that
+  // omits this field keeps parsing. `finding_lines` is the sorted,
+  // de-duplicated projection of this array — derived in one place, so the two
+  // can't drift.
+  finding_marks: z.array(FindingMark).nullish(),
 });
 export type SmartDiffFile = z.infer<typeof SmartDiffFile>;
 
