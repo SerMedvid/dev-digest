@@ -35,6 +35,8 @@ import { IntentService } from '../modules/intent/service.js';
 import { IntentModel } from '../modules/intent/model.js';
 import { CloneDocReader } from '../modules/intent/docs.js';
 import { GitHubIssueReader } from '../modules/intent/github.js';
+import { SmartDiffRepository } from '../modules/smart-diff/repository.js';
+import { SmartDiffService } from '../modules/smart-diff/service.js';
 import { loadDiff } from '../modules/reviews/diff-loader.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -96,6 +98,8 @@ export class Container {
   private _reviewRepo?: ReviewRepository;
   private _intentRepo?: IntentRepository;
   private _intentService?: IntentService;
+  private _smartDiffRepo?: SmartDiffRepository;
+  private _smartDiffService?: SmartDiffService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -199,6 +203,31 @@ export class Container {
       // a logger a review's failed classification would go unrecorded until a
       // caller happens to pass `onLog`. This is that record.
       ...(this.logger ? { logger: this.logger } : {}),
+    }));
+  }
+
+  get smartDiffRepo(): SmartDiffRepository {
+    return (this._smartDiffRepo ??= new SmartDiffRepository(this.db));
+  }
+
+  /**
+   * Smart Diff composes over the reviews aggregate for the pull, its files
+   * and its findings — the store port is built inline here, exactly as
+   * `intentService`'s `store`/`diff` deps are, so consuming modules never
+   * import `modules/reviews/repository.ts` directly.
+   */
+  get smartDiffService(): SmartDiffService {
+    return (this._smartDiffService ??= new SmartDiffService({
+      store: {
+        getPull: (workspaceId, prId) => this.reviewRepo.getPull(workspaceId, prId),
+        getPrFiles: (prId) => this.reviewRepo.getPrFiles(prId),
+        findingsForPull: async (prId) => {
+          const rows = await this.reviewRepo.reviewsForPull(prId);
+          return rows.flatMap((r) => r.findings);
+        },
+      },
+      repo: this.smartDiffRepo,
+      ...(this.logger ? { log: this.logger } : {}),
     }));
   }
 
