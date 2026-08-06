@@ -37,6 +37,7 @@ import { CloneDocReader } from '../modules/intent/docs.js';
 import { GitHubIssueReader } from '../modules/intent/github.js';
 import { SmartDiffRepository } from '../modules/smart-diff/repository.js';
 import { SmartDiffService } from '../modules/smart-diff/service.js';
+import { FileSummaryModel } from '../modules/smart-diff/model.js';
 import { loadDiff } from '../modules/reviews/diff-loader.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -49,6 +50,13 @@ const INTENT_REGISTRY_ENTRY = FEATURE_MODELS.find((f) => f.id === 'review_intent
 const INTENT_DEFAULT_MODEL = {
   provider: INTENT_REGISTRY_ENTRY.defaultProvider,
   model: INTENT_REGISTRY_ENTRY.defaultModel,
+};
+
+/** Registry default for the on-demand file summary — never a local restatement (Task 6). */
+const FILE_SUMMARY_REGISTRY_ENTRY = FEATURE_MODELS.find((f) => f.id === 'file_summary')!;
+const FILE_SUMMARY_DEFAULT_MODEL = {
+  provider: FILE_SUMMARY_REGISTRY_ENTRY.defaultProvider,
+  model: FILE_SUMMARY_REGISTRY_ENTRY.defaultModel,
 };
 
 /**
@@ -227,6 +235,14 @@ export class Container {
         },
       },
       repo: this.smartDiffRepo,
+      // Exact shape of `intentService`'s `model` dep: workspace choice, else
+      // the registry default, resolved to a bound provider.
+      model: async (workspaceId) => {
+        const choice =
+          (await this.smartDiffRepo.featureModelChoice(workspaceId)) ?? FILE_SUMMARY_DEFAULT_MODEL;
+        const llm = await this.llm(choice.provider as 'openai' | 'anthropic' | 'openrouter');
+        return new FileSummaryModel(llm, choice.provider, choice.model);
+      },
       ...(this.logger ? { log: this.logger } : {}),
     }));
   }

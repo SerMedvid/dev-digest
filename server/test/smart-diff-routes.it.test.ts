@@ -315,7 +315,16 @@ describe('SmartDiffService degradation (hermetic)', () => {
     const warnings: unknown[] = [];
     const service = new SmartDiffService({
       store,
-      repo: { summariesForPr: async () => [] },
+      // Task 6 widened this port; only `summariesForPr` is exercised by
+      // `get()`, which is all this hermetic test calls.
+      repo: {
+        summariesForPr: async () => [],
+        upsertSummary: async () => {},
+        featureModelChoice: async () => undefined,
+      },
+      model: async () => {
+        throw new Error('not used: this test never calls summarize()');
+      },
       log: { warn: (obj) => warnings.push(obj) },
     });
 

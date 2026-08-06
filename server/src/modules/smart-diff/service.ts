@@ -1,16 +1,21 @@
-import type { FindingMark, SmartDiff } from '@devdigest/shared';
-import { NotFoundError } from '../../platform/errors.js';
+import type { FindingMark, PrFileSummaryRecord, SmartDiff } from '@devdigest/shared';
+import { ConflictError, NotFoundError } from '../../platform/errors.js';
+import { MAX_SUMMARY_CHARS } from './constants.js';
 import { groupFiles, splitSuggestion, type FileStat } from './helpers.js';
-import type { SmartDiffStorePort, SmartDiffSummaryPort } from './domain.js';
+import type { FileSummaryModelPort, SmartDiffStorePort, SmartDiffSummaryPort } from './domain.js';
 
 /** The narrow half of the platform logger — never the platform object itself. */
 export interface Logger {
   warn(obj: unknown, msg?: string): void;
+  /** Optional: the pre-Task-6 hermetic degradation test supplies `warn` only. */
+  info?(obj: unknown, msg?: string): void;
 }
 
 export interface SmartDiffServiceDeps {
   store: SmartDiffStorePort;
   repo: SmartDiffSummaryPort;
+  /** Resolves the workspace's model choice (or the registry default) into a bound caller — same shape as `IntentServiceDeps.model`. */
+  model: (workspaceId: string) => Promise<FileSummaryModelPort>;
   log?: Logger;
 }
 
@@ -28,6 +33,14 @@ export interface SmartDiffServiceDeps {
  * them (mirrors `pulls/routes.ts`'s cost/findings roll-up degradation).
  */
 export class SmartDiffService {
+  /**
+   * In-process guard against two derivations for one (prId, path) at once.
+   * Like `IntentService.inFlight` and `RunBus`'s cancel set, it does not
+   * survive a restart — the cost of that is one duplicate call, so it needs
+   * no table.
+   */
+  private readonly inFlight = new Set<string>();
+
   constructor(private deps: SmartDiffServiceDeps) {}
 
   async get(workspaceId: string, prId: string): Promise<SmartDiff> {
@@ -86,5 +99,85 @@ export class SmartDiffService {
       groups: groupFiles(fileStats, marksByPath, summaryByPath),
       split_suggestion: splitSuggestion(fileStats),
     };
+  }
+
+  /**
+   * Derive (or serve cached) an on-demand summary of one changed file. A user
+   * action, so — unlike `get()`'s findings degradation — every failure
+   * throws: a silent success would tell the user the button worked when it
+   * didn't. Nothing is persisted on a failed call.
+   */
+  async summarize(workspaceId: string, prId: string, path: string): Promise<PrFileSummaryRecord> {
+    const pull = await this.deps.store.getPull(workspaceId, prId);
+    if (!pull) throw new NotFoundError('Pull request not found');
+
+    // `path` must be material the workspace already imported, checked BEFORE
+    // any model call — without this the endpoint would summarise an
+    // arbitrary caller-supplied string on the model's dime.
+    const files = await this.deps.store.getPrFiles(prId);
+    const file = files.find((f) => f.path === path);
+    if (!file) throw new NotFoundError('File not part of this pull request');
+
+    // A row keyed to the pull's CURRENT head is safe to serve with no model
+    // call — one describing a different commit would not be (mirrors `get()`'s
+    // summaryByPath filter).
+    const existing = await this.deps.repo.summariesForPr(prId);
+    const cached = existing.find((s) => s.path === path);
+    if (cached && cached.headSha === pull.headSha) {
+      return {
+        pr_id: prId,
+        path: cached.path,
+        head_sha: cached.headSha,
+        summary: cached.summary,
+        provider: cached.provider,
+        model: cached.model,
+        created_at: cached.createdAt.toISOString(),
+      };
+    }
+
+    const key = `${prId}:${path}`;
+    if (this.inFlight.has(key)) {
+      throw new ConflictError('A summary is already being derived for this file');
+    }
+    this.inFlight.add(key);
+    try {
+      const model = await this.deps.model(workspaceId);
+      const patch = file.patch ?? '';
+
+      const out = await model.summarize(path, patch);
+      const summary = out.summary.slice(0, MAX_SUMMARY_CHARS);
+
+      await this.deps.repo.upsertSummary(prId, {
+        path,
+        headSha: pull.headSha,
+        summary,
+        provider: model.provider,
+        model: model.model,
+      });
+
+      this.deps.log?.info?.(
+        {
+          prId,
+          path,
+          provider: model.provider,
+          model: model.model,
+          chars_in: patch.length,
+          chars_out: summary.length,
+        },
+        'smart-diff: file summary derived',
+      );
+
+      return {
+        pr_id: prId,
+        path,
+        head_sha: pull.headSha,
+        summary,
+        provider: model.provider,
+        model: model.model,
+        created_at: new Date().toISOString(),
+      };
+    } finally {
+      this.inFlight.delete(key);
+    }
   }
 }

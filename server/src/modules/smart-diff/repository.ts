@@ -1,7 +1,8 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
+import { FeatureModelChoice } from '@devdigest/shared';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
-import type { PrFileSummaryRow, SmartDiffSummaryPort } from './domain.js';
+import type { PrFileSummaryRow, SmartDiffSummaryPort, UpsertSummaryInput } from './domain.js';
 
 /**
  * The ONLY file touching `pr_file_summary`. `pr_files`/`pull_requests`/
@@ -18,8 +19,52 @@ export class SmartDiffRepository implements SmartDiffSummaryPort {
         path: t.prFileSummary.path,
         headSha: t.prFileSummary.headSha,
         summary: t.prFileSummary.summary,
+        provider: t.prFileSummary.provider,
+        model: t.prFileSummary.model,
+        createdAt: t.prFileSummary.createdAt,
       })
       .from(t.prFileSummary)
       .where(eq(t.prFileSummary.prId, prId));
+  }
+
+  /**
+   * Replaces the (prId, path) row wholesale, `createdAt` included: a
+   * re-derivation describes one new derivation, not the first one ever made
+   * for this file (mirrors `IntentRepository.upsertIntent`'s note).
+   */
+  async upsertSummary(prId: string, rec: UpsertSummaryInput): Promise<void> {
+    const values = {
+      headSha: rec.headSha,
+      summary: rec.summary,
+      provider: rec.provider,
+      model: rec.model,
+      createdAt: new Date(),
+    };
+    await this.db
+      .insert(t.prFileSummary)
+      .values({ prId, path: rec.path, ...values })
+      .onConflictDoUpdate({
+        target: [t.prFileSummary.prId, t.prFileSummary.path],
+        set: values,
+      });
+  }
+
+  /**
+   * The workspace's Settings choice for `file_summary`, or undefined when
+   * unset. Read here rather than through `modules/settings/`, deliberately —
+   * same reasoning as `IntentRepository.featureModelChoice`: that module
+   * takes `Container`, so routing through it would close an import cycle the
+   * `no-circular` gate rejects.
+   */
+  async featureModelChoice(
+    workspaceId: string,
+  ): Promise<{ provider: string; model: string } | undefined> {
+    const rows = await this.db
+      .select({ value: t.settings.value })
+      .from(t.settings)
+      .where(and(eq(t.settings.workspaceId, workspaceId), eq(t.settings.key, 'feature_models')));
+    const featureModels = rows[0]?.value as Record<string, unknown> | undefined;
+    const parsed = FeatureModelChoice.safeParse(featureModels?.['file_summary']);
+    return parsed.success ? parsed.data : undefined;
   }
 }
