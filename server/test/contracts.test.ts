@@ -24,6 +24,9 @@ import {
   SkillStats,
   SkillWithUsage,
   FeatureModelId,
+  FEATURE_MODELS,
+  BlastStatus,
+  BlastRadiusResponse,
 } from '@devdigest/shared';
 
 /**
@@ -212,6 +215,78 @@ describe('AI contracts parse fixtures', () => {
 
   it('FeatureModelId accepts file_summary', () => {
     expect(FeatureModelId.parse('file_summary')).toBe('file_summary');
+  });
+
+  it('BlastRadiusResponse round-trips a full map', () => {
+    const sample = {
+      status: 'partial' as const,
+      reason: 'index_stale',
+      head_sha: 'a1b2c3d4e5f6',
+      changed_symbols: [
+        {
+          name: 'rateLimit',
+          kind: 'function',
+          file: 'src/middleware/ratelimit.ts',
+          line: 12,
+          callers: [
+            { file: 'src/api/public/index.ts', line: 23, symbol: 'publicRouter', rank: 0.92 },
+          ],
+          endpoints: ['GET /api/public/items'],
+          crons: [],
+        },
+        // A symbol the index knows about but whose declaration line is missing.
+        {
+          name: 'bucketKey',
+          kind: 'function',
+          file: 'src/middleware/ratelimit.ts',
+          line: null,
+          callers: [],
+          endpoints: [],
+          crons: [],
+        },
+      ],
+      endpoints: ['GET /api/public/items', 'POST /api/public/webhooks'],
+      crons: ['job:reset-rate-buckets'],
+      summary: null,
+    };
+    const parsed = BlastRadiusResponse.parse(sample);
+    expect(parsed).toEqual(sample);
+    expect(parsed.changed_symbols[0]!.callers[0]!.rank).toBe(0.92);
+    expect(parsed.changed_symbols[1]!.line).toBeNull();
+  });
+
+  it('BlastRadiusResponse accepts a true-empty ok map', () => {
+    const ok = BlastRadiusResponse.parse({
+      status: 'ok',
+      reason: null,
+      head_sha: 'deadbeef',
+      changed_symbols: [],
+      endpoints: [],
+      crons: [],
+      summary: null,
+    });
+    expect(ok.status).toBe('ok');
+    expect(ok.reason).toBeNull();
+    expect(BlastStatus.options).toEqual(['ok', 'partial', 'degraded']);
+    // `reason` is nullable, never optional — an absent key is a producer bug.
+    expect(() =>
+      BlastRadiusResponse.parse({
+        status: 'ok',
+        head_sha: 'deadbeef',
+        changed_symbols: [],
+        endpoints: [],
+        crons: [],
+        summary: null,
+      }),
+    ).toThrow();
+  });
+
+  it('FeatureModelId accepts blast_summary and the registry carries its default', () => {
+    expect(FeatureModelId.parse('blast_summary')).toBe('blast_summary');
+    const entry = FEATURE_MODELS.find((f) => f.id === 'blast_summary');
+    expect(entry).toBeDefined();
+    expect(entry!.defaultProvider).toBe('openrouter');
+    expect(entry!.defaultModel).toBe('google/gemini-2.5-flash-lite');
   });
 
   it('Conformance / Onboarding / EvalRun / MemoryItem', () => {
