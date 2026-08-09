@@ -58,6 +58,12 @@ export interface BlastChangedSymbol {
   file: string;
   name: string;
   kind: string;
+  /**
+   * Declaration line. `symbols.line` is nullable, and the ripgrep fallback has
+   * no stable line to offer at all — hence both `null` and absent. Consumers
+   * collapse the two (the wire contract exposes one nullable field).
+   */
+  line?: number | null;
 }
 
 export interface BlastCallerRow {
@@ -76,6 +82,12 @@ export interface BlastResult {
   callers: BlastCallerRow[];
   /** "METHOD /path" (via extractEndpoints / file_facts) — flat union. */
   impactedEndpoints: string[];
+  /**
+   * Cron/job identifiers over the same file set. Always `[]` on the ripgrep
+   * fallback — that path never extracted crons, and saying so beats implying
+   * a repo has none.
+   */
+  impactedCrons: string[];
   /**
    * Per-caller-file precomputed facts, so consumers (blast) can attribute
    * endpoints/crons to the changed symbol whose callers live in that file.

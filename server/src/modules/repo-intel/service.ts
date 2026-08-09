@@ -229,6 +229,7 @@ export class RepoIntelService implements RepoIntel {
       changedSymbols: [],
       callers: [],
       impactedEndpoints: [],
+      impactedCrons: [],
       degraded: true,
       reason: 'no_data',
     };
@@ -298,6 +299,9 @@ export class RepoIntelService implements RepoIntel {
       changedSymbols,
       callers: callerRows,
       impactedEndpoints: [...endpoints],
+      // The ripgrep fallback never extracted crons. `[]` here means "we did not
+      // look", which the wire `status: degraded` is what actually communicates.
+      impactedCrons: [],
       degraded: true,
       reason: 'no_data',
     };
@@ -330,12 +334,18 @@ export class RepoIntelService implements RepoIntel {
       const key = `${s.name}:${s.path}`;
       if (!seenSym.has(key)) {
         seenSym.add(key);
-        changedSymbols.push({ file: s.path, name: s.name, kind: s.kind });
+        changedSymbols.push({ file: s.path, name: s.name, kind: s.kind, line: s.line });
       }
       nameSet.add(s.name);
     }
     if (nameSet.size === 0) {
-      return { changedSymbols, callers: [], impactedEndpoints: [], degraded: false };
+      return {
+        changedSymbols,
+        callers: [],
+        impactedEndpoints: [],
+        impactedCrons: [],
+        degraded: false,
+      };
     }
 
     // Resolved cross-file callers.
@@ -371,20 +381,41 @@ export class RepoIntelService implements RepoIntel {
     }
     callers.sort((a, b) => b.rank - a.rank);
 
-    // Precomputed facts per caller file (endpoints + crons), so consumers can
-    // attribute them to the changed symbol whose callers live in that file.
-    const facts = await this.repo.getFileFacts(repoId, callerFiles);
+    // The cap is PER changed symbol, which is what MAX_CALLERS_PER_SYMBOL has
+    // always promised. A slice over the flat rank-sorted list silently erases
+    // every caller of a low-ranked symbol once a hot one fills the budget.
+    const capped: BlastCallerRow[] = [];
+    const perSymbol = new Map<string, number>();
+    for (const c of callers) {
+      const n = perSymbol.get(c.viaSymbol) ?? 0;
+      if (n >= MAX_CALLERS_PER_SYMBOL) continue;
+      perSymbol.set(c.viaSymbol, n + 1);
+      capped.push(c);
+    }
+
+    // Endpoints/crons are attributed over caller files ∪ their reverse
+    // dependents: a route file two imports above the changed helper is affected
+    // even though it never names the changed symbol.
+    const dependents = await this.repo.getReverseDependents(repoId, changedFiles);
+    const factFiles = [...new Set([...callerFiles, ...dependents])];
+
+    // Precomputed facts per file, so consumers can attribute endpoints/crons to
+    // the changed symbol whose callers live in that file.
+    const facts = await this.repo.getFileFacts(repoId, factFiles);
     const endpoints = new Set<string>();
+    const crons = new Set<string>();
     const factsByFile: Record<string, { endpoints: string[]; crons: string[] }> = {};
     for (const f of facts) {
       factsByFile[f.filePath] = { endpoints: f.endpoints, crons: f.crons };
       for (const e of f.endpoints) endpoints.add(e);
+      for (const c of f.crons) crons.add(c);
     }
 
     return {
       changedSymbols,
-      callers: callers.slice(0, MAX_CALLERS_PER_SYMBOL),
+      callers: capped,
       impactedEndpoints: [...endpoints],
+      impactedCrons: [...crons],
       factsByFile,
       degraded: false,
     };
