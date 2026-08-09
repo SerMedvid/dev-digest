@@ -108,6 +108,18 @@ on `head_sha` in `pr_file_summary`. The `file_summary` entry in `FEATURE_MODELS`
 is consumed the same way `review_intent` is. Full contract, classification
 rules and degradation paths: [`specs/smart-diff.md`](specs/smart-diff.md).
 
+`GET /pulls/:id/blast` answers "what does this change touch?" — the symbols the
+PR changed, who calls them, and the HTTP endpoints and crons downstream — read
+**entirely from the persisted index**: no AST rebuild, no import-graph rebuild
+and **no model call on this path**. It degrades visibly rather than silently:
+`status` distinguishes a map that is empty because nothing is there (`ok`) from
+one that is empty because the index cannot see (`degraded`), with `partial` for
+an index that is incomplete or behind the PR's head. `POST /pulls/:id/blast/summary`
+is the one place a model runs — one explicit, cached-on-`head_sha` paragraph
+explaining the computed map, refused outright when the map is degraded. Full
+contract, status derivation and degradation paths:
+[`specs/blast.md`](specs/blast.md).
+
 ## Environment
 
 `server/.env` (copied from `.env.example`):

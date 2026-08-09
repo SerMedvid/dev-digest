@@ -38,6 +38,9 @@ import { GitHubIssueReader } from '../modules/intent/github.js';
 import { SmartDiffRepository } from '../modules/smart-diff/repository.js';
 import { SmartDiffService } from '../modules/smart-diff/service.js';
 import { FileSummaryModel } from '../modules/smart-diff/model.js';
+import { BlastRepository } from '../modules/blast/repository.js';
+import { BlastService } from '../modules/blast/service.js';
+import { BlastSummaryModel } from '../modules/blast/model.js';
 import { loadDiff } from '../modules/reviews/diff-loader.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -57,6 +60,13 @@ const FILE_SUMMARY_REGISTRY_ENTRY = FEATURE_MODELS.find((f) => f.id === 'file_su
 const FILE_SUMMARY_DEFAULT_MODEL = {
   provider: FILE_SUMMARY_REGISTRY_ENTRY.defaultProvider,
   model: FILE_SUMMARY_REGISTRY_ENTRY.defaultModel,
+};
+
+/** Registry default for the on-demand blast summary — never a local restatement. */
+const BLAST_SUMMARY_REGISTRY_ENTRY = FEATURE_MODELS.find((f) => f.id === 'blast_summary')!;
+const BLAST_SUMMARY_DEFAULT_MODEL = {
+  provider: BLAST_SUMMARY_REGISTRY_ENTRY.defaultProvider,
+  model: BLAST_SUMMARY_REGISTRY_ENTRY.defaultModel,
 };
 
 /**
@@ -108,6 +118,8 @@ export class Container {
   private _intentService?: IntentService;
   private _smartDiffRepo?: SmartDiffRepository;
   private _smartDiffService?: SmartDiffService;
+  private _blastRepo?: BlastRepository;
+  private _blastService?: BlastService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -242,6 +254,46 @@ export class Container {
           (await this.smartDiffRepo.featureModelChoice(workspaceId)) ?? FILE_SUMMARY_DEFAULT_MODEL;
         const llm = await this.llm(choice.provider as 'openai' | 'anthropic' | 'openrouter');
         return new FileSummaryModel(llm, choice.provider, choice.model);
+      },
+      ...(this.logger ? { log: this.logger } : {}),
+    }));
+  }
+
+  get blastRepo(): BlastRepository {
+    return (this._blastRepo ??= new BlastRepository(this.db));
+  }
+
+  /**
+   * Blast composes the reviews aggregate (the pull + its changed paths) with
+   * the repo-intel facade. Both port objects are built inline here, exactly as
+   * `smartDiffService`'s are, so the module never imports another module's
+   * repository and never takes `Container` (the cycle `server/INSIGHTS.md`
+   * 2026-08-02 warns about).
+   */
+  get blastService(): BlastService {
+    return (this._blastService ??= new BlastService({
+      store: {
+        getPull: async (workspaceId, prId) => {
+          const pull = await this.reviewRepo.getPull(workspaceId, prId);
+          // Projected rather than passed through: the port declares the three
+          // fields blast reads, and nothing more travels into the module.
+          return pull ? { id: pull.id, repoId: pull.repoId, headSha: pull.headSha } : undefined;
+        },
+        getPrFilePaths: async (prId) => {
+          const rows = await this.reviewRepo.getPrFiles(prId);
+          return rows.map((r) => r.path);
+        },
+      },
+      intel: {
+        blastRadius: (repoId, files) => this.repoIntel.getBlastRadius(repoId, files),
+        indexState: (repoId) => this.repoIntel.getIndexState(repoId),
+      },
+      summaries: this.blastRepo,
+      model: async (workspaceId) => {
+        const choice =
+          (await this.blastRepo.featureModelChoice(workspaceId)) ?? BLAST_SUMMARY_DEFAULT_MODEL;
+        const llm = await this.llm(choice.provider as 'openai' | 'anthropic' | 'openrouter');
+        return new BlastSummaryModel(llm, choice.provider, choice.model);
       },
       ...(this.logger ? { log: this.logger } : {}),
     }));
