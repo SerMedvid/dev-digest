@@ -54,11 +54,11 @@ and every MCP tool will return the same "API is not reachable" error.
 ### 2. Install this package
 
 ```bash
-cd mcp && npm ci
+cd mcp && pnpm install
 ```
 
-**npm, not pnpm** — this package has its own `package-lock.json`, like
-`reviewer-core/` and `e2e/`. Running `pnpm install` writes a second lockfile.
+**pnpm, not npm** — this package has its own `pnpm-lock.yaml`, like `server/`
+and `client/`. Running `npm install` here writes a second lockfile.
 
 ### 3. Check it in isolation, before wiring any client
 
@@ -84,12 +84,12 @@ For the same check with a UI — browse the tool schemas, fill arguments in a fo
 re-run a call without retyping the frame — use the MCP Inspector:
 
 ```bash
-cd mcp && npm run inspect
+cd mcp && pnpm run inspect
 ```
 
 It spawns its own copy of the server, opens a browser, and speaks the same stdio
 protocol the printf check does. The Inspector is **not** a dependency of this
-package: the script fetches it with `npx --yes` so `npm ci` — and CI — stay lean.
+package: the script fetches it with `npx --yes` so `pnpm install` — and CI — stay lean.
 The server itself still resolves from the local `tsx`, so the thing you inspect
 is the version in your working tree.
 
@@ -130,7 +130,7 @@ Remove the entry (or list it in `enabledMcpjsonServers`) when you want it back;
 either way it takes effect on the next client session. Related key:
 `enableAllProjectMcpServers` approves every `.mcp.json` server without asking.
 
-Starting `npm start` in a terminal is **not** a way to "have it running" — with
+Starting `pnpm start` in a terminal is **not** a way to "have it running" — with
 no client on the other end of stdin it idles and serves nobody. A client always
 spawns its own process.
 
@@ -165,7 +165,7 @@ is a read.
 |---|---|---|
 | Every tool says "The DevDigest API is not reachable" | the API is not running, or is on another port | start it (step 1); if the port differs, set `DEVDIGEST_API_URL` |
 | `list_agents` errors with "No reviewer agents are configured" | database migrated but never seeded | `cd server && pnpm db:seed` |
-| Client shows the server as failed, no tools | deps not installed | `cd mcp && npm ci` |
+| Client shows the server as failed, no tools | deps not installed | `cd mcp && pnpm install` |
 | A PR resolves but reports "not imported yet" | the PR exists on GitHub but was never opened in the studio | open it once in the studio, then retry |
 | Findings come back but `agents` is `["unknown"]` | that review predates agent attribution (seeded/imported rows carry `agent_name: null`) | expected; the `agent` filter cannot narrow such a review |
 | Protocol errors / garbled JSON from the client | something wrote to stdout | see the stdout rule below |
@@ -174,8 +174,8 @@ is a read.
 
 ```bash
 cd mcp
-npm test           # vitest, hermetic — the API is faked (test/helpers/fake-api.ts)
-npm run typecheck
+pnpm test          # vitest, hermetic — the API is faked (test/helpers/fake-api.ts)
+pnpm typecheck
 ```
 
 Both are hermetic: no Postgres, no Docker, no running API. `mcp.yml` runs

@@ -1,6 +1,6 @@
 # MCP suite — the local MCP server (@devdigest/mcp).
 # Hermetic: the DevDigest API is faked, so no Postgres and no Docker.
-# Uses npm (package-lock.json), like reviewer-core and e2e.
+# Uses pnpm (pnpm-lock.yaml), like server and client.
 name: mcp
 
 on:
@@ -31,14 +31,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-          cache: npm
-          cache-dependency-path: mcp/package-lock.json
+          cache: pnpm
+          cache-dependency-path: mcp/pnpm-lock.yaml
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
-      - run: npm run typecheck
+      - run: pnpm typecheck
 
-      - run: npm test
+      - run: pnpm test

@@ -44,7 +44,7 @@ code. Do **not** "fix" these:
 - `reviewer-core` accepts prompt slots nothing feeds yet (`skills`, `memory`,
   `specs`). Omitted slots render no section — that's the contract.
 
-## Not a monorepo — four standalone packages
+## Not a monorepo — five standalone packages
 
 No workspace, no root `package.json`. Each package has its own lockfile, and
 **the package manager differs per package**:
@@ -53,6 +53,7 @@ No workspace, no root `package.json`. Each package has its own lockfile, and
 |---|---|---|---|
 | `server/` | **pnpm** | `pnpm install` | `pnpm test` |
 | `client/` | **pnpm** | `pnpm install` | `pnpm test` |
+| `mcp/` | **pnpm** | `pnpm install` | `pnpm test` |
 | `reviewer-core/` | **npm** | `npm ci` | `npm test` |
 | `e2e/` | **npm** | `npm ci` | `npm test` |
 

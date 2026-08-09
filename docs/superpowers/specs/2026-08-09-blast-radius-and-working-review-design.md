@@ -405,11 +405,11 @@ lesson makes the two paths drift, that is the moment to extract — not before.
 
 ### 6.1 Invocation
 
-Lives in `mcp/` (npm, not pnpm). `package.json` gains
-`"bin": { "devdigest": "bin/devdigest.mjs" }` — a small Node wrapper that
-registers tsx (`tsx/esm/api`) and imports `src/cli/main.ts`, so the npm bin
-shim works on every OS without emitting JS. Also `npm run review` for the
-no-install path. `.mcp.json` and the MCP server are untouched — the CLI is a
+Lives in `mcp/` (pnpm — the package was switched from npm to pnpm during
+design). `package.json` gains `"bin": { "devdigest": "bin/devdigest.mjs" }` — a
+small Node wrapper that registers tsx (`tsx/esm/api`) and imports
+`src/cli/main.ts`, so the package-manager bin shim works on every OS without
+emitting JS. Also `pnpm review` for the no-install path. `.mcp.json` and the MCP server are untouched — the CLI is a
 second entry point in the same package, sharing `src/api.ts` (`HttpApiClient`
 gains `reviewAdhoc(diff, agent?)`), `src/config.ts` (`DEVDIGEST_API_URL`, same
 default `http://localhost:3001`) and `src/errors.ts`.
@@ -509,7 +509,7 @@ so previously-seeded databases gain it on the next `pnpm db:seed`.
 | mcp | `test/cli.test.ts` | temp git repo fixtures: diff collection; untracked counted + excluded; empty → exit 0; blockers → exit 1; server down / not a repo → exit 2; stdout/stderr split |
 
 Gates: `cd server && pnpm typecheck && pnpm arch:check` (still exactly the
-frozen violation count), `cd client && pnpm typecheck`, `cd mcp && npm test`,
+frozen violation count), `cd client && pnpm typecheck`, `cd mcp && pnpm test`,
 plus the touched suites. `server/specs/blast.md` and an update to
 `mcp/README.md` (CLI section, exit-code contract) ship with the code —
 non-trivial behaviour without a spec is invisible per the package rules.
