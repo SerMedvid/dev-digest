@@ -1,10 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 import type { ZodTypeProvider } from 'fastify-type-provider-zod';
+import { z } from 'zod';
 import { RunRequest } from '@devdigest/shared';
 import type { RunEvent } from '@devdigest/shared';
 import { getContext } from '../_shared/context.js';
 import { IdParams } from '../_shared/schemas.js';
 import { NotFoundError } from '../../platform/errors.js';
+import { MAX_ADHOC_DIFF_BYTES } from './constants.js';
 import { ReviewService } from './service.js';
 
 /**
@@ -42,6 +44,29 @@ export default async function reviewsRoutes(appBase: FastifyInstance) {
     );
     return { pr_id: req.params.id, runs, reviews };
   });
+
+  // ---- Stateless review of a posted diff (the `devdigest review` CLI) ------
+  // Same 10/min limit as the PR trigger above — one call is one LLM run.
+  // `bodyLimit` makes Fastify answer 413 before the handler sees an oversized
+  // body, so a huge working tree can never reach the parser or a model.
+  app.post(
+    '/reviews/adhoc',
+    {
+      schema: {
+        body: z.object({
+          diff: z.string().min(1),
+          /** Agent NAME, not id — the CLI user types a name, not a uuid. */
+          agent: z.string().min(1).optional(),
+        }),
+      },
+      config: { rateLimit: { max: 10, timeWindow: '1 minute' } },
+      bodyLimit: MAX_ADHOC_DIFF_BYTES,
+    },
+    async (req) => {
+      const { workspaceId } = await getContext(container, req);
+      return service.runAdhocReview(workspaceId, req.body, req.log);
+    },
+  );
 
   // ---- SSE: live run events (replay buffer first, then live; ends on done) -
   // No rate limit: SSE is one long-lived connection, not burst traffic.

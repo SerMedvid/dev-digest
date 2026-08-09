@@ -1,7 +1,10 @@
 import type { Container } from '../../platform/container.js';
-import type { FindingActionKind, RunEventKind, RunTrace } from '@devdigest/shared';
+import type { CiFailOn, FindingActionKind, Provider, Review, RunEventKind, RunTrace } from '@devdigest/shared';
+import { countBlockers, reviewPullRequest } from '@devdigest/reviewer-core';
 import { AppError, NotFoundError } from '../../platform/errors.js';
 import type { AgentRow } from '../../db/rows.js';
+import { parseUnifiedDiff } from '../../adapters/git/diff-parser.js';
+import { REVIEW_STRATEGY } from './constants.js';
 import { ReviewRepository } from './repository.js';
 import { type ReviewDto, type ReviewDtoFinding } from './helpers.js';
 import { ReviewRunExecutor, type Logger } from './run-executor.js';
@@ -12,6 +15,20 @@ import { reviewToDto } from './helpers.js';
 // './service.js' (these previously lived here; logic now in ./helpers.ts).
 export { findingRowToDto, reviewToDto } from './helpers.js';
 export type { ReviewDto, ReviewDtoFinding } from './helpers.js';
+
+/** `POST /reviews/adhoc`'s 200 body — snake_case, like every other wire shape. */
+export interface AdhocReviewResult {
+  review: Review;
+  blockers: number;
+  /** Reasons the grounding gate dropped a finding. Never hidden. */
+  dropped: string[];
+  scope_dropped: string[];
+  agent: { name: string; ci_fail_on: CiFailOn };
+  model: string;
+  tokens_in: number;
+  tokens_out: number;
+  cost_usd: number | null;
+}
 
 /**
  * Review service (the core). Orchestrates:
@@ -54,6 +71,120 @@ export class ReviewService {
       return [agent];
     }
     throw new AppError('invalid_run_request', 'Provide agentId or all:true', 400);
+  }
+
+  // ===========================================================================
+  // Stateless review of a posted diff (the `devdigest review` CLI's server side).
+  // ===========================================================================
+
+  /**
+   * Review a raw unified diff with no PR behind it — the same engine, the same
+   * grounding gate and the same blocker count the web flow uses, composed from
+   * the exported bricks rather than through `runOneAgent`.
+   *
+   * Deliberately **stateless**: no `runs`, no `reviews`, no `findings`, no
+   * `run_traces`, no SSE. There is no PR to hang them off, and a working-tree
+   * review is a pre-push check whose result is the exit code, not a record.
+   *
+   * `runOneAgent` is NOT refactored into a shared core here: the two paths
+   * share three exported functions today, and extracting before they actually
+   * diverge would buy an abstraction over one call site.
+   */
+  async runAdhocReview(
+    workspaceId: string,
+    body: { diff: string; agent?: string },
+    log: Logger,
+  ): Promise<AdhocReviewResult> {
+    const agent = await this.resolveAdhocAgent(workspaceId, body.agent);
+
+    // The same parser the PR path uses, so the CLI and the web flow agree on
+    // what a diff means — including which lines exist for grounding.
+    const diff = parseUnifiedDiff(body.diff);
+    if (diff.files.length === 0) {
+      throw new AppError(
+        'empty_diff',
+        'Diff parsed to zero files — is this unified diff text?',
+        422,
+      );
+    }
+
+    const llm = await this.container.llm(agent.provider as Provider);
+
+    // No `intent`, `repoMap`, `callers` or `prDescription`: there is no PR to
+    // derive them from. By the engine's contract an omitted slot renders no
+    // section, so this is the same reviewer minus context it cannot have.
+    const outcome = await reviewPullRequest({
+      systemPrompt: agent.systemPrompt,
+      model: agent.model,
+      diff,
+      llm,
+      strategy: agent.strategy ?? REVIEW_STRATEGY,
+      task: 'Review the working-tree changes below.',
+      sessionId: `adhoc:${agent.name}`,
+    });
+
+    const blockers = countBlockers(outcome.review.findings, agent.ciFailOn);
+
+    // Token counts go to the route log, not to a run_traces document — there is
+    // no run row for one to belong to.
+    log.info(
+      {
+        agent: agent.name,
+        model: agent.model,
+        files: diff.files.length,
+        tokens_in: outcome.tokensIn,
+        tokens_out: outcome.tokensOut,
+        blockers,
+        dropped: outcome.dropped.length,
+      },
+      'reviews: adhoc diff review completed',
+    );
+
+    return {
+      review: outcome.review,
+      blockers,
+      // The grounding gate still applies, and what it dropped is reported
+      // rather than silently swallowed — same contract as the web flow.
+      dropped: outcome.dropped.map((d) => d.reason),
+      scope_dropped: outcome.scopeDropped.map((d) => d.reason),
+      agent: { name: agent.name, ci_fail_on: agent.ciFailOn },
+      model: agent.model,
+      tokens_in: outcome.tokensIn,
+      tokens_out: outcome.tokensOut,
+      cost_usd: outcome.costUsd,
+    };
+  }
+
+  /**
+   * By name (case-insensitive) when given, else the workspace's enabled agent
+   * with the earliest `createdAt` — deterministic, documented, and the same
+   * agent a fresh seed creates first. Ties break on `id` so the choice cannot
+   * flip between calls.
+   */
+  private async resolveAdhocAgent(workspaceId: string, name?: string): Promise<AgentRow> {
+    const enabled = await this.agents.listEnabled(workspaceId);
+    if (enabled.length === 0) {
+      throw new AppError(
+        'no_agents',
+        'No enabled agents — create one in the Agents screen, or enable an existing one.',
+        409,
+      );
+    }
+    if (name) {
+      const wanted = name.trim().toLowerCase();
+      const match = enabled.find((a) => a.name.toLowerCase() === wanted);
+      if (!match) {
+        throw new NotFoundError(
+          `No enabled agent named "${name}". Enabled agents: ${enabled
+            .map((a) => a.name)
+            .join(', ')}.`,
+        );
+      }
+      return match;
+    }
+    return [...enabled].sort(
+      (a, b) => a.createdAt.getTime() - b.createdAt.getTime() || a.id.localeCompare(b.id),
+    )[0]!;
   }
 
   /** Delete a whole review run (one agent's pass) + its findings (cascade). */

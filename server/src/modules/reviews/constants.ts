@@ -10,3 +10,11 @@
  * model's context.
  */
 export const REVIEW_STRATEGY = 'single-pass' as const;
+
+/**
+ * Body cap for `POST /reviews/adhoc` (1 MB). Fastify rejects a larger body with
+ * 413 before the handler runs, so an oversized working tree can never reach the
+ * parser or a model. A real working-tree diff that exceeds this is not a review
+ * unit anyway.
+ */
+export const MAX_ADHOC_DIFF_BYTES = 1_048_576;
