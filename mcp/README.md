@@ -80,6 +80,22 @@ Expected: three JSON-RPC responses on **stdout**, one `[devdigest-mcp] ready`
 line on **stderr**, and the `tools/call` result listing your configured agents.
 `tools/list` must name all five `devdigest_*` tools.
 
+For the same check with a UI — browse the tool schemas, fill arguments in a form,
+re-run a call without retyping the frame — use the MCP Inspector:
+
+```bash
+cd mcp && npm run inspect
+```
+
+It spawns its own copy of the server, opens a browser, and speaks the same stdio
+protocol the printf check does. The Inspector is **not** a dependency of this
+package: the script fetches it with `npx --yes` so `npm ci` — and CI — stay lean.
+The server itself still resolves from the local `tsx`, so the thing you inspect
+is the version in your working tree.
+
+Reach for the printf check when you want to know whether the server answers at
+all, and the Inspector when you want to explore what it answers.
+
 ### 4. Wire it into a client
 
 [`.mcp.json`](../.mcp.json) at the repo root already declares the server, so
