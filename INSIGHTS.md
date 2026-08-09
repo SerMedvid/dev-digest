@@ -15,6 +15,18 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-09** — Same root cause as the `node --test` entry below, worse
+  failure mode: with no root `package.json`, `npx <tool>` run from the repo root
+  does not resolve the package's pinned binary — it **silently fetches a
+  different major version** and reports success. `npx vitest run test/x.test.ts`
+  from the root ran `v4.1.10` rooted at the repo, while the same command from
+  `mcp/` ran the pinned `v2.1.9` rooted at the package; the root invocation
+  printed green for a suite it had resolved differently. There is no error to
+  notice, so read the `RUN v<version> <rootdir>` banner, and `cd` into the
+  package for every `npx`/`npm`/`pnpm` invocation — including after a `cd` to
+  the repo root to run `git`, which is where the working directory usually
+  drifts. (`mcp/package.json:1`)
+
 - **2026-08-05** — A Claude Code Bash permission rule with a trailing wildcard
   does **not** match the bare command: `Bash(pnpm typecheck *)` never authorises
   `pnpm typecheck` with no arguments, so a rule that looks installed silently
