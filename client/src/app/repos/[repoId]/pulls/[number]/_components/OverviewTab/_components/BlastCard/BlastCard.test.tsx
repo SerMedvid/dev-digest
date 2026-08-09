@@ -194,6 +194,73 @@ describe("BlastCard — states", () => {
   });
 });
 
+describe("BlastCard — Tree | Graph toggle", () => {
+  it("starts on the tree and switches to the graph without a refetch", async () => {
+    const fetchMock = stubFetchWithExplain(OK_MAP, {});
+    renderCard(card());
+
+    await screen.findByText("rateLimit");
+    expect(screen.queryByRole("img", { name: /blast radius graph/i })).not.toBeInTheDocument();
+    const before = fetchMock.mock.calls.length;
+
+    fireEvent.click(screen.getByRole("button", { name: /^graph$/i }));
+    expect(screen.getByRole("img", { name: /blast radius graph/i })).toBeInTheDocument();
+    // Both views render the SAME response — toggling must cost no request.
+    expect(fetchMock.mock.calls).toHaveLength(before);
+
+    fireEvent.click(screen.getByRole("button", { name: /^tree$/i }));
+    expect(screen.queryByRole("img", { name: /blast radius graph/i })).not.toBeInTheDocument();
+  });
+
+  it("marks the active view as pressed", async () => {
+    stubFetch(200, OK_MAP);
+    renderCard(card());
+    await screen.findByText("rateLimit");
+
+    expect(screen.getByRole("button", { name: /^tree$/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    fireEvent.click(screen.getByRole("button", { name: /^graph$/i }));
+    expect(screen.getByRole("button", { name: /^graph$/i })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+  });
+
+  it("hides the toggle entirely on a degraded map", async () => {
+    stubFetch(200, {
+      status: "degraded",
+      reason: "no_data",
+      head_sha: HEAD,
+      changed_symbols: [],
+      endpoints: [],
+      crons: [],
+      summary: null,
+    });
+    renderCard(card());
+
+    await screen.findByText(/Index not usable/i);
+    expect(screen.queryByRole("button", { name: /^graph$/i })).not.toBeInTheDocument();
+  });
+
+  it("hides the toggle when there are no symbols to draw", async () => {
+    stubFetch(200, {
+      status: "ok",
+      reason: null,
+      head_sha: HEAD,
+      changed_symbols: [],
+      endpoints: [],
+      crons: [],
+      summary: null,
+    });
+    renderCard(card());
+
+    await screen.findByText(/No indexed symbols/i);
+    expect(screen.queryByRole("button", { name: /^graph$/i })).not.toBeInTheDocument();
+  });
+});
+
 describe("BlastCard — Explain", () => {
   it("posts once and renders the returned paragraph", async () => {
     const fetchMock = stubFetchWithExplain(OK_MAP, {

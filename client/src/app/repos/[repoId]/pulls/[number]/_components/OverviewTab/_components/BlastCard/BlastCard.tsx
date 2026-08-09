@@ -6,8 +6,9 @@ import { SectionLabel, Button, Skeleton } from "@devdigest/ui";
 import type { BlastSymbolC } from "@devdigest/shared";
 import { useBlastRadius, useBlastSummary } from "@/lib/hooks/blast";
 import { ApiError } from "@/lib/api";
+import { BlastGraph } from "./_components/BlastGraph";
 import { callerHref } from "./helpers";
-import { s } from "./styles";
+import { s, toggleButton } from "./styles";
 
 interface BlastCardProps {
   prId: string | null;
@@ -53,6 +54,9 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
   const t = useTranslations("blast");
   const { data, isLoading, isError, error, refetch, isFetching } = useBlastRadius(prId);
   const explain = useBlastSummary(prId);
+  // Plain local state, tree by default, no URL param: which view you are on is
+  // presentation, not a shareable location.
+  const [view, setView] = React.useState<"tree" | "graph">("tree");
 
   const explainError = explain.isError
     ? explain.error instanceof ApiError
@@ -109,9 +113,35 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
     [t("stat.crons"), data.crons.length],
   ];
 
+  const hasMap = data.changed_symbols.length > 0;
+
   return (
     <section style={s.card}>
-      <SectionLabel icon="Zap">{t("title")}</SectionLabel>
+      {/* The toggle rides in the heading's `right` slot, like IntentCard's
+          action. It only exists when there is a map to draw, so the graph
+          needs no degraded or empty variant of its own. */}
+      <SectionLabel
+        icon="Zap"
+        right={
+          hasMap ? (
+            <div style={s.viewToggle}>
+              {(["tree", "graph"] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  aria-pressed={view === v}
+                  style={toggleButton(view === v)}
+                  onClick={() => setView(v)}
+                >
+                  {t(`view.${v}`)}
+                </button>
+              ))}
+            </div>
+          ) : undefined
+        }
+      >
+        {t("title")}
+      </SectionLabel>
 
       {data.status === "partial" && (
         <p style={s.warning}>{t("partialWarning", { reason: data.reason ?? "" })}</p>
@@ -126,8 +156,12 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
         ))}
       </div>
 
-      {data.changed_symbols.length === 0 ? (
+      {!hasMap ? (
         <p style={s.emptyNote}>{t("empty")}</p>
+      ) : view === "graph" ? (
+        // The same `data` object the tree just rendered — toggling views costs
+        // no request.
+        <BlastGraph data={data} headSha={headSha} repoFullName={repoFullName} />
       ) : (
         <div style={s.tree}>
           {data.changed_symbols.map((sym) => (
