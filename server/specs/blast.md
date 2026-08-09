@@ -118,17 +118,29 @@ not change.
 2. **Declaration-file exclusion.** `getResolvedCallers` filtered by `decl_file`
    and `to_symbol` but never excluded the declaration files themselves, so a
    recursive call or a re-export inside the changed file came back as its own
-   caller. One `notInArray` predicate closes it
-   ([`repo-intel/repository.ts:527-533`](../src/modules/repo-intel/repository.ts)).
+   caller. One predicate closes it — `ne(references.fromPath,
+   references.declFile)`, compared **column to column**
+   ([`repo-intel/repository.ts:527-540`](../src/modules/repo-intel/repository.ts)).
+
+   > Not `notInArray(fromPath, declFiles)`, which is what this looked like at
+   > first. `declFiles` is the PR's whole changed-file list, so excluding it
+   > drops every caller that the PR *also* touches — on the seeded nine-file
+   > demo PR that took `rateLimit` from four callers to one. Only `decl_file`
+   > names the file that actually declares the symbol. Recorded in
+   > [`INSIGHTS.md`](../INSIGHTS.md).
+
 3. **Reverse BFS.** `getReverseDependents(repoId, files, maxDepth = BLAST_BFS_DEPTH)`
-   ([`repository.ts:544-580`](../src/modules/repo-intel/repository.ts)) is the
+   ([`repository.ts:551-587`](../src/modules/repo-intel/repository.ts)) is the
    first reader of `file_edges_repo_to_idx`. Breadth-first, **one query per
    level** (never per file), inputs pre-seeded into the visited set so they are
    never their own dependents and cycles terminate, sorted output so the same
    graph always yields the same array. `tryPersistentBlast` then unions
-   `file_facts` over **caller files ∪ reverse dependents**, so an endpoint two
+   `file_facts` over **changed files ∪ caller files ∪ reverse dependents**
+   ([`service.ts:394`](../src/modules/repo-intel/service.ts)), so an endpoint two
    imports above the changed helper is attributed even though the route file
-   never names the changed symbol.
+   never names the changed symbol — and a changed file that declares an endpoint
+   or cron of its own is attributed too. The changed files have to be added back
+   explicitly because the BFS excludes its own inputs by contract.
 
 `BlastResult` gained two additive fields — `impactedCrons` (crons rode only in
 `factsByFile` and were never surfaced) and `line` on `BlastChangedSymbol`.
@@ -233,6 +245,19 @@ The house rule: degrade visibly, never fail the read.
 | 9 | A self-file reference is not a caller | `repo-intel-reverse-bfs.it.test.ts` + `blast-routes.it.test.ts` ("never reports a reference from the declaration file itself") |
 | 10 | The per-symbol cap does not erase a cold symbol's callers | [`repo-intel-blast.test.ts`](../test/repo-intel-blast.test.ts) ("caps each viaSymbol group … not the flat list") |
 | 11 | Both vendor copies of the contract agree; both packages type-check | [`test/contracts.test.ts`](../test/contracts.test.ts) + the typecheck gates |
+| 12 | A caller that is *also* a changed file is still reported | `repo-intel-reverse-bfs.it.test.ts` ("keeps a caller that is itself one of the changed files") — the §3.1 regression |
+| 13 | A changed file's own endpoints and crons are attributed | `repo-intel-blast.test.ts` ("attributes a changed file's own endpoints and crons") + the seeded demo's cron, which only the depth-2 hop reaches |
+
+Client-side coverage for the display rules — SHA-pinned links, plain text when
+`full_name` is unknown, the four card states, the Explain button's absence once
+a summary exists, and the Tree|Graph toggle costing no request — lives in
+`client/.../BlastCard/BlastCard.test.tsx` and `.../BlastGraph/BlastGraph.test.tsx`.
+The MCP tool's degraded-passthrough is `mcp/test/tools.test.ts`.
+
+No e2e flow ships for this card. The existing `e2e/` runner has a known
+Windows defect recorded against the smart-diff work, and the acceptance items
+above are all covered hermetically or against a real database — so this is a
+deliberate gap, not an oversight.
 
 ## 6. Known gaps
 

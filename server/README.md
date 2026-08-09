@@ -120,6 +120,14 @@ explaining the computed map, refused outright when the map is degraded. Full
 contract, status derivation and degradation paths:
 [`specs/blast.md`](specs/blast.md).
 
+`POST /reviews/adhoc` runs the **same** reviewer over a posted unified diff with
+no PR behind it — the server side of `devdigest review --mode working` in
+[`mcp/`](../mcp/README.md). It composes the same exported pieces the PR path
+uses (`parseUnifiedDiff` → `reviewPullRequest` → `countBlockers`), so grounding
+and the blocker gate behave identically, and it persists **nothing**: no runs,
+no reviews, no findings, no trace. Contract, refusals and acceptance:
+[`specs/reviews-adhoc.md`](specs/reviews-adhoc.md).
+
 ## Environment
 
 `server/.env` (copied from `.env.example`):
