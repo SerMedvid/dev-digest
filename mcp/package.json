@@ -4,8 +4,12 @@
   "private": true,
   "type": "module",
   "description": "Local MCP server exposing DevDigest reviews, findings and conventions to MCP clients. Thin HTTP adapter over the DevDigest API — no database, no server internals.",
+  "bin": {
+    "devdigest": "bin/devdigest.mjs"
+  },
   "scripts": {
     "start": "tsx src/main.ts",
+    "review": "tsx src/cli/main.ts review",
     "inspect": "npx --yes @modelcontextprotocol/inspector npx tsx src/main.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "build": "tsc --noEmit -p tsconfig.json",

@@ -95,6 +95,29 @@ an entry can age — verify before relying on one.
 
 ## Recurring errors & fixes
 
+- **2026-08-09** — In a `tsx`-run CLI, `process.exit(code)` **loses the exit
+  code on Windows**: it tears down while tsx's ESM loader thread is still live,
+  which trips a libuv assertion
+  (`!(handle->flags & UV_HANDLE_CLOSING), file src\win\async.c`) and the process
+  reports **127** instead. `devdigest review` exited 127 on a clean review whose
+  contract says 0 — the review output printed correctly first, so nothing looked
+  wrong until the code was checked. Set `process.exitCode` and return, letting
+  the loop drain. This applies to every `tsx`-launched entry point here
+  (`mcp/src/cli/main.ts`, `mcp/src/main.ts`, `server`'s tsx scripts), and it is
+  invisible to a unit test that calls the command function directly — only
+  running the binary and reading `$?` catches it.
+  (`mcp/src/cli/main.ts:22`)
+
+- **2026-08-09** — `pnpm <script> -- <args>` forwards the `--` **verbatim** to
+  the script (pnpm 11 does not strip it, unlike npm), so a hand-rolled argv
+  parser sees `['review', '--', '--mode', 'working']` and rejects `--` as an
+  unknown option. The documented npm-style invocation therefore fails on the
+  package manager the package actually uses. Either skip a bare `--` in the
+  parser or document the no-separator form; skipping is safer, since both
+  invocations then work. Reproduce with `pnpm review -- --mode working` — the
+  echoed command line in pnpm's own output shows the quoted `"--"`.
+  (`mcp/src/cli/args.ts:73`)
+
 - **2026-08-06** — A *fabricated* secret in fixture data still blocks the push if
   it is **shaped** like a real one. [`server/src/db/seed.ts`](server/src/db/seed.ts)'s
   demo diff carried `sk_live_` + 40 alphanumerics, and GitHub push protection

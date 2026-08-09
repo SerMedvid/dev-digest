@@ -122,3 +122,31 @@ export interface BlastRadiusRef {
   crons: string[];
   summary: string | null;
 }
+
+/**
+ * Working-tree review — a structural mirror of `POST /reviews/adhoc`'s body.
+ * Only the fields the CLI renders; the server also returns token counts and
+ * cost, which the CLI does not print.
+ */
+export interface AdhocFinding {
+  severity: 'CRITICAL' | 'WARNING' | 'SUGGESTION';
+  title: string;
+  file: string;
+  start_line: number;
+  end_line: number;
+}
+
+export interface AdhocReviewRef {
+  review: {
+    verdict: string;
+    summary: string;
+    score: number;
+    findings: AdhocFinding[];
+  };
+  blockers: number;
+  /** Reasons the grounding gate dropped a finding — surfaced, never hidden. */
+  dropped: string[];
+  scope_dropped: string[];
+  agent: { name: string; ci_fail_on: string };
+  model: string;
+}
