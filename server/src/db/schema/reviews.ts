@@ -119,3 +119,25 @@ export const prFileSummary = pgTable(
   },
   (t) => ({ pk: primaryKey({ columns: [t.prId, t.path] }) }),
 );
+
+/**
+ * On-demand LLM explanation of a PR's blast-radius map. One row per PR — the
+ * summary describes the map at ONE head, not a history, so a new head replaces
+ * the row wholesale rather than accumulating.
+ *
+ * `head_sha` is the freshness key: a row from an older head is never served
+ * (the map it described no longer exists) and the next explicit Explain click
+ * replaces it. That is also why this is a table rather than a column on
+ * `pr_files` — see `prFileSummary` above for the same reasoning.
+ */
+export const blastSummary = pgTable('blast_summary', {
+  prId: uuid('pr_id')
+    .primaryKey()
+    .references(() => pullRequests.id, { onDelete: 'cascade' }),
+  /** Head commit the explained map was computed against — the cache key. */
+  headSha: text('head_sha').notNull(),
+  summary: text('summary').notNull(),
+  provider: text('provider').notNull(),
+  model: text('model').notNull(),
+  createdAt: now(),
+});
