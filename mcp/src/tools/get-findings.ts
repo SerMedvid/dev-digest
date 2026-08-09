@@ -52,6 +52,27 @@ export const getFindingsTool: ToolDef = {
         );
       }
 
+      // An agent filter that matches nothing would otherwise project to
+      // {verdict: "no_reviews", total: 0} — a successful-looking result the
+      // model reads as "this PR was never reviewed". Name who did review instead.
+      if (args.agent) {
+        const wanted = args.agent.trim().toLowerCase();
+        const matched = reviews.some((r) => (r.agent_name ?? '').toLowerCase() === wanted);
+        if (!matched) {
+          const reviewers = [
+            ...new Set(reviews.map((r) => r.agent_name).filter((n): n is string => Boolean(n))),
+          ];
+          throw new ToolError(
+            reviewers.length > 0
+              ? `No review by "${args.agent}" exists on ${repo.full_name}#${args.pr}.`
+              : `The review on ${repo.full_name}#${args.pr} is not attributed to a named agent, so it cannot be filtered by agent.`,
+            reviewers.length > 0
+              ? `That pull request was reviewed by: ${reviewers.join(', ')}. Retry with one of those names, drop the agent argument to combine every reviewer, or start a fresh review with devdigest_run_agent_on_pr.`
+              : 'Drop the agent argument to read the review as it stands, or start an attributed review with devdigest_run_agent_on_pr.',
+          );
+        }
+      }
+
       const projection = projectFindings(reviews, {
         format: args.format,
         limit: args.limit,

@@ -126,6 +126,41 @@ describe('devdigest_get_findings', () => {
     expect(api.calls).not.toContain('listReviews:pr-1');
   });
 
+  it('returns just that reviewer when the agent filter matches', async () => {
+    const result = await getFindingsTool.handler(
+      { repo: 'acme/payments-api', pr: 482, agent: 'security reviewer' },
+      deps(makeFakeApi({ reviews })),
+    );
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({ total: 1, agents: ['Security Reviewer'] });
+  });
+
+  // Without this guard the filter silently produces {verdict:"no_reviews",
+  // total:0} — a successful-looking result the model reads as "never reviewed".
+  it('names the actual reviewers when the agent filter matches nothing', async () => {
+    const result = await getFindingsTool.handler(
+      { repo: 'acme/payments-api', pr: 482, agent: 'Performance Reviewer' },
+      deps(makeFakeApi({ reviews })),
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('Performance Reviewer');
+    expect(result.content[0]!.text).toContain('Security Reviewer');
+    expect(result.content[0]!.text).toContain('Next:');
+  });
+
+  // Seeded/imported reviews carry agent_name: null, so they cannot be filtered
+  // by agent at all. Saying "no such reviewer" there would be a lie.
+  it('explains that an unattributed review cannot be filtered by agent', async () => {
+    const unattributed = [{ ...reviews[0]!, agent_id: null, run_id: null, agent_name: null }];
+    const result = await getFindingsTool.handler(
+      { repo: 'acme/payments-api', pr: 482, agent: 'Security Reviewer' },
+      deps(makeFakeApi({ reviews: unattributed })),
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('not attributed');
+    expect(result.content[0]!.text).toContain('Next:');
+  });
+
   it('is marked read-only', () => {
     expect(getFindingsTool.annotations.readOnlyHint).toBe(true);
   });
