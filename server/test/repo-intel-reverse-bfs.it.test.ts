@@ -148,5 +148,18 @@ d('repo-intel blast reads', () => {
       );
       expect(rows.map((r) => r.fromPath)).toEqual(['src/api/index.ts']);
     });
+
+    it('keeps a caller that is itself one of the changed files', async () => {
+      // `declFiles` is the PR's WHOLE changed-file list, and a caller is very
+      // often also in the diff. Excluding the list rather than each symbol's
+      // own declaration file would drop exactly the callers a reviewer most
+      // wants to see.
+      const rows = await repo.getResolvedCallers(
+        refRepoId,
+        ['src/middleware/ratelimit.ts', 'src/api/index.ts'],
+        ['rateLimit'],
+      );
+      expect(rows.map((r) => r.fromPath)).toEqual(['src/api/index.ts']);
+    });
   });
 });

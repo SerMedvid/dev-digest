@@ -120,6 +120,22 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-09** — The `declFiles` parameter of
+  [`RepoIntelRepository.getResolvedCallers`](src/modules/repo-intel/repository.ts)
+  is **the PR's whole changed-file list**, not one symbol's declaration file —
+  `tryPersistentBlast` passes `changedFiles` straight through. So filtering
+  self-references with `notInArray(references.fromPath, declFiles)` reads
+  correctly and is wrong: it drops every caller the PR *also* touches, which on
+  a real multi-file diff is most of them (the seeded nine-file PR #482 went from
+  four callers of `rateLimit` to one). The self-reference filter has to be
+  column-to-column — `ne(references.fromPath, references.declFile)` — because
+  only `decl_file` names the file that actually declares the symbol. The same
+  confusion bites the fact-file set: `getReverseDependents` excludes its own
+  inputs by contract, so `changedFiles` must be unioned back in explicitly or a
+  changed route file's own endpoints/crons are attributed to nothing.
+  (`src/modules/repo-intel/repository.ts:527`,
+  `src/modules/repo-intel/service.ts:394`)
+
 - **2026-08-06** — `GET /pulls/:id` **deletes and re-inserts every `pr_files` row
   on each request** (and the same for `pr_commits`), so nothing per-file can be
   cached on that table: a column added there is silently wiped by the next page
@@ -233,6 +249,19 @@ an entry can age — verify before relying on one.
   (`src/modules/reviews/run-executor.ts:213`)
 
 ## Recurring errors & fixes
+
+- **2026-08-09** — A repo-intel fixture whose `changedFiles` has **one entry**
+  cannot distinguish "this symbol's declaration file" from "the set of changed
+  files" — every predicate over the two is trivially equivalent, so a filter
+  that confuses them passes. Two blast defects lived through a green
+  hand-built route it-test for exactly this reason and only appeared when the
+  same endpoint was pointed at the seeded nine-file PR #482. When testing
+  anything in `repo-intel` that takes a file list, make the fixture's list
+  contain a file that is *also* a caller/dependent of another file in it —
+  that overlap is the normal case in a real PR and the only shape that
+  exercises the distinction. Asserting the whole file set a query was asked
+  for (rather than just the result) is what localises it.
+  (`test/blast-routes.it.test.ts:396`, `test/repo-intel-blast.test.ts:140`)
 
 - **2026-08-06** — The hermetic/integration lane split excludes by **filename, not
   by `describe`**, so a Docker-free block placed inside an `*.it.test.ts` file

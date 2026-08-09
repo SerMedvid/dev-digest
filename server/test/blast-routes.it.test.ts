@@ -372,4 +372,67 @@ d('blast routes (Testcontainers pg)', () => {
       expect(res.statusCode).toBe(404);
     });
   });
+
+  /**
+   * Acceptance #1 over the SEEDED demo repo, not a hand-built fixture: a fresh
+   * install with `clone_path: null` and no model key must still demonstrate the
+   * feature. `seed()` already ran in `beforeAll`.
+   */
+  describe('the seeded demo PR #482', () => {
+    let demoPrId: string;
+
+    beforeAll(async () => {
+      const [demoRepo] = await pg.handle.db
+        .select()
+        .from(t.repos)
+        .where(eq(t.repos.fullName, 'acme/payments-api'));
+      const [demoPr] = await pg.handle.db
+        .select()
+        .from(t.pullRequests)
+        .where(eq(t.pullRequests.repoId, demoRepo!.id));
+      demoPrId = demoPr!.id;
+    });
+
+    it('shows ≥2 real callers of the changed helper and ≥1 endpoint and cron', async () => {
+      const before = structuredCalls().length;
+      const res = await app.inject({ method: 'GET', url: `/pulls/${demoPrId}/blast` });
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+
+      expect(body.status).toBe('ok');
+      expect(body.reason).toBeNull();
+
+      const rateLimit = body.changed_symbols.find((s: { name: string }) => s.name === 'rateLimit');
+      expect(rateLimit).toBeDefined();
+      expect(rateLimit.callers.length).toBeGreaterThanOrEqual(2);
+      expect(body.endpoints.length).toBeGreaterThanOrEqual(1);
+      expect(body.crons.length).toBeGreaterThanOrEqual(1);
+
+      // No clone, no model key, no index job — the whole map came from rows.
+      expect(structuredCalls()).toHaveLength(before);
+    });
+
+    it('attributes the cron through the depth-2 import hop', async () => {
+      const res = await app.inject({ method: 'GET', url: `/pulls/${demoPrId}/blast` });
+      // server.ts declares the cron and reaches ratelimit.ts only via
+      // api/public/index.ts — only the reverse BFS can find it.
+      expect(res.json().crons).toContain('job:reset-rate-buckets');
+    });
+
+    it('is idempotent — a second seed() does not duplicate the slice', async () => {
+      const countSymbols = async () => {
+        const [demoRepo] = await pg.handle.db
+          .select()
+          .from(t.repos)
+          .where(eq(t.repos.fullName, 'acme/payments-api'));
+        return pg.handle.db.select().from(t.symbols).where(eq(t.symbols.repoId, demoRepo!.id));
+      };
+      const before = await countSymbols();
+      await seed(pg.handle.db);
+      expect(await countSymbols()).toHaveLength(before.length);
+
+      const res = await app.inject({ method: 'GET', url: `/pulls/${demoPrId}/blast` });
+      expect(res.json().status).toBe('ok');
+    });
+  });
 });

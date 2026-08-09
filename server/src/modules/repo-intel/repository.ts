@@ -13,7 +13,7 @@
  * raw-SQL probes below MUST swallow `undefined_table` (Postgres 42P01) so the
  * facade keeps returning degraded — never throws.
  */
-import { and, asc, desc, eq, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { clampIndexedName } from '../../db/schema/context.js';
@@ -530,7 +530,13 @@ export class RepoIntelRepository {
           // A symbol referenced from its OWN declaration file (recursion, a
           // re-export, a local call) is not a blast caller — blast is about who
           // is affected ELSEWHERE. The persistent path used to leak these.
-          notInArray(t.references.fromPath, declFiles),
+          //
+          // Compared column-to-column, NOT against `declFiles`: `declFiles` is
+          // the PR's whole changed-file list, and a file can be both a caller
+          // and part of the diff. Excluding the list would drop exactly the
+          // callers a reviewer most wants to see — every caller that this PR
+          // also touches.
+          ne(t.references.fromPath, t.references.declFile),
         ),
       );
   }

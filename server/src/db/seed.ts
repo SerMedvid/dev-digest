@@ -77,6 +77,85 @@ const SMART_DIFF_SEED_FILES: ReadonlyArray<{
   { path: 'README.md', additions: 6, deletions: 2, patch: null },
 ];
 
+// ---- Blast radius index slice for PR #482 (design §8) ----
+//
+// The seeded demo repo has `clone_path: null` and no index, so without these
+// rows the Blast card could only ever show `degraded` on a fresh install — the
+// acceptance demo ("a change to a shared helper shows ≥2 real callers and an
+// HTTP endpoint") has to work with no clone and no model key.
+//
+// Consistent with the nine `pr_files` above: `src/middleware/ratelimit.ts` is
+// the changed file, and its callers are files that PR touches — except
+// `src/api/public/health.ts`, which is deliberately NOT in the diff. Callers
+// living outside the PR is the entire point of a blast map.
+//
+// The version is restated rather than imported: `seed.ts` imports no module
+// code today, and `repo-intel/constants.ts`'s INDEXER_VERSION is the value
+// this must match (a mismatch forces a reindex, which a seeded repo with no
+// clone can never complete).
+const BLAST_SEED_INDEXER_VERSION = 2; // = repo-intel/constants.ts INDEXER_VERSION
+
+const BLAST_DECL_FILE = 'src/middleware/ratelimit.ts';
+
+const BLAST_SEED_SYMBOLS: ReadonlyArray<{
+  path: string;
+  name: string;
+  kind: string;
+  line: number;
+  endLine: number;
+}> = [
+  { path: BLAST_DECL_FILE, name: 'rateLimit', kind: 'function', line: 12, endLine: 38 },
+  { path: BLAST_DECL_FILE, name: 'bucketKey', kind: 'function', line: 41, endLine: 52 },
+  // Caller-side symbols, so the map names the enclosing function at each call
+  // site instead of falling back to the file's basename.
+  { path: 'src/api/public/index.ts', name: 'publicRouter', kind: 'function', line: 10, endLine: 40 },
+  { path: 'src/api/public/webhooks.ts', name: 'handleWebhook', kind: 'function', line: 30, endLine: 60 },
+  { path: 'src/api/public/health.ts', name: 'healthRoute', kind: 'function', line: 5, endLine: 20 },
+  { path: 'src/server.ts', name: 'boot', kind: 'function', line: 70, endLine: 120 },
+];
+
+const BLAST_SEED_REFERENCES: ReadonlyArray<{
+  fromPath: string;
+  toSymbol: string;
+  line: number;
+}> = [
+  { fromPath: 'src/api/public/index.ts', toSymbol: 'rateLimit', line: 23 },
+  { fromPath: 'src/api/public/webhooks.ts', toSymbol: 'rateLimit', line: 45 },
+  { fromPath: 'src/api/public/health.ts', toSymbol: 'rateLimit', line: 11 },
+  { fromPath: 'src/server.ts', toSymbol: 'rateLimit', line: 88 },
+  { fromPath: 'src/api/public/index.ts', toSymbol: 'bucketKey', line: 27 },
+  { fromPath: 'src/server.ts', toSymbol: 'bucketKey', line: 91 },
+];
+
+const BLAST_SEED_EDGES: ReadonlyArray<{ fromFile: string; toFile: string }> = [
+  { fromFile: 'src/api/public/index.ts', toFile: BLAST_DECL_FILE },
+  { fromFile: 'src/api/public/webhooks.ts', toFile: BLAST_DECL_FILE },
+  { fromFile: 'src/api/public/health.ts', toFile: BLAST_DECL_FILE },
+  // Depth-2 hop: server.ts reaches the middleware only through index.ts, so
+  // the reverse BFS is what attributes its cron.
+  { fromFile: 'src/server.ts', toFile: 'src/api/public/index.ts' },
+];
+
+/** Distinct ranks so caller ordering is deterministic on every seed. */
+const BLAST_SEED_RANKS: ReadonlyArray<{ filePath: string; rank: number; percentile: number }> = [
+  { filePath: 'src/api/public/index.ts', rank: 0.92, percentile: 92 },
+  { filePath: 'src/api/public/webhooks.ts', rank: 0.71, percentile: 71 },
+  { filePath: 'src/server.ts', rank: 0.55, percentile: 55 },
+  { filePath: BLAST_DECL_FILE, rank: 0.5, percentile: 50 },
+  { filePath: 'src/api/public/health.ts', rank: 0.31, percentile: 31 },
+];
+
+const BLAST_SEED_FACTS: ReadonlyArray<{
+  filePath: string;
+  endpoints: string[];
+  crons: string[];
+}> = [
+  { filePath: 'src/api/public/index.ts', endpoints: ['GET /api/public/items'], crons: [] },
+  { filePath: 'src/api/public/webhooks.ts', endpoints: ['POST /api/public/webhooks'], crons: [] },
+  { filePath: 'src/api/public/health.ts', endpoints: ['GET /api/public/health'], crons: [] },
+  { filePath: 'src/server.ts', endpoints: [], crons: ['job:reset-rate-buckets'] },
+];
+
 /**
  * Seed the starter's demo data. Idempotent: re-running upserts the default
  * workspace/user and the demo fixtures.
@@ -252,6 +331,51 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
     await db
       .insert(t.prFiles)
       .values(SMART_DIFF_SEED_FILES.map((f) => ({ prId: pr!.id, ...f })));
+  }
+
+  // ---- blast radius index slice (L04, design §8) ----
+  // Outside the `if (!pr)` block for the same reason `pr_files` is: a DB
+  // seeded before this slice existed already has PR #482 and the repo, and
+  // would otherwise never acquire an index.
+  //
+  // The whole slice is replaced when the symbol count is short, rather than
+  // upserted row by row: `references` has no unique key to conflict on, and a
+  // partially-written slice (say, symbols but no ranks) produces a map with
+  // callers that silently lose their ordering. All-or-nothing keeps the six
+  // tables consistent with each other.
+  const existingBlastSymbols = await db
+    .select({ id: t.symbols.id })
+    .from(t.symbols)
+    .where(eq(t.symbols.repoId, repoId));
+  if (existingBlastSymbols.length < BLAST_SEED_SYMBOLS.length) {
+    await db.delete(t.symbols).where(eq(t.symbols.repoId, repoId));
+    await db.delete(t.references).where(eq(t.references.repoId, repoId));
+    await db.delete(t.fileEdges).where(eq(t.fileEdges.repoId, repoId));
+    await db.delete(t.fileRank).where(eq(t.fileRank.repoId, repoId));
+    await db.delete(t.fileFacts).where(eq(t.fileFacts.repoId, repoId));
+    await db.delete(t.repoIndexState).where(eq(t.repoIndexState.repoId, repoId));
+
+    await db.insert(t.repoIndexState).values({
+      repoId,
+      // Read off the seeded PR rather than restated, so the card can never
+      // render as `index_stale` on a fresh install.
+      lastIndexedSha: pr!.headSha,
+      indexerVersion: BLAST_SEED_INDEXER_VERSION,
+      status: 'full',
+      filesIndexed: BLAST_SEED_RANKS.length,
+      filesSkipped: 0,
+    });
+    await db
+      .insert(t.symbols)
+      .values(BLAST_SEED_SYMBOLS.map((s) => ({ repoId, exported: true, ...s })));
+    await db
+      .insert(t.references)
+      .values(BLAST_SEED_REFERENCES.map((r) => ({ repoId, declFile: BLAST_DECL_FILE, ...r })));
+    await db.insert(t.fileEdges).values(BLAST_SEED_EDGES.map((e) => ({ repoId, ...e })));
+    await db
+      .insert(t.fileRank)
+      .values(BLAST_SEED_RANKS.map((r) => ({ repoId, pagerank: r.rank, hotness: 0, ...r })));
+    await db.insert(t.fileFacts).values(BLAST_SEED_FACTS.map((f) => ({ repoId, ...f })));
   }
 
   // ---- derived intent for the demo PR (L03) ----

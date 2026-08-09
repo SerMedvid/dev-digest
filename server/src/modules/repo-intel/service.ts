@@ -393,11 +393,14 @@ export class RepoIntelService implements RepoIntel {
       capped.push(c);
     }
 
-    // Endpoints/crons are attributed over caller files ∪ their reverse
-    // dependents: a route file two imports above the changed helper is affected
-    // even though it never names the changed symbol.
+    // Endpoints/crons are attributed over the changed files themselves ∪ their
+    // callers ∪ their reverse dependents. A route file two imports above the
+    // changed helper is affected even though it never names the changed symbol
+    // — and a changed file that declares an endpoint or cron of its own is
+    // affected most directly of all. `getReverseDependents` excludes its own
+    // inputs by contract, so the changed files have to be added back here.
     const dependents = await this.repo.getReverseDependents(repoId, changedFiles);
-    const factFiles = [...new Set([...callerFiles, ...dependents])];
+    const factFiles = [...new Set([...changedFiles, ...callerFiles, ...dependents])];
 
     // Precomputed facts per file, so consumers can attribute endpoints/crons to
     // the changed symbol whose callers live in that file.

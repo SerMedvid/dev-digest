@@ -128,10 +128,26 @@ describe('tryPersistentBlast — BFS-widened facts', () => {
 
     expect(res.impactedEndpoints).toContain('GET /api/public/items');
     expect(res.impactedCrons).toContain('job:reset-rate-buckets');
-    // Facts were fetched over caller files ∪ reverse dependents.
-    expect(factsAskedFor[0]).toEqual(['src/routes.ts', 'src/service.ts']);
+    // Facts were fetched over changed files ∪ caller files ∪ reverse dependents.
+    expect(factsAskedFor[0]).toEqual([
+      'src/lib/helper.ts',
+      'src/routes.ts',
+      'src/service.ts',
+    ]);
     expect(res.factsByFile?.['src/routes.ts']?.endpoints).toEqual(['GET /api/public/items']);
     expect(res.degraded).toBe(false);
+  });
+
+  it("attributes a changed file's own endpoints and crons", async () => {
+    // A PR that changes the route file itself: its endpoint is impacted most
+    // directly of all, and `getReverseDependents` excludes its own inputs.
+    const { svc } = buildService({
+      symbolsByPath: [sym('src/routes.ts', 'handler', 4)],
+      facts: [{ filePath: 'src/routes.ts', endpoints: ['GET /x'], crons: ['job:y'] }],
+    });
+    const res = await svc.getBlastRadius('r1', ['src/routes.ts']);
+    expect(res.impactedEndpoints).toEqual(['GET /x']);
+    expect(res.impactedCrons).toEqual(['job:y']);
   });
 
   it('carries the declaration line on every changed symbol', async () => {
