@@ -88,3 +88,37 @@ export interface ConventionsRef {
   scan: { status: string } | null;
   candidates: ConventionRef[];
 }
+
+/**
+ * Blast radius — a structural mirror of the server's `BlastRadiusResponse`
+ * (`contracts/blast.ts`). Declared here rather than imported: `mcp/` resolves
+ * no `@devdigest/shared` alias, and the tool only ever reads these fields.
+ */
+export interface BlastCallerRef {
+  file: string;
+  line: number;
+  /** The ENCLOSING symbol at the call site, not the one being called. */
+  symbol: string;
+  rank: number;
+}
+
+export interface BlastSymbolRef {
+  name: string;
+  kind: string;
+  file: string;
+  line: number | null;
+  callers: BlastCallerRef[];
+  endpoints: string[];
+  crons: string[];
+}
+
+export interface BlastRadiusRef {
+  /** `partial`/`degraded` mean the map is incomplete — never launder them. */
+  status: 'ok' | 'partial' | 'degraded';
+  reason: string | null;
+  head_sha: string;
+  changed_symbols: BlastSymbolRef[];
+  endpoints: string[];
+  crons: string[];
+  summary: string | null;
+}

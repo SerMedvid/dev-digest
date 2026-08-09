@@ -1,4 +1,5 @@
 import type {
+  BlastRadiusRef,
   ConventionRef,
   ConventionStatus,
   ConventionsRef,
@@ -147,5 +148,80 @@ export function projectConventions(
       `Showing ${shown.length} of ${matching.length} conventions. ` +
       `Narrow with the category argument or raise limit.`;
   }
+  return projection;
+}
+
+/** Top callers listed per symbol before the projection says how many it dropped. */
+const MAX_TOP_CALLERS = 5;
+
+export interface BlastSymbolProjection {
+  name: string;
+  file: string;
+  line: number | null;
+  caller_count: number;
+  /** "file:line (enclosingSymbol)", rank-descending, capped. */
+  top_callers: string[];
+  endpoints: string[];
+  crons: string[];
+}
+
+export interface BlastProjection {
+  status: string;
+  reason?: string;
+  head_sha: string;
+  symbols: BlastSymbolProjection[];
+  endpoints: string[];
+  crons: string[];
+  summary?: string;
+  note?: string;
+}
+
+/**
+ * Compact the blast map for an agent: counts plus the top callers, not every
+ * row. `status` and `reason` are always carried through — a `degraded` map
+ * projected as a successful-looking empty result is the one failure mode this
+ * tool must not have, because the caller cannot tell it from "nothing calls
+ * this".
+ */
+export function projectBlastRadius(res: BlastRadiusRef): BlastProjection {
+  const symbols: BlastSymbolProjection[] = res.changed_symbols.map((s) => ({
+    name: s.name,
+    file: s.file,
+    line: s.line,
+    caller_count: s.callers.length,
+    top_callers: s.callers
+      .slice(0, MAX_TOP_CALLERS)
+      .map((c) => `${c.file}:${c.line} (${c.symbol})`),
+    endpoints: s.endpoints,
+    crons: s.crons,
+  }));
+
+  const projection: BlastProjection = {
+    status: res.status,
+    head_sha: res.head_sha,
+    symbols,
+    endpoints: res.endpoints,
+    crons: res.crons,
+  };
+  if (res.reason) projection.reason = res.reason;
+  if (res.summary) projection.summary = res.summary;
+
+  const truncated = res.changed_symbols.filter((s) => s.callers.length > MAX_TOP_CALLERS);
+  const notes: string[] = [];
+  if (truncated.length > 0) {
+    notes.push(
+      `top_callers is capped at ${MAX_TOP_CALLERS} per symbol; caller_count is the true total.`,
+    );
+  }
+  // Spelled out rather than left for the model to infer from a status string.
+  if (res.status === 'degraded') {
+    notes.push(
+      'The index could not be read, so the empty arrays above mean "unknown", not "nothing".',
+    );
+  } else if (res.status === 'partial') {
+    notes.push('The index is incomplete or behind this PR, so some callers may be missing.');
+  }
+  if (notes.length > 0) projection.note = notes.join(' ');
+
   return projection;
 }

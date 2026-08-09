@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { projectFindings, projectConventions } from '../src/project.js';
-import type { FindingRef, ReviewRef } from '../src/types.js';
+import { projectFindings, projectConventions, projectBlastRadius } from '../src/project.js';
+import type { BlastRadiusRef, BlastSymbolRef, FindingRef, ReviewRef } from '../src/types.js';
 
 function finding(over: Partial<FindingRef> = {}): FindingRef {
   return {
@@ -172,5 +172,73 @@ describe('projectConventions', () => {
     const out = projectConventions({ scan: { status: 'done' }, candidates: many }, { limit: 10, status: 'accepted' });
     expect(out.shown).toBe(10);
     expect(out.note).toContain('category');
+  });
+});
+
+describe('projectBlastRadius', () => {
+  function symbol(over: Partial<BlastSymbolRef> = {}): BlastSymbolRef {
+    return {
+      name: 'rateLimit',
+      kind: 'function',
+      file: 'src/middleware/ratelimit.ts',
+      line: 12,
+      callers: [{ file: 'src/api/index.ts', line: 23, symbol: 'publicRouter', rank: 0.9 }],
+      endpoints: ['GET /x'],
+      crons: [],
+      ...over,
+    };
+  }
+  function map(over: Partial<BlastRadiusRef> = {}): BlastRadiusRef {
+    return {
+      status: 'ok',
+      reason: null,
+      head_sha: 'sha1',
+      changed_symbols: [symbol()],
+      endpoints: ['GET /x'],
+      crons: [],
+      summary: null,
+      ...over,
+    };
+  }
+
+  it('renders a caller as file:line (enclosingSymbol)', () => {
+    const out = projectBlastRadius(map());
+    expect(out.symbols[0]!.top_callers).toEqual(['src/api/index.ts:23 (publicRouter)']);
+    expect(out.symbols[0]!.caller_count).toBe(1);
+    expect(out.note).toBeUndefined();
+  });
+
+  it('caps top_callers but keeps caller_count truthful, and says so', () => {
+    const many = Array.from({ length: 25 }, (_, i) => ({
+      file: `src/caller${i}.ts`,
+      line: i + 1,
+      symbol: `fn${i}`,
+      rank: 1 - i / 100,
+    }));
+    const out = projectBlastRadius(map({ changed_symbols: [symbol({ callers: many })] }));
+
+    expect(out.symbols[0]!.caller_count).toBe(25);
+    expect(out.symbols[0]!.top_callers).toHaveLength(5);
+    expect(out.note).toContain('caller_count is the true total');
+  });
+
+  it('omits reason and summary when there are none', () => {
+    const out = projectBlastRadius(map());
+    expect(out).not.toHaveProperty('reason');
+    expect(out).not.toHaveProperty('summary');
+  });
+
+  it('carries a degraded status with an explicit "unknown, not nothing" note', () => {
+    const out = projectBlastRadius(
+      map({ status: 'degraded', reason: 'no_data', changed_symbols: [], endpoints: [] }),
+    );
+    expect(out.status).toBe('degraded');
+    expect(out.reason).toBe('no_data');
+    expect(out.note).toContain('"unknown"');
+  });
+
+  it('carries a cached summary through', () => {
+    const out = projectBlastRadius(map({ summary: 'Touches the public API.' }));
+    expect(out.summary).toBe('Touches the public API.');
   });
 });

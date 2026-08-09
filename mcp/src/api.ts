@@ -1,5 +1,6 @@
 import type {
   AgentRef,
+  BlastRadiusRef,
   ConventionsRef,
   PullRef,
   RepoRef,
@@ -40,6 +41,7 @@ export interface ApiClient {
   listRuns(prId: string): Promise<RunRef[]>;
   listReviews(prId: string): Promise<ReviewRef[]>;
   getConventions(repoId: string): Promise<ConventionsRef>;
+  getBlastRadius(prId: string): Promise<BlastRadiusRef>;
 }
 
 export class HttpApiClient implements ApiClient {
@@ -101,5 +103,9 @@ export class HttpApiClient implements ApiClient {
 
   getConventions(repoId: string): Promise<ConventionsRef> {
     return this.request<ConventionsRef>(`/repos/${repoId}/conventions`);
+  }
+
+  getBlastRadius(prId: string): Promise<BlastRadiusRef> {
+    return this.request<BlastRadiusRef>(`/pulls/${prId}/blast`);
   }
 }

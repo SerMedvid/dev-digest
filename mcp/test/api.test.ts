@@ -59,3 +59,26 @@ describe('HttpApiClient', () => {
     await expect(api.listRepos()).rejects.toBeInstanceOf(ApiUnavailableError);
   });
 });
+
+describe('HttpApiClient.getBlastRadius', () => {
+  it('GETs /pulls/:id/blast and returns the parsed map', async () => {
+    const calls: string[] = [];
+    const api = new HttpApiClient('http://api.test', async (input) => {
+      calls.push(String(input));
+      return jsonResponse({
+        status: 'ok',
+        reason: null,
+        head_sha: 'sha1',
+        changed_symbols: [],
+        endpoints: [],
+        crons: [],
+        summary: null,
+      });
+    });
+
+    const map = await api.getBlastRadius('pr-1');
+    expect(calls).toEqual(['http://api.test/pulls/pr-1/blast']);
+    expect(map.status).toBe('ok');
+    expect(map.head_sha).toBe('sha1');
+  });
+});
