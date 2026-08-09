@@ -3,12 +3,17 @@ import { ApiHttpError, ApiUnavailableError } from './api.js';
 /**
  * What a tool handler hands back. Deliberately a local shape rather than the
  * SDK's CallToolResult so handlers stay testable without importing the SDK.
+ *
+ * A `type` alias, not an `interface`, on purpose: the SDK's CallToolResult
+ * carries an index signature (`[x: string]: unknown`), and TypeScript only
+ * grants implicit index signatures to type aliases. As an interface this is
+ * structurally identical but rejected at the registerTool() call site.
  */
-export interface ToolResult {
+export type ToolResult = {
   content: { type: 'text'; text: string }[];
   structuredContent?: Record<string, unknown>;
   isError?: boolean;
-}
+};
 
 /**
  * A business failure. Always carries `next` — the concrete action that gets
