@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { ALL_TOOLS } from '../src/tools/index.js';
 import { listAgentsTool } from '../src/tools/list-agents.js';
 import { getFindingsTool } from '../src/tools/get-findings.js';
+import { getConventionsTool } from '../src/tools/get-conventions.js';
 import { makeFakeApi } from './helpers/fake-api.js';
 import type { ToolDeps } from '../src/tools/index.js';
 
@@ -125,5 +126,76 @@ describe('devdigest_get_findings', () => {
 
   it('is marked read-only', () => {
     expect(getFindingsTool.annotations.readOnlyHint).toBe(true);
+  });
+});
+
+describe('devdigest_get_conventions', () => {
+  const conventions = {
+    scan: { status: 'done' },
+    candidates: [
+      { id: 'c1', category: 'testing', rule: 'Tests use vitest', evidence_path: 'a.ts', evidence_line: 1, confidence: 0.9, status: 'accepted' as const },
+      { id: 'c2', category: 'imports', rule: 'No default exports', evidence_path: 'b.ts', evidence_line: 2, confidence: 0.6, status: 'pending' as const },
+    ],
+  };
+
+  it('returns accepted conventions by default', async () => {
+    const result = await getConventionsTool.handler(
+      { repo: 'acme/payments-api' },
+      deps(makeFakeApi({ conventions })),
+    );
+    expect(result.structuredContent).toMatchObject({
+      repo: 'acme/payments-api',
+      scan_status: 'done',
+      conventions: [{ category: 'testing', rule: 'Tests use vitest' }],
+      total: 1,
+    });
+  });
+
+  it('tells the caller to run an extraction when the repo was never scanned', async () => {
+    const result = await getConventionsTool.handler(
+      { repo: 'acme/payments-api' },
+      deps(makeFakeApi({ conventions: { scan: null, candidates: [] } })),
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('Conventions');
+    expect(result.content[0]!.text).toContain('Next:');
+  });
+
+  it('explains an accepted-but-empty result rather than returning silence', async () => {
+    const result = await getConventionsTool.handler(
+      { repo: 'acme/payments-api' },
+      deps(
+        makeFakeApi({
+          conventions: { scan: { status: 'done' }, candidates: [conventions.candidates[1]!] },
+        }),
+      ),
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('pending');
+  });
+
+  // The server's ConventionCategory enum (shared/contracts/knowledge.ts) is the
+  // contract. Accepting a category the server never emits would silently return
+  // "no conventions match" instead of an argument error.
+  it('accepts every category the server can emit', async () => {
+    const serverCategories = [
+      'naming',
+      'structure',
+      'error-handling',
+      'api-shape',
+      'testing',
+      'imports',
+      'typing',
+      'tooling',
+    ];
+    const shape = z.object(getConventionsTool.inputSchema).shape;
+    const category = shape.category as z.ZodTypeAny;
+    for (const c of serverCategories) {
+      expect(category.safeParse(c).success, `category "${c}"`).toBe(true);
+    }
+  });
+
+  it('is marked read-only', () => {
+    expect(getConventionsTool.annotations.readOnlyHint).toBe(true);
   });
 });
