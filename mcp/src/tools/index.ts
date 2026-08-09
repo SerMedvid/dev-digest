@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type { ApiClient } from '../api.js';
 import type { ToolResult } from '../errors.js';
+import { blastRadiusTool } from './get-blast-radius.js';
 import { getConventionsTool } from './get-conventions.js';
 import { getFindingsTool } from './get-findings.js';
 import { listAgentsTool } from './list-agents.js';
@@ -37,4 +38,5 @@ export const ALL_TOOLS: ToolDef[] = [
   runAgentOnPrTool,
   getFindingsTool,
   getConventionsTool,
+  blastRadiusTool,
 ];

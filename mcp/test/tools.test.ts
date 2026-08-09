@@ -5,6 +5,7 @@ import { listAgentsTool } from '../src/tools/list-agents.js';
 import { getFindingsTool } from '../src/tools/get-findings.js';
 import { getConventionsTool } from '../src/tools/get-conventions.js';
 import { runAgentOnPrTool } from '../src/tools/run-agent-on-pr.js';
+import { blastRadiusTool } from '../src/tools/get-blast-radius.js';
 import { makeFakeApi } from './helpers/fake-api.js';
 import type { ToolDeps } from '../src/tools/index.js';
 
@@ -314,5 +315,27 @@ describe('devdigest_run_agent_on_pr', () => {
   it('is the only tool that is not read-only', () => {
     expect(runAgentOnPrTool.annotations.readOnlyHint).toBe(false);
     expect(runAgentOnPrTool.annotations.idempotentHint).toBe(false);
+  });
+});
+
+describe('devdigest_get_blast_radius', () => {
+  it('reports that it is not implemented and points at what is', async () => {
+    const result = await blastRadiusTool.handler(
+      { repo: 'acme/payments-api', pr: 482 },
+      deps(),
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('not implemented');
+    expect(result.content[0]!.text).toContain('devdigest_get_findings');
+  });
+
+  it('says so in its description too, so the model does not waste a call', () => {
+    expect(blastRadiusTool.description.toLowerCase()).toContain('not implemented');
+  });
+
+  it('never touches the API', async () => {
+    const api = makeFakeApi();
+    await blastRadiusTool.handler({ repo: 'acme/payments-api', pr: 482 }, deps(api));
+    expect(api.calls).toEqual([]);
   });
 });
