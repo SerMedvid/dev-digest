@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import type { ApiClient } from '../api.js';
 import type { ToolResult } from '../errors.js';
+import { getFindingsTool } from './get-findings.js';
 import { listAgentsTool } from './list-agents.js';
 
 export interface ToolDeps {
@@ -29,4 +30,4 @@ export interface ToolDef {
   handler(args: Record<string, unknown>, deps: ToolDeps): Promise<ToolResult>;
 }
 
-export const ALL_TOOLS: ToolDef[] = [listAgentsTool];
+export const ALL_TOOLS: ToolDef[] = [listAgentsTool, getFindingsTool];
