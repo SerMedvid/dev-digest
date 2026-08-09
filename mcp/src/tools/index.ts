@@ -4,6 +4,7 @@ import type { ToolResult } from '../errors.js';
 import { getConventionsTool } from './get-conventions.js';
 import { getFindingsTool } from './get-findings.js';
 import { listAgentsTool } from './list-agents.js';
+import { runAgentOnPrTool } from './run-agent-on-pr.js';
 
 export interface ToolDeps {
   api: ApiClient;
@@ -31,4 +32,9 @@ export interface ToolDef {
   handler(args: Record<string, unknown>, deps: ToolDeps): Promise<ToolResult>;
 }
 
-export const ALL_TOOLS: ToolDef[] = [listAgentsTool, getFindingsTool, getConventionsTool];
+export const ALL_TOOLS: ToolDef[] = [
+  listAgentsTool,
+  runAgentOnPrTool,
+  getFindingsTool,
+  getConventionsTool,
+];

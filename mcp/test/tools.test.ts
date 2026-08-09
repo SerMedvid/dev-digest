@@ -4,6 +4,7 @@ import { ALL_TOOLS } from '../src/tools/index.js';
 import { listAgentsTool } from '../src/tools/list-agents.js';
 import { getFindingsTool } from '../src/tools/get-findings.js';
 import { getConventionsTool } from '../src/tools/get-conventions.js';
+import { runAgentOnPrTool } from '../src/tools/run-agent-on-pr.js';
 import { makeFakeApi } from './helpers/fake-api.js';
 import type { ToolDeps } from '../src/tools/index.js';
 
@@ -197,5 +198,121 @@ describe('devdigest_get_conventions', () => {
 
   it('is marked read-only', () => {
     expect(getConventionsTool.annotations.readOnlyHint).toBe(true);
+  });
+});
+
+describe('devdigest_run_agent_on_pr', () => {
+  const finishedReview = [
+    {
+      id: 'rev1',
+      agent_id: 'agent-1',
+      run_id: 'run-1',
+      agent_name: 'Security Reviewer',
+      verdict: 'request_changes',
+      summary: 'One issue.',
+      score: 62,
+      findings: [
+        {
+          id: 'f1',
+          severity: 'CRITICAL' as const,
+          category: 'security',
+          title: 'SQL injection',
+          file: 'src/db.ts',
+          start_line: 42,
+          end_line: 42,
+          rationale: 'User input is concatenated.',
+          suggestion: 'Parameterise.',
+          confidence: 0.95,
+          dismissed_at: null,
+        },
+      ],
+    },
+  ];
+
+  const doneRun = {
+    run_id: 'run-1',
+    agent_id: 'agent-1',
+    agent_name: 'Security Reviewer',
+    status: 'done',
+    error: null,
+    score: 62,
+    findings_count: 1,
+  };
+
+  it('resolves, starts, waits and returns the findings in one call', async () => {
+    const api = makeFakeApi({ runs: [[doneRun]], reviews: finishedReview });
+    const result = await runAgentOnPrTool.handler(
+      { repo: 'acme/payments-api', pr: 482, agent: 'Security Reviewer' },
+      deps(api),
+    );
+
+    expect(api.calls).toContain('startReview:pr-1:agent-1');
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({
+      repo: 'acme/payments-api',
+      pr: 482,
+      agent: 'Security Reviewer',
+      status: 'done',
+      verdict: 'request_changes',
+      total: 1,
+    });
+  });
+
+  it("returns only the requested agent's findings, not every reviewer's", async () => {
+    const api = makeFakeApi({
+      runs: [[doneRun]],
+      reviews: [
+        ...finishedReview,
+        { ...finishedReview[0]!, id: 'rev2', run_id: 'run-9', agent_name: 'Test Quality' },
+      ],
+    });
+    const result = await runAgentOnPrTool.handler(
+      { repo: 'acme/payments-api', pr: 482, agent: 'Security Reviewer' },
+      deps(api),
+    );
+    expect(result.structuredContent).toMatchObject({ total: 1, agents: ['Security Reviewer'] });
+  });
+
+  it('hands back a run_id and a next step when the budget runs out', async () => {
+    const api = makeFakeApi({
+      runs: [[{ ...doneRun, status: 'running', score: null, findings_count: null }]],
+    });
+    const result = await runAgentOnPrTool.handler(
+      { repo: 'acme/payments-api', pr: 482, agent: 'Security Reviewer', wait_seconds: 1 },
+      deps(api),
+    );
+
+    expect(result.isError).toBeUndefined();
+    expect(result.structuredContent).toMatchObject({ status: 'running', run_id: 'run-1' });
+    expect(String(result.structuredContent?.next)).toContain('devdigest_get_findings');
+  });
+
+  it('surfaces the run error when the review fails', async () => {
+    const api = makeFakeApi({
+      runs: [[{ ...doneRun, status: 'failed', error: 'ANTHROPIC_API_KEY is not configured' }]],
+    });
+    const result = await runAgentOnPrTool.handler(
+      { repo: 'acme/payments-api', pr: 482, agent: 'Security Reviewer' },
+      deps(api),
+    );
+    expect(result.isError).toBe(true);
+    expect(result.content[0]!.text).toContain('ANTHROPIC_API_KEY');
+    expect(result.content[0]!.text).toContain('Next:');
+  });
+
+  it('does not start a review when the agent name is wrong', async () => {
+    const api = makeFakeApi();
+    const result = await runAgentOnPrTool.handler(
+      { repo: 'acme/payments-api', pr: 482, agent: 'Secrity' },
+      deps(api),
+    );
+    expect(result.isError).toBe(true);
+    expect(api.calls.some((c) => c.startsWith('startReview'))).toBe(false);
+    expect(result.content[0]!.text).toContain('devdigest_list_agents');
+  });
+
+  it('is the only tool that is not read-only', () => {
+    expect(runAgentOnPrTool.annotations.readOnlyHint).toBe(false);
+    expect(runAgentOnPrTool.annotations.idempotentHint).toBe(false);
   });
 });
