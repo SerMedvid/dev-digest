@@ -1,4 +1,16 @@
 {
+  "title": "Blast radius",
+  "loadError": "Couldn't load the blast radius.",
+  "retry": "Retry",
+  "empty": "No indexed symbols in the changed files.",
+  "partialWarning": "The index is incomplete or behind this PR ({reason}) — some callers may be missing.",
+  "degradedTitle": "Index not usable",
+  "degradedBody": "This repository has no usable index ({reason}), so callers can't be resolved. This is not the same as \"nothing calls it\".",
+  "explain": "Explain",
+  "explaining": "Explaining…",
+  "explainError": "Couldn't explain this map.",
+  "summaryTitle": "What this touches",
+  "declaredAt": "declared at",
   "stat": {
     "symbols": "symbols",
     "callers": "callers",
