@@ -283,6 +283,8 @@ export class Container {
           const rows = await this.reviewRepo.getPrFiles(prId);
           return rows.map((r) => r.path);
         },
+        priorPrs: (args) => this.reviewRepo.getPriorPrsTouching(args),
+        countPrsWithoutFiles: (args) => this.reviewRepo.countPrsWithoutFiles(args),
       },
       intel: {
         blastRadius: (repoId, files) => this.repoIntel.getBlastRadius(repoId, files),

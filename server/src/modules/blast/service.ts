@@ -1,7 +1,17 @@
-import type { BlastRadiusResponse, BlastSummaryResponse } from '@devdigest/shared';
+import type {
+  BlastRadiusResponse,
+  BlastSummaryResponse,
+  PriorPrsResponse,
+} from '@devdigest/shared';
 import { AppError, ConflictError, NotFoundError } from '../../platform/errors.js';
-import { BLAST_REASON, MAX_SUMMARY_CHARS } from './constants.js';
-import { degradedWire, toWire } from './helpers.js';
+import {
+  BLAST_REASON,
+  MAX_OVERLAP_FILES_PER_PR,
+  MAX_PRIOR_PRS,
+  MAX_SUMMARY_CHARS,
+  PRIOR_PR_STATUSES,
+} from './constants.js';
+import { degradedWire, toPriorPrWire, toWire } from './helpers.js';
 import type { BlastPullHead, BlastServiceDeps } from './ports.js';
 
 /**
@@ -101,6 +111,44 @@ export class BlastService {
     } finally {
       this.inFlight.delete(prId);
     }
+  }
+
+  /**
+   * Which merged or closed PRs have already been in these files.
+   *
+   * Nothing here touches the code index, so this answers just as well on a
+   * `degraded` map as on a healthy one — which is why the card renders it in
+   * both. `uncomparable_prs` is read even when the list short-circuits: an
+   * empty list is only honest alongside the count of what could not be looked
+   * at (`pr_files` is populated by `GET /pulls/:id`, so a PR nobody opened has
+   * no rows here).
+   */
+  async priorPrs(workspaceId: string, prId: string): Promise<PriorPrsResponse> {
+    const pull = await this.requirePull(workspaceId, prId);
+
+    const uncomparable = await this.deps.store.countPrsWithoutFiles({
+      workspaceId,
+      repoId: pull.repoId,
+      excludePrId: pull.id,
+    });
+
+    const paths = await this.deps.store.getPrFilePaths(pull.id);
+    // No stored paths, no question to ask — and `path IN ()` is not valid SQL.
+    if (paths.length === 0) return { prs: [], uncomparable_prs: uncomparable };
+
+    const rows = await this.deps.store.priorPrs({
+      workspaceId,
+      repoId: pull.repoId,
+      excludePrId: pull.id,
+      paths,
+      statuses: PRIOR_PR_STATUSES,
+      limit: MAX_PRIOR_PRS,
+    });
+
+    return {
+      prs: rows.map((r) => toPriorPrWire(r, MAX_OVERLAP_FILES_PER_PR)),
+      uncomparable_prs: uncomparable,
+    };
   }
 
   /** 404 — a PR in another workspace is indistinguishable from one that does not exist. */

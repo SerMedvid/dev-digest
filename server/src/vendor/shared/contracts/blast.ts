@@ -67,3 +67,39 @@ export const BlastSummaryResponse = z.object({
   head_sha: z.string(),
 });
 export type BlastSummaryResponse = z.infer<typeof BlastSummaryResponse>;
+
+/**
+ * One earlier pull request that touched at least one of the same files.
+ *
+ * Derived from `pr_files` alone — no code index, no model, no GitHub call. The
+ * overlap is on file PATHS, not symbols: this answers "who else has been in
+ * here lately", which is a weaker and much cheaper question than the map's.
+ */
+export const PriorPrC = z.object({
+  number: z.number().int(),
+  title: z.string(),
+  author: z.string(),
+  /** GitHub's merge state. This list carries only 'merged' | 'closed'. */
+  status: z.string(),
+  /** How many of THIS PR's paths that PR also touched. Drives the ordering. */
+  overlap_count: z.number().int(),
+  /** The shared paths, capped — `overlap_count` is the untruncated total. */
+  overlap_files: z.array(z.string()),
+  updated_at: z.string().nullable(),
+});
+export type PriorPrC = z.infer<typeof PriorPrC>;
+
+/** Response of `GET /pulls/:id/prior-prs`. */
+export const PriorPrsResponse = z.object({
+  /** Most overlap first, then most recently updated. Capped. */
+  prs: z.array(PriorPrC),
+  /**
+   * How many other PRs in this repo have NO stored file rows, and so could not
+   * be compared at all. `GET /pulls/:id` is what populates `pr_files`, so a PR
+   * whose detail was never opened is invisible here. Non-zero means this list
+   * is a lower bound, not the repo's whole history — the same "nothing there"
+   * vs "we could not look" distinction `BlastStatus` carries.
+   */
+  uncomparable_prs: z.number().int(),
+});
+export type PriorPrsResponse = z.infer<typeof PriorPrsResponse>;

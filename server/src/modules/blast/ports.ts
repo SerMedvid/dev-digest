@@ -54,10 +54,44 @@ export interface BlastPullHead {
   headSha: string;
 }
 
+/**
+ * One earlier PR that shares at least one changed path with the PR in view.
+ * Structural, like the repo-intel mirrors above: the repository's row satisfies
+ * it with no import, so no `$inferSelect` alias crosses into the core.
+ *
+ * `overlapFiles` is EVERY shared path; the service applies the cap, because how
+ * many to show is a presentation decision and not the query's business.
+ */
+export interface PriorPrShape {
+  number: number;
+  title: string;
+  author: string;
+  status: string;
+  updatedAt: Date | null;
+  /** Untruncated count of shared paths — stays true after `overlapFiles` is cut. */
+  overlapCount: number;
+  overlapFiles: string[];
+}
+
 /** Cross-aggregate reads, over `reviewRepo`. */
 export interface BlastStorePort {
   getPull(workspaceId: string, prId: string): Promise<BlastPullHead | undefined>;
   getPrFilePaths(prId: string): Promise<string[]>;
+  /** Merged/closed PRs in the same repo whose files intersect `paths`. */
+  priorPrs(args: {
+    workspaceId: string;
+    repoId: string;
+    excludePrId: string;
+    paths: string[];
+    statuses: readonly string[];
+    limit: number;
+  }): Promise<PriorPrShape[]>;
+  /** Same-repo PRs with no stored file rows — the uncomparable ones. */
+  countPrsWithoutFiles(args: {
+    workspaceId: string;
+    repoId: string;
+    excludePrId: string;
+  }): Promise<number>;
 }
 
 /** The two repo-intel facade reads the map is built from. */

@@ -12,6 +12,8 @@ import { IdParams } from '../_shared/schemas.js';
  *                                     explanation. 409 while one is in flight,
  *                                     422 `blast_degraded` on a map with no
  *                                     data to explain.
+ *   GET  /pulls/:id/prior-prs      → merged/closed PRs that touched the same
+ *                                     files, read from `pr_files` alone.
  *
  * The service is built in the container so its ports (`store` over `reviewRepo`,
  * `intel` over `repoIntel`, `summaries` over `blastRepo`, `model` over the
@@ -24,6 +26,16 @@ export default async function blastRoutes(appBase: FastifyInstance) {
   app.get('/pulls/:id/blast', { schema: { params: IdParams } }, async (req) => {
     const { workspaceId } = await getContext(container, req);
     return container.blastService.get(workspaceId, req.params.id);
+  });
+
+  /**
+   * Which merged or closed PRs have already been in this PR's files. Read from
+   * `pr_files` only — no index, no model, no GitHub call — so it answers even
+   * when the blast map itself is degraded.
+   */
+  app.get('/pulls/:id/prior-prs', { schema: { params: IdParams } }, async (req) => {
+    const { workspaceId } = await getContext(container, req);
+    return container.blastService.priorPrs(workspaceId, req.params.id);
   });
 
   // Synchronous on purpose: one bounded call, nothing to stream, no job to

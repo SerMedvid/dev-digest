@@ -1,6 +1,6 @@
-import type { BlastRadiusResponse, BlastSymbolC } from '@devdigest/shared';
+import type { BlastRadiusResponse, BlastSymbolC, PriorPrC } from '@devdigest/shared';
 import { BLAST_REASON } from './constants.js';
-import type { BlastResultShape, IndexStateShape } from './ports.js';
+import type { BlastResultShape, IndexStateShape, PriorPrShape } from './ports.js';
 
 /**
  * Pure mapping from repo-intel's `BlastResult` to the wire contract. Nothing
@@ -98,5 +98,21 @@ export function toWire(
     endpoints: [...result.impactedEndpoints],
     crons: [...result.impactedCrons],
     summary,
+  };
+}
+
+/**
+ * Row → wire. The cap lands here rather than in the query so `overlap_count`
+ * can stay the true total while `overlap_files` is only what the UI will draw.
+ */
+export function toPriorPrWire(row: PriorPrShape, maxFiles: number): PriorPrC {
+  return {
+    number: row.number,
+    title: row.title,
+    author: row.author,
+    status: row.status,
+    overlap_count: row.overlapCount,
+    overlap_files: row.overlapFiles.slice(0, maxFiles),
+    updated_at: row.updatedAt ? row.updatedAt.toISOString() : null,
   };
 }
