@@ -9,7 +9,7 @@
     { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
     { "cmd": ["find", "role", "button", "click", "--name", "Files changed"], "label": "switch to the Files changed tab" },
     { "cmd": ["wait", "--url", "tab=diff"], "label": "diff tab is active in the URL" },
-    { "cmd": ["wait", "--text", "Reviewer-ordered diff"], "label": "Smart Diff (not the flat viewer) is the default order — DiffTab's section label reads the smart caption; under ?order=original it falls back to 'Files changed'" },
+    { "cmd": ["wait", "--text", "REVIEWER-ORDERED DIFF"], "label": "Smart Diff (not the flat viewer) is the default order — DiffTab's section label reads the smart caption; under ?order=original it falls back to 'Files changed'. Asserted UPPERCASE because `wait --text` matches rendered innerText and the caption goes through @devdigest/ui's SectionLabel, which sets textTransform: uppercase on its children — the catalogue-cased 'Reviewer-ordered diff' (messages/en/prReview.json smartDiff.caption) is never on screen and times out" },
     { "cmd": ["wait", "--text", "Core logic"], "label": "the Core group heading renders" },
     { "cmd": ["wait", "--text", "Wiring"], "label": "the Wiring group heading renders" },
     { "cmd": ["wait", "--text", "Boilerplate"], "label": "the Boilerplate group heading renders" },
