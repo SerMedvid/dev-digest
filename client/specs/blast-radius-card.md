@@ -35,6 +35,11 @@ The card reads top to bottom:
    ([`SymbolRow.tsx`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/_components/SymbolRow/SymbolRow.tsx)).
 4. The cached summary, under a `What this touches` label, once one exists at
    this head. At that point the Explain button in the header is gone.
+5. **Prior PRs touching these files** — a titled list of the merged and closed
+   PRs that have already been in these paths, each linking out to GitHub
+   ([`PriorPrs.tsx`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/_components/PriorPrs/PriorPrs.tsx)).
+   It answers the question a reviewer asks right after the map: *who else has
+   been in here, and what did they do?*
 
 The `Graph` button opens the same data as a force-directed diagram in a modal
 over the card. It is an action, not a view switch: the card behind it keeps
@@ -56,6 +61,20 @@ empty arrays) versus **"we could not see"** (`partial` / `degraded`).
 | `ok`, no symbols | Counters (all reading zero) plus an empty note, and **no graph action** — there is nothing to draw, so the dialog needs no empty state of its own ([`BlastCard.tsx:105`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/BlastCard.tsx)) |
 | `ok` | Counters plus the tree |
 
+The prior-PRs section is a **separate read with its own states**, and it renders
+in three of the branches above — `ok`, `partial` and `degraded` — but in neither
+Loading nor Load error. It reads `pr_files` and never the code index, so "the
+index is unusable" says nothing about whether this list is right.
+
+| Prior-PRs state | Behaviour |
+|---|---|
+| Loading | One skeleton bar under the section title; the map around it is unaffected |
+| Error | A muted inline line only — **never an `ErrorState`, never a Retry**. A failed secondary read must not look like the card failed |
+| Empty, nothing uncomparable | "No merged or closed PR has touched these files." — a true all-clear |
+| Empty, `uncomparable_prs > 0` | The all-clear is **suppressed** and replaced by how many PRs could not be compared. An empty list is only honest next to that count |
+| Populated | One row per PR: `#number`, title, then shared-file count and author |
+| Collapsed | Header only. Everything below it — list, all-clear, uncomparable note — folds away together |
+
 Under `ok`, a zero renders rather than being suppressed. A suppressed zero would
 make "nothing there" look like "we could not see" — collapsing exactly the
 distinction the status enum carries.
@@ -74,6 +93,13 @@ distinction the status enum carries.
 - **The graph issues no request of its own.** It is handed the same response
   object the tree just rendered, so opening the dialog costs nothing
   ([`BlastCard.tsx:142`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/BlastCard.tsx)).
+- `usePriorPrs(prId)` — `["pr-prior-prs", prId]` → `GET /pulls/:id/prior-prs`
+  ([`lib/hooks/blast.ts`](../src/lib/hooks/blast.ts)). **Its own query, not a
+  field on the map.** Two reasons: the card must render the map when this read
+  fails, and the map must not pay for the join on every render. The section
+  fetches for itself rather than taking data from `BlastCard`, so a failure here
+  is structurally incapable of taking the map down. Server contract:
+  [`server/specs/prior-prs.md`](../../server/specs/prior-prs.md).
 - No `fetch` in a component. A failed read surfaces inline with Retry; a failed
   Explain surfaces as an inline `role="alert"` beside its button, which stays so
   the user can retry once the cause is fixed.
@@ -98,6 +124,15 @@ not claim.
   Each row's header is a real `<button aria-expanded>` controlling its body by
   id, so the collapse is keyboard-operable and announced rather than being a
   click target that only a mouse can reach.
+- **Prior-PRs disclosure.** The section's title is itself a
+  `<button aria-expanded>` controlling its body by id — the same disclosure
+  `SymbolRow` uses, so it is keyboard-operable and announced. **Open on mount**:
+  collapsing is additive, and a section that hid itself by default would be a
+  feature nobody finds. The PR count sits at the header's far edge so a collapsed
+  header still says how much is folded away rather than reading as empty. The
+  list, the all-clear and the `uncomparable_prs` note collapse **together** —
+  hiding the list while leaving the caveat on screen would strand it, and hiding
+  the caveat alone would leave a false all-clear.
 - **Naming.** A `function` or `method` renders as `name()`. Every other kind the
   indexer emits — `class`, `enum`, `interface`, `type` — renders bare, with the
   kind beside it as a muted tag
@@ -156,6 +191,15 @@ not claim.
 | 16 | A load error offers Retry, and every retry is a GET | `BlastCard.test.tsx` ("surfaces a load error and retries the GET (not a paid POST)") |
 | 17 | Explain posts once; the button disappears once a summary exists; a failure is an inline alert | `BlastCard.test.tsx` (— Explain, three cases) |
 | 18 | Overview renders two columns, collapsing to one when narrow | **Not verified** — no automated test is possible at this tier and no browser check has been done; see Known gaps |
+| 19 | A prior PR renders with its overlap count and author, linked to GitHub with `rel="noopener noreferrer"` | `PriorPrs.test.tsx` ("lists a prior PR with its overlap, linked to GitHub") |
+| 20 | Prior-PR rows render as plain text, never a dead link, when the repo is unknown | `PriorPrs.test.tsx` ("renders plain text — never a dead link…") |
+| 21 | An empty list with nothing uncomparable is a true all-clear | `PriorPrs.test.tsx` ("says nothing touched these files when the comparison was complete") |
+| 22 | An empty list with `uncomparable_prs > 0` suppresses the all-clear and says how many could not be compared | `PriorPrs.test.tsx` ("never claims an all-clear when PRs could not be compared") |
+| 23 | A failed prior-PRs read reports inline, with no Retry, and the map stays rendered | `PriorPrs.test.tsx` ("reports a failed read inline without throwing"); `BlastCard.test.tsx` ("keeps the map rendered when the prior-PRs read fails") |
+| 24 | The section renders on a `degraded` map too — it reads no index | `BlastCard.test.tsx` ("renders it on a degraded map too — it reads no index") |
+| 25 | The section is open on mount and collapses, toggling `aria-expanded`; the header stays | `PriorPrs.test.tsx` ("opens on mount and collapses the list away, toggling aria-expanded") |
+| 26 | The PR count rides on the header and survives the collapse | `PriorPrs.test.tsx` ("says how many PRs are folded away…") |
+| 27 | Collapsing hides the all-clear and its uncomparable caveat together | `PriorPrs.test.tsx` ("keeps the all-clear and its caveat together when collapsed") |
 
 The journey does not currently warrant an [`e2e`](../../e2e/README.md) flow: the
 card reads one GET and the only paid action is already covered by component
@@ -173,10 +217,22 @@ tests against a mocked `fetch`.
 - **Counter labels have no singular form.** One caller reads `1 callers`,
   matching the existing `callerCount` catalogue entry rather than introducing
   pluralisation this card would be the first to need.
-- **"Prior PRs touching these files" is not built.** The design comp draws it
-  inside this card's border, but it has no backend — no query, no route, no
-  contract, no hook, with only `pr_files` to build it from. It is deliberately
-  out of scope here and needs its own spec.
+- **The prior-PRs list is a lower bound, and says so.** `pr_files` is populated
+  by opening a PR's detail, so a PR nobody has opened is invisible to the query.
+  `uncomparable_prs` discloses how many, and the section suppresses its
+  all-clear whenever that count is non-zero — but the underlying blind spot is
+  reported, not removed. See
+  [`server/specs/prior-prs.md`](../../server/specs/prior-prs.md) §5.
+- **Backfilling `pr_files` at import time would remove that blind spot**, at the
+  cost of a much heavier import. Out of scope; no work is planned.
+- **Prior-PR rows have no singular form either** — one shared file reads
+  `1 shared files` and a one-PR header reads `1 PRs`, matching the `callerCount`
+  convention above rather than introducing pluralisation this catalogue has
+  never carried.
+- **The prior-PRs collapse is not persisted.** It is local `useState`, so it
+  resets on every navigation back to the tab — the same choice the graph dialog
+  makes, for the same reason: which sections you have folded is presentation,
+  not a shareable location.
 - **Graph node labels are truncated** to a fixed character budget, keeping the
   tail as the identifying part. A long path is therefore readable in the tree but
   abbreviated in the graph; the tree remains the complete, accessible-first view

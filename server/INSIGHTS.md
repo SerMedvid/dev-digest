@@ -250,6 +250,22 @@ an entry can age — verify before relying on one.
 
 ## Recurring errors & fixes
 
+- **2026-08-10** — A testcontainers fixture must be owned by **one** outer
+  `describe`. Vitest runs an `afterAll` registered inside a `describe` as soon as
+  *that* block's tests finish — before the next sibling `describe` runs — so a
+  file laid out as two top-level `d(...)` blocks sharing a module-level `db` hands
+  the second block a closed pool. It does not surface as a teardown error: every
+  `app.inject` returns **500 `write CONNECTION_ENDED localhost:<port>`**, which
+  reads like a route bug, and the query-level tests above it all pass. Nest the
+  second block instead, as [`test/blast-routes.it.test.ts`](test/blast-routes.it.test.ts)
+  does — one outer `d(...)` holding `beforeAll`/`afterAll`, plain `describe`s
+  inside. Worth knowing alongside it: when `startPg()` itself fails (the reaper
+  is flaky on Windows), the module-level `db` and id vars stay `undefined`, so
+  `buildApp({ db: undefined })` quietly connects to the *dev* database from
+  `config.databaseUrl` and the route 422s on a `/pulls/undefined/...` uuid — a
+  container failure can therefore masquerade as an assertion failure two suites
+  away. (`test/blast-prior-prs.it.test.ts:63`)
+
 - **2026-08-09** — A repo-intel fixture whose `changedFiles` has **one entry**
   cannot distinguish "this symbol's declaration file" from "the set of changed
   files" — every predicate over the two is trivially equivalent, so a filter

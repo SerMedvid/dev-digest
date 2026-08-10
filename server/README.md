@@ -120,6 +120,15 @@ explaining the computed map, refused outright when the map is degraded. Full
 contract, status derivation and degradation paths:
 [`specs/blast.md`](specs/blast.md).
 
+`GET /pulls/:id/prior-prs` sits in the same module and answers the question that
+follows the map: **which merged or closed PRs have already been in these files.**
+Overlap is on paths, from `pr_files` alone — no index, no GitHub call, no model —
+so it answers even when the blast map is degraded. Because `pr_files` is
+populated by opening a PR's detail, PRs nobody has opened are invisible to the
+join; the response carries `uncomparable_prs` so an empty list can never read as
+"nothing has touched these files". Contract, ordering, caps and that blind spot:
+[`specs/prior-prs.md`](specs/prior-prs.md).
+
 `POST /reviews/adhoc` runs the **same** reviewer over a posted unified diff with
 no PR behind it — the server side of `devdigest review --mode working` in
 [`mcp/`](../mcp/README.md). It composes the same exported pieces the PR path

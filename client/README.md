@@ -58,7 +58,11 @@ response as a force-directed diagram in a modal. It reads
 `GET /pulls/:id/blast`, whose `status` distinguishes "nothing there" from "we
 could not see", and explains the map on demand through
 `POST /pulls/:id/blast/summary`, both via
-[`src/lib/hooks/blast.ts`](src/lib/hooks/blast.ts). Client journey and states:
+[`src/lib/hooks/blast.ts`](src/lib/hooks/blast.ts). Inside the same card border,
+a **Prior PRs touching these files** section lists the merged and closed PRs
+already in those paths from `GET /pulls/:id/prior-prs` — its own query, so a
+failure there cannot take the map down, and it renders on a degraded map too
+since it reads no index. Client journey and states:
 [`specs/blast-radius-card.md`](specs/blast-radius-card.md).
 
 The **Files changed** tab defaults to Smart Diff: the PR's files grouped into
