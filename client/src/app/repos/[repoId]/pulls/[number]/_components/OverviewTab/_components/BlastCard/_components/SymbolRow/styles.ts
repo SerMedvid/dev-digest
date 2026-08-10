@@ -123,6 +123,8 @@ export const s = {
     marginTop: 2,
     minWidth: 0,
   } satisfies CSSProperties,
+  /** Blue, as the comp draws endpoint chips — `--info` is gray in this design
+      system, so the accent pair is what actually matches. */
   chip: {
     display: "inline-flex",
     alignItems: "center",
@@ -130,8 +132,8 @@ export const s = {
     borderRadius: 5,
     padding: "2px 8px",
     fontSize: 11,
-    color: "var(--info)",
-    background: "var(--info-bg)",
+    color: "var(--accent-text)",
+    background: "var(--accent-bg)",
     maxWidth: "100%",
     overflowWrap: "anywhere",
   } satisfies CSSProperties,
