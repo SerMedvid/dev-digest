@@ -193,6 +193,19 @@ groups it under the symbol each caller reaches
 preserved, which is rank-descending — the facade sorted it that way, so the
 tree and the graph agree on prominence.
 
+**The symbols themselves are ordered by caller count descending, then name
+ascending** ([`helpers.ts`](../src/modules/blast/helpers.ts), after the map).
+This is a wire-contract guarantee, not a presentation choice, for two reasons:
+`getSymbolRows` carries no `ORDER BY`, so without it two identical requests can
+return different orders; and every consumer — the card, the graph dialog, the
+MCP tool — needs the same idea of "first". It matters most on a large PR, where
+"changed symbols" means *every* symbol declared in *every* touched file, so the
+handful anything actually calls would otherwise be buried among dozens nothing
+does. Name breaks ties, compared directly rather than through `localeCompare`,
+whose result depends on the host's locale. A side effect worth knowing: the
+card opens its first row by default, so the most-reached symbol is the one
+expanded on arrival.
+
 Per-symbol `endpoints`/`crons` come from `factsByFile` over **the symbol's own
 declaring file plus that symbol's caller files**; the top-level unions are the
 BFS-widened set. The per-symbol lists are therefore a subset, which is

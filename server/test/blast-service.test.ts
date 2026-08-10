@@ -77,7 +77,7 @@ function build(opts: {
     },
     indexState: async () => {
       intelCalls.push('indexState');
-      return opts.state ?? { status: 'full', lastIndexedSha: HEAD };
+      return opts.state ?? { status: 'full' };
     },
   };
   const deps: BlastServiceDeps = {
@@ -85,6 +85,9 @@ function build(opts: {
       getPull: async () =>
         'pull' in opts ? opts.pull : { id: 'pr-1', repoId: 'repo-1', headSha: HEAD },
       getPrFilePaths: async () => opts.files ?? ['src/middleware/ratelimit.ts'],
+      // Unused on the read path, but the port declares them.
+      priorPrs: async () => [],
+      countPrsWithoutFiles: async () => 0,
     },
     intel,
     summaries: { get: async () => opts.cached, put: async () => {} },
@@ -147,6 +150,53 @@ describe('BlastService.get — ok', () => {
     );
   });
 
+  it('orders symbols by caller count, most-reached first', async () => {
+    // Declared quiet-then-busy on purpose: the facade's order is the DB's, and
+    // `getSymbolRows` has no ORDER BY, so this proves the wire re-orders rather
+    // than passing whatever arrived straight through.
+    const { svc } = build({
+      map: {
+        changedSymbols: [
+          { file: 'src/quiet.ts', name: 'quiet', kind: 'function', line: 1 },
+          { file: 'src/busy.ts', name: 'busy', kind: 'function', line: 2 },
+        ],
+        callers: [
+          { file: 'src/x.ts', symbol: 'x', viaSymbol: 'busy', line: 1, rank: 0.9 },
+          { file: 'src/y.ts', symbol: 'y', viaSymbol: 'busy', line: 2, rank: 0.8 },
+          { file: 'src/z.ts', symbol: 'z', viaSymbol: 'quiet', line: 3, rank: 0.7 },
+        ],
+        impactedEndpoints: [],
+        impactedCrons: [],
+        degraded: false,
+      },
+    });
+    const res = await svc.get('ws-1', 'pr-1');
+
+    expect(res.changed_symbols.map((s) => s.name)).toEqual(['busy', 'quiet']);
+    expect(res.changed_symbols[0]!.callers).toHaveLength(2);
+  });
+
+  it('breaks equal caller counts by name, so the response is stable', async () => {
+    // On a large PR most symbols have zero callers, so the tiebreak decides the
+    // bulk of the list. Without one the order is whatever Postgres returned and
+    // two identical requests can disagree.
+    const { svc } = build({
+      map: {
+        changedSymbols: [
+          { file: 'src/z.ts', name: 'zeta', kind: 'function', line: 1 },
+          { file: 'src/a.ts', name: 'alpha', kind: 'function', line: 2 },
+        ],
+        callers: [],
+        impactedEndpoints: [],
+        impactedCrons: [],
+        degraded: false,
+      },
+    });
+    const res = await svc.get('ws-1', 'pr-1');
+
+    expect(res.changed_symbols.map((s) => s.name)).toEqual(['alpha', 'zeta']);
+  });
+
   it('attributes a declaring file’s own facts to its symbols even with zero callers', async () => {
     // The degenerate case the union alone cannot explain: no resolved callers
     // (stale index), yet the changed file itself declares an endpoint. The
@@ -197,7 +247,7 @@ describe('BlastService.get — ok', () => {
 
 describe('BlastService.get — partial and degraded', () => {
   it('a partial index serves the map with reason index_partial', async () => {
-    const { svc } = build({ state: { status: 'partial', lastIndexedSha: HEAD } });
+    const { svc } = build({ state: { status: 'partial' } });
     const res = await svc.get('ws-1', 'pr-1');
     expect(res.status).toBe('partial');
     expect(res.reason).toBe('index_partial');
@@ -205,12 +255,18 @@ describe('BlastService.get — partial and degraded', () => {
     expect(res.changed_symbols).toHaveLength(2);
   });
 
-  it('an index built at another commit is STILL ok — that is not staleness', async () => {
-    // Regression guard. This case used to be `partial`/`index_stale`, which
-    // meant every pull request was warned about: the index is built from the
-    // clone's default-branch HEAD and `headSha` is the PR branch's tip, so the
-    // two differ by construction and re-indexing could never make them agree.
-    const { svc } = build({ state: { status: 'full', lastIndexedSha: 'older-sha' } });
+  it('a healthy index is ok regardless of which commit it was built at', async () => {
+    // This used to be `partial`/`index_stale` whenever the indexed sha differed
+    // from the PR's head — which was EVERY pull request, since the index is
+    // built from the clone's default-branch HEAD while `headSha` is the PR
+    // branch's tip. Re-indexing could never make them agree.
+    //
+    // The real guard against a relapse is now structural rather than in this
+    // assertion: `IndexStateShape` no longer carries a sha at all, so the
+    // derivation has nothing to compare and the old rule cannot be written
+    // without first re-adding the field. What is left to check here is that a
+    // healthy index yields a clean `ok`.
+    const { svc } = build({ state: { status: 'full' } });
     const res = await svc.get('ws-1', 'pr-1');
     expect(res.status).toBe('ok');
     expect(res.reason).toBeNull();
@@ -227,7 +283,7 @@ describe('BlastService.get — partial and degraded', () => {
         degraded: true,
         reason: 'no_data',
       },
-      state: { status: 'partial', lastIndexedSha: 'older-sha' },
+      state: { status: 'partial' },
     });
     const res = await svc.get('ws-1', 'pr-1');
     expect(res.status).toBe('degraded');

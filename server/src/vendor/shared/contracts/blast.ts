@@ -52,6 +52,14 @@ export const BlastRadiusResponse = z.object({
   /** Machine reason; null iff `status === 'ok'`. Nullable, never optional. */
   reason: z.string().nullable(),
   head_sha: z.string(),
+  /**
+   * Most-reached first: caller count descending, then name ascending. The
+   * ordering is part of the contract because the index query has no ORDER BY
+   * of its own — without it the list is whatever Postgres returned, which is
+   * unstable between identical requests. On a large PR "changed symbols" is
+   * every symbol declared in every touched file, so the few with callers would
+   * otherwise be buried among the many without.
+   */
   changed_symbols: z.array(BlastSymbolC),
   /** BFS-widened union — a SUPERSET of the per-symbol attributions. */
   endpoints: z.array(z.string()),

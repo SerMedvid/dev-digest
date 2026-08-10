@@ -95,6 +95,20 @@ export function toWire(
     };
   });
 
+  // Most-reached symbol first. Two reasons this belongs here rather than in the
+  // card: `getSymbolRows` carries no ORDER BY, so without it the order is
+  // whatever Postgres happened to return — unstable between runs and untestable
+  // — and every consumer (the card, the graph dialog, the MCP tool) should agree
+  // on what "first" means. It matters most on a large PR: "changed symbols" is
+  // every symbol declared in every touched file, so the handful that anything
+  // actually calls would otherwise sit buried among dozens that nothing does.
+  // Name breaks ties, compared directly rather than via `localeCompare`, whose
+  // result depends on the host's locale.
+  changed_symbols.sort(
+    (a, b) =>
+      b.callers.length - a.callers.length || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+  );
+
   return {
     status,
     reason,
