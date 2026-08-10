@@ -14,7 +14,7 @@ an entry can age — verify before relying on one.
 - **2026-08-05** — A negative UI assertion has no `wait` form, but
   `{"cmd": ["get", "count", "text=<string>"], "assert": {"stdoutIncludes": "0"}}`
   works: `get count` prints the bare integer, so an absent element prints `0` and
-  a present one prints `1`. Used to assert the Intent card is *not* labelled
+  a present one prints `1`. Used to assert the Intent card is _not_ labelled
   stale. Pair it with a positive assertion — a count of `0` also holds on a blank
   page. (`specs/08-pr-intent.flow.json`)
 
@@ -37,7 +37,7 @@ an entry can age — verify before relying on one.
   static HTML fixture in both states (present and absent) before trusting it.
   (`specs/09-pr-smart-diff.flow.json`, `specs/08-pr-intent.flow.json:20`)
 
-- **2026-08-06** — An e2e assertion can be *valid* and still prove nothing, and
+- **2026-08-06** — An e2e assertion can be _valid_ and still prove nothing, and
   the collapse rules are where that bites. Flow `09` clicked a finding badge and
   then waited for the revealed line — but `src/config.ts` is `wiring` **with** a
   finding, so `SmartDiffViewer`'s collapse rule 2 had already expanded it at first
@@ -63,7 +63,7 @@ an entry can age — verify before relying on one.
   its own process, with none of the polling every `wait` form does — so a
   `get count` immediately after a click asserts on whatever the DOM happened to
   be at that instant, and has no retry if the re-render lands a beat later. Two
-  compounding weaknesses: `stdoutIncludes` is a *substring* check, so an
+  compounding weaknesses: `stdoutIncludes` is a _substring_ check, so an
   expected `"2"` also passes on `12`, `20` or `32`, and an expected `"1"` passes
   on `10`–`19`. Assert **presence** with `wait "<css selector>"` (polls, exits
   non-zero on timeout) and keep `get count` for **absence**, which has no wait
@@ -118,7 +118,7 @@ an entry can age — verify before relying on one.
 ## Open questions
 
 - **2026-08-05** — `wait --url` intermittently times out when the navigation it
-  is waiting for has *already* completed (agent-browser 0.33.2): each CLI
+  is waiting for has _already_ completed (agent-browser 0.33.2): each CLI
   invocation is a separate process, so a fast client-side route change can land
   before the wait arms. Observed once by hand, never in a full `npm test` run —
   unclear whether it is a real race in the flows or an artifact of driving the
