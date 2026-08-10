@@ -41,7 +41,7 @@ The card reads top to bottom:
    It answers the question a reviewer asks right after the map: *who else has
    been in here, and what did they do?*
 
-The `Graph` button opens the same data as a force-directed diagram in a modal
+The `Graph` button opens the same data as a layered column diagram in a modal
 over the card. It is an action, not a view switch: the card behind it keeps
 rendering the tree, so there is no view state and no URL parameter — which
 surface you are looking at is presentation, not a shareable location.
@@ -154,12 +154,20 @@ not claim.
   path-bearing row here needs both; neither is observable in jsdom, which
   computes no layout.
 - **Graph.** Opens in a modal, closes on the modal's own close control or its
-  backdrop. The layout is a `d3-force` simulation seeded on a fixed spiral and
-  ticked to completion **synchronously** inside a `useMemo`, never animated —
-  so one response always produces one picture, nothing competes with React's
-  render loop, and the geometry is assertable without an animation-frame shim.
-  d3 computes numbers only; React renders every element
+  backdrop. The layout is **three layered columns** — changed symbols, their
+  callers, and what those callers expose — one row per node, computed by plain
+  arithmetic inside a `useMemo`. Rows are a fixed pitch apart, so two labels
+  can never overlap; ordering within a column is barycentric against the caller
+  column, the standard layered-graph crossing heuristic. Nothing is random or
+  iterative, so one response always produces one picture, nothing competes with
+  React's render loop, and the geometry is assertable with no animation-frame
+  shim. The helper computes numbers only; React renders every element
   ([`BlastGraph/helpers.ts`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/_components/BlastGraph/helpers.ts)).
+- **The canvas grows downwards, and the modal body scrolls.** Width is fixed at
+  the three columns the dialog is sized for; height is computed from the row
+  count. A large map therefore gets a taller canvas at full label size rather
+  than tighter packing. The legend sits **above** the diagram for the same
+  reason — below it, it would be off screen on exactly the maps that need it.
 - **Explain.** One model call, only on an explicit click, never on render. It
   sits in the section heading's right slot. Once a summary exists at the current
   head the button is gone and the summary renders in the card body — there is no
@@ -184,7 +192,10 @@ not claim.
 | 9 | Counters report the widened union, not the per-symbol chips | `BlastCard.test.tsx` ("counts callers across symbols, and endpoints from the widened union") |
 | 10 | The Graph button opens a modal, the tree stays mounted behind it, no refetch, and it closes again | `BlastCard.test.tsx` ("opens the graph over the card without a refetch, and closes again") |
 | 11 | The dialog names all four node colours in a legend | `BlastGraphDialog.test.tsx` ("names every node colour in the legend") |
-| 12 | The layout is deterministic for a fixed response, every node inside the canvas | `BlastGraph.test.tsx` ("is deterministic…", "places every node inside the canvas") |
+| 12 | The layout is deterministic for a fixed response, every node inside the canvas it reports | `BlastGraph.test.tsx` ("is deterministic…", "places every node inside the canvas it reports") |
+| 12a | Symbols, callers and facts sit in three left-to-right columns, each headed | `BlastGraph.test.tsx` ("lays symbols, callers and facts out in three left-to-right columns", "heads each column so the diagram reads without the legend") |
+| 12b | No two labels can overlap, at any map size, and the canvas grows instead | `BlastGraph.test.tsx` ("never lets two labels share a band, however large the map", "grows the canvas with the map rather than packing nodes tighter") |
+| 12c | Callers follow the order of the symbols that call them; an edge leaves clear of its own label | `BlastGraph.test.tsx` ("orders callers to follow the symbol that calls them", "starts an outgoing edge clear of its own label") |
 | 13 | Node and edge counts match the response, deduped; a BFS-widened fact gets no node | `BlastGraph.test.tsx` ("emits one node per symbol, caller and fact…", "emits one edge per…", "draws no node for a fact the BFS widened past every caller") |
 | 14 | `degraded` renders no tree, no counters, no graph action, no Explain | `BlastCard.test.tsx` ("degraded explains itself and renders no tree, no counters, no Explain"; "hides the graph action entirely on a degraded map") |
 | 15 | `ok` with no symbols is a distinct empty state, counters still present | `BlastCard.test.tsx` ("ok-with-no-symbols is a true empty state, distinct from degraded") |
@@ -237,6 +248,12 @@ tests against a mocked `fetch`.
   tail as the identifying part. A long path is therefore readable in the tree but
   abbreviated in the graph; the tree remains the complete, accessible-first view
   and the graph carries no information the tree lacks.
-- **The graph canvas is a fixed viewBox.** A map far larger than the tuned
-  ~20-node case will place nodes closer together rather than growing the canvas,
-  since the simulation clamps every node inside the box.
+- **A very large map is a long scroll.** The canvas grows a row per node with no
+  cap, so a PR touching a widely-called symbol produces a diagram several
+  screens tall. Every row stays legible, but there is no overview of the whole
+  map at once and no zoom-out; the counters and the tree remain the summary
+  view. This replaces the previous gap here — "the graph canvas is a fixed
+  viewBox … the simulation clamps every node inside the box" — which was not a
+  packing trade-off but a defect: the clamp projected every out-of-box node onto
+  the border, putting 100% of a 72-node map onto 11 distinct rows. Resolved
+  2026-08-10 by the layered layout in §4.

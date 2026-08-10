@@ -25,6 +25,27 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-10** — **Clamping a force-layout's output into a fixed viewBox is
+  not containment — it is the bug.** `forceCenter` only translates the centroid;
+  nothing in `d3-force` bounds the extent, and the settled blob's diameter grows
+  with the node count. Measured on the blast graph's own constants
+  (`charge -340`, `linkDistance 110`, 300 ticks): 438×417 at 20 nodes, but
+  1316×1207 at 72 and 1921×1943 at 120, against a 1000×500 usable box. The
+  trailing `clamp(x, MARGIN, W-MARGIN)` then **projects every out-of-box node
+  onto the border rectangle**, so overflow becomes exact overlap rather than
+  crowding: at 72 nodes that was 100% of nodes on the border, min pair distance
+  0.0px, and 11 distinct y values — the dense horizontal rows that made the
+  dialog unreadable. Even the "tuned for ~20 nodes" case already clamped 71%.
+  Two things follow. A per-node clamp can never be the containment strategy —
+  fit the viewBox to the settled bounding box, or don't use physics. And
+  `forceCollide(r)` is a **circle** while a label is a ~120×14px rectangle, so
+  it does not prevent label collisions even when nothing is clamped. The cheap
+  way to see any of this is a throwaway vitest file that calls the layout
+  function and prints border-hits and min pair distance; every unit test in
+  place passed throughout, because they asserted nodes were *inside* the box —
+  which clamping guarantees by construction.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/BlastCard/_components/BlastGraph/helpers.ts:200`)
+
 - **2026-07-29** — A `position: absolute` popover **cannot** work on the list,
   timeline or accordion surfaces: each one sets `overflow: hidden` to clip its
   own rounded corners (`src/app/repos/[repoId]/pulls/styles.ts:93` `tableCard`,
@@ -223,6 +244,21 @@ an entry can age — verify before relying on one.
   (`src/components/findings-breakdown/FindingsBreakdown.test.tsx:191`)
 
 ## Decisions
+
+- **2026-08-10** — The blast graph is **layered columns, not a force
+  simulation**, and a future "let's make it force-directed again" should stop
+  here. The response is a strict three-tier DAG (changed symbol → caller →
+  endpoint/cron), which is the shape force-directed layout is worst at: it
+  discards the tier information the data already carries and converges to a
+  hairball that is unreadable past ~40 nodes however well it is fitted. Columns
+  give it back for free — one row per node at a fixed pitch means two labels
+  *cannot* overlap at any map size, barycentric ordering within a column is the
+  standard crossing heuristic, and the whole thing is plain arithmetic, so it
+  needs no ticks, no alpha, no seeded spiral to stay deterministic. The cost is
+  accepted deliberately: a large map is a several-screen scroll with no
+  zoomed-out overview, and the counters plus the tree remain the summary view.
+  This also removed the package's only `d3-force` dependency.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/BlastCard/_components/BlastGraph/helpers.ts:24`)
 
 ## Recurring errors & fixes
 

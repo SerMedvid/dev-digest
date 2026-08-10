@@ -38,6 +38,11 @@
     "title": "Blast radius",
     "subtitle": "Changed symbols, their callers, and what those callers expose.",
     "close": "Close",
+    "column": {
+      "symbol": "Changed symbols",
+      "caller": "Callers",
+      "exposes": "Exposes"
+    },
     "legend": {
       "symbol": "Changed symbol",
       "caller": "Caller",

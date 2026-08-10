@@ -1,14 +1,31 @@
 import type { CSSProperties } from "react";
 
 export const s = {
-  /** The svg scales to the dialog's width; the viewBox fixes the coordinates. */
+  /** Rendered at its own scale rather than shrunk to fit: the canvas grows with
+      the map, and the modal body is what scrolls. Tailwind 4's preflight already
+      sets `display: block` on every svg (INSIGHTS 2026-08-06); restated here so
+      the rule does not depend on it. */
   svg: {
-    width: "100%",
-    height: "auto",
     display: "block",
+    maxWidth: "100%",
+    /** Lets the canvas scale down proportionally on a narrow viewport rather
+        than being squashed by `maxWidth` against a fixed height attribute. */
+    height: "auto",
   } satisfies CSSProperties,
   edge: {
     stroke: "var(--border-strong)",
+    strokeWidth: 1,
+    fill: "none",
+  } satisfies CSSProperties,
+  header: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: "0.08em",
+    textTransform: "uppercase",
+    fill: "var(--text-muted)",
+  } satisfies CSSProperties,
+  headerRule: {
+    stroke: "var(--border)",
     strokeWidth: 1,
   } satisfies CSSProperties,
 } as const;

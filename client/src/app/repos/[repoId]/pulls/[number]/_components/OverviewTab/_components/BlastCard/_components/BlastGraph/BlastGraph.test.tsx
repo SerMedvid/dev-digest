@@ -6,7 +6,7 @@ import type { BlastRadiusResponse } from "@devdigest/shared";
 import messages from "../../../../../../../../../../../../messages/en/blast.json";
 import { BlastGraph } from "./BlastGraph";
 import { layoutBlastGraph } from "./helpers";
-import { GRAPH_WIDTH, GRAPH_HEIGHT, NODE_MARGIN } from "./constants";
+import { COLUMN_X, GRAPH_WIDTH, LABEL_DX, ROW_PITCH } from "./constants";
 import { callerHref } from "../../helpers";
 
 const HEAD = "a1b2c3d4e5f6";
@@ -38,6 +38,27 @@ const MAP: BlastRadiusResponse = {
 
 const href = (file: string, line: number | null) => callerHref(REPO, HEAD, file, line);
 
+/** A map the size a real PR produces — the case the fixed viewBox could not hold. */
+function bigMap(symbols: number, callersEach: number): BlastRadiusResponse {
+  return {
+    ...MAP,
+    changed_symbols: Array.from({ length: symbols }, (_, i) => ({
+      name: `symbol${i}`,
+      kind: "method",
+      file: `src/modules/thing${i}/service.ts`,
+      line: 10 + i,
+      callers: Array.from({ length: callersEach }, (_, j) => ({
+        file: `src/modules/caller${(i * callersEach + j) % 40}/routes.ts`,
+        line: 100 + j,
+        symbol: `caller${j}`,
+        rank: 0.5,
+      })),
+      endpoints: i % 4 === 0 ? [`GET /api/thing${i}`] : [],
+      crons: [],
+    })),
+  };
+}
+
 afterEach(cleanup);
 
 function renderGraph(repoFullName: string | null = REPO) {
@@ -55,17 +76,88 @@ describe("layoutBlastGraph", () => {
     expect(layoutBlastGraph(MAP, href)).toEqual(layoutBlastGraph(MAP, href));
   });
 
-  it("places every node inside the canvas", () => {
-    const { nodes } = layoutBlastGraph(MAP, href);
+  it("places every node inside the canvas it reports", () => {
+    const { nodes, width, height } = layoutBlastGraph(MAP, href);
     expect(nodes.length).toBeGreaterThan(0);
     for (const n of nodes) {
       expect(Number.isFinite(n.x)).toBe(true);
       expect(Number.isFinite(n.y)).toBe(true);
-      expect(n.x).toBeGreaterThanOrEqual(NODE_MARGIN);
-      expect(n.x).toBeLessThanOrEqual(GRAPH_WIDTH - NODE_MARGIN);
-      expect(n.y).toBeGreaterThanOrEqual(NODE_MARGIN);
-      expect(n.y).toBeLessThanOrEqual(GRAPH_HEIGHT - NODE_MARGIN);
+      expect(n.x).toBeGreaterThan(0);
+      expect(n.x).toBeLessThan(width);
+      expect(n.y).toBeGreaterThan(0);
+      expect(n.y).toBeLessThan(height);
     }
+  });
+
+  it("lays symbols, callers and facts out in three left-to-right columns", () => {
+    const { nodes } = layoutBlastGraph(MAP, href);
+    const xOf = (k: string) => new Set(nodes.filter((n) => n.kind === k).map((n) => n.x));
+    // Every node of a kind shares one x, and the kinds read in flow order.
+    expect([...xOf("symbol")]).toEqual([COLUMN_X[0]]);
+    expect([...xOf("caller")]).toEqual([COLUMN_X[1]]);
+    expect([...xOf("endpoint")]).toEqual([COLUMN_X[2]]);
+    expect([...xOf("cron")]).toEqual([COLUMN_X[2]]);
+    expect(COLUMN_X[0]).toBeLessThan(COLUMN_X[1]);
+    expect(COLUMN_X[1]).toBeLessThan(COLUMN_X[2]);
+  });
+
+  it("never lets two labels share a band, however large the map", () => {
+    // The old force layout clamped every out-of-box node onto the border, which
+    // stacked 72 nodes onto 11 distinct y values. Rows are the fix: two nodes
+    // may share a y only if they sit in different columns.
+    const { nodes } = layoutBlastGraph(bigMap(25, 5), href);
+    expect(nodes.length).toBeGreaterThan(60);
+    for (let i = 0; i < nodes.length; i++) {
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i]!;
+        const b = nodes[j]!;
+        if (a.x !== b.x) continue;
+        expect(Math.abs(a.y - b.y)).toBeGreaterThanOrEqual(ROW_PITCH);
+      }
+    }
+  });
+
+  it("grows the canvas with the map rather than packing nodes tighter", () => {
+    const small = layoutBlastGraph(MAP, href);
+    const large = layoutBlastGraph(bigMap(25, 5), href);
+    expect(large.height).toBeGreaterThan(small.height * 3);
+    // Width is fixed — the columns are what the dialog is sized for; only the
+    // row count grows, and the modal body scrolls.
+    expect(large.width).toBe(GRAPH_WIDTH);
+    expect(small.width).toBe(GRAPH_WIDTH);
+  });
+
+  it("starts an outgoing edge clear of its own label", () => {
+    // An edge leaving from the dot would be drawn straight through the label
+    // text sitting beside it.
+    const { nodes } = layoutBlastGraph(MAP, href);
+    for (const n of nodes) {
+      expect(n.outX).toBeGreaterThan(n.x + LABEL_DX);
+    }
+  });
+
+  it("orders callers to follow the symbol that calls them", () => {
+    // Crossing reduction: with one symbol per caller the caller column must
+    // come out in the symbols' own order, not the order the ids hash to.
+    const data: BlastRadiusResponse = {
+      ...MAP,
+      changed_symbols: ["alpha", "beta", "gamma"].map((name, i) => ({
+        name,
+        kind: "function",
+        file: `src/${name}.ts`,
+        line: 1,
+        callers: [{ file: `src/callers/${name}-caller.ts`, line: 5, symbol: "use", rank: 0.5 }],
+        endpoints: [],
+        crons: [],
+      })),
+    };
+    const { nodes } = layoutBlastGraph(data, href);
+    const callers = nodes.filter((n) => n.kind === "caller").sort((a, b) => a.y - b.y);
+    expect(callers.map((c) => c.label)).toEqual([
+      "src/callers/alpha-caller.ts",
+      "src/callers/beta-caller.ts",
+      "src/callers/gamma-caller.ts",
+    ]);
   });
 
   it("emits one node per symbol, caller and fact, deduped", () => {
@@ -124,9 +216,17 @@ describe("BlastGraph", () => {
     expect(svg.tagName.toLowerCase()).toBe("svg");
   });
 
-  it("draws one line per edge", () => {
+  it("draws one curve per edge", () => {
     const { container } = renderGraph();
-    expect(container.querySelectorAll("line")).toHaveLength(9);
+    // Edges are paths; the one `line` in the drawing is the header rule.
+    expect(container.querySelectorAll("path")).toHaveLength(9);
+  });
+
+  it("heads each column so the diagram reads without the legend", () => {
+    renderGraph();
+    for (const heading of ["Changed symbols", "Callers", "Exposes"]) {
+      expect(screen.getByText(heading)).toBeInTheDocument();
+    }
   });
 
   it("links caller and symbol nodes, never endpoint or cron nodes", () => {

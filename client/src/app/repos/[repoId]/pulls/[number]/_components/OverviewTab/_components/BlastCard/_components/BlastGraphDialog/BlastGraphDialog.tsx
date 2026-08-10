@@ -31,7 +31,9 @@ export function BlastGraphDialog({ data, headSha, repoFullName, onClose }: Blast
       onClose={onClose}
     >
       <div style={s.body}>
-        <BlastGraph data={data} headSha={headSha} repoFullName={repoFullName} />
+        {/* Above the diagram, not below it: the canvas grows with the map and
+            the modal body is what scrolls, so a legend underneath would be off
+            screen on exactly the large maps that need it most. */}
         <div style={s.legend}>
           {LEGEND.map(({ key, color }) => (
             <span key={key} style={s.legendItem}>
@@ -40,6 +42,7 @@ export function BlastGraphDialog({ data, headSha, repoFullName, onClose }: Blast
             </span>
           ))}
         </div>
+        <BlastGraph data={data} headSha={headSha} repoFullName={repoFullName} />
       </div>
     </Modal>
   );

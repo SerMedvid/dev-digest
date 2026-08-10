@@ -4,8 +4,16 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import type { BlastRadiusResponse } from "@devdigest/shared";
 import { callerHref } from "../../helpers";
-import { layoutBlastGraph, type GraphNode } from "./helpers";
-import { GRAPH_HEIGHT, GRAPH_WIDTH } from "./constants";
+import { layoutBlastGraph, COLUMN_KEYS, type GraphNode } from "./helpers";
+import {
+  COLUMN_X,
+  HEADER_Y,
+  LABEL_DX,
+  LABEL_DY,
+  MARGIN_TOP,
+  ROW_WIDTH,
+  SUBLABEL_DY,
+} from "./constants";
 import { s, label, labelPrimary, nodeDot, sublabel } from "./styles";
 
 interface BlastGraphProps {
@@ -15,17 +23,18 @@ interface BlastGraphProps {
 }
 
 /**
- * The same response the tree renders, drawn as a force-directed node-link
- * diagram: changed symbols, their callers, and what those callers expose.
+ * The same response the tree renders, drawn as a layered node-link diagram:
+ * one column per tier — changed symbols, their callers, and what those callers
+ * expose — with one row per node.
  *
- * React renders every element here; d3 only computed the numbers in
- * `helpers.ts`, synchronously and once. The tree stays the accessible-first
- * view, so this carries no information the tree lacks.
+ * React renders every element here; `helpers.ts` only computed the numbers,
+ * synchronously and once. The tree stays the accessible-first view, so this
+ * carries no information the tree lacks.
  */
 export function BlastGraph({ data, headSha, repoFullName }: BlastGraphProps) {
   const t = useTranslations("blast");
 
-  const { nodes, edges } = React.useMemo(
+  const { nodes, edges, width, height } = React.useMemo(
     () => layoutBlastGraph(data, (file, line) => callerHref(repoFullName, headSha, file, line)),
     [data, headSha, repoFullName],
   );
@@ -38,12 +47,28 @@ export function BlastGraph({ data, headSha, repoFullName }: BlastGraphProps) {
     <svg
       role="img"
       aria-label={t("graph.ariaLabel")}
-      viewBox={`0 0 ${GRAPH_WIDTH} ${GRAPH_HEIGHT}`}
+      viewBox={`0 0 ${width} ${height}`}
+      width={width}
+      height={height}
       style={s.svg}
     >
       <g>
+        {COLUMN_KEYS.map((key, col) => (
+          <text key={key} x={COLUMN_X[col]} y={HEADER_Y} style={s.header}>
+            {t(`graph.column.${key}`)}
+          </text>
+        ))}
+        <line
+          x1={COLUMN_X[0]}
+          y1={MARGIN_TOP - 24}
+          x2={COLUMN_X[2]! + ROW_WIDTH}
+          y2={MARGIN_TOP - 24}
+          style={s.headerRule}
+        />
+      </g>
+      <g>
         {edges.map((e) => (
-          <line key={e.id} x1={e.x1} y1={e.y1} x2={e.x2} y2={e.y2} style={s.edge} />
+          <path key={e.id} d={e.path} style={s.edge} />
         ))}
       </g>
       <g>
@@ -58,22 +83,16 @@ export function BlastGraph({ data, headSha, repoFullName }: BlastGraphProps) {
 function NodeMark({ node }: { node: GraphNode }) {
   const body = (
     <>
-      <circle
-        cx={node.x}
-        cy={node.y}
-        r={node.kind === "symbol" ? 7 : 5}
-        style={nodeDot[node.kind]}
-      />
+      <circle cx={node.x} cy={node.y} r={node.kind === "symbol" ? 6 : 4.5} style={nodeDot[node.kind]} />
       <text
-        x={node.x}
-        y={node.y + 20}
-        textAnchor="middle"
+        x={node.x + LABEL_DX}
+        y={node.y + LABEL_DY}
         style={node.kind === "symbol" ? labelPrimary : label}
       >
         {node.label}
       </text>
       {node.sub && (
-        <text x={node.x} y={node.y + 32} textAnchor="middle" style={sublabel}>
+        <text x={node.x + LABEL_DX} y={node.y + SUBLABEL_DY} style={sublabel}>
           {node.sub}
         </text>
       )}
