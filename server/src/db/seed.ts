@@ -357,8 +357,10 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
 
     await db.insert(t.repoIndexState).values({
       repoId,
-      // Read off the seeded PR rather than restated, so the card can never
-      // render as `index_stale` on a fresh install.
+      // Read off the seeded PR rather than restated. This used to be load-
+      // bearing — it was the only thing keeping the card off `index_stale` on a
+      // fresh install, which masked the fact that every real PR hit it. That
+      // derivation is gone, so this is now just an honest fixture value.
       lastIndexedSha: pr!.headSha,
       indexerVersion: BLAST_SEED_INDEXER_VERSION,
       status: 'full',

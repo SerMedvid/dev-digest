@@ -114,7 +114,7 @@ PR changed, who calls them, and the HTTP endpoints and crons downstream — read
 and **no model call on this path**. It degrades visibly rather than silently:
 `status` distinguishes a map that is empty because nothing is there (`ok`) from
 one that is empty because the index cannot see (`degraded`), with `partial` for
-an index that is incomplete or behind the PR's head. `POST /pulls/:id/blast/summary`
+an index the indexer itself reported incomplete. `POST /pulls/:id/blast/summary`
 is the one place a model runs — one explicit, cached-on-`head_sha` paragraph
 explaining the computed map, refused outright when the map is degraded. Full
 contract, status derivation and degradation paths:

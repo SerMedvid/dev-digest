@@ -13,6 +13,22 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-10** — Deriving a PR-scoped status by comparing
+  `repo_index_state.lastIndexedSha` to the pull request's `headSha` is
+  **structurally always true**, and blast shipped that way: the index is built
+  from the clone's default-branch HEAD (`git rev-parse HEAD`, the clone is synced
+  to `origin/<defaultBranch>`), while `headSha` is the PR branch's tip — a pull
+  request exists precisely because those differ. So `partial`/`index_stale` fired
+  on every PR forever and re-indexing could not clear it, which devalued the
+  card's only "the map is incomplete" signal. What kept it hidden is worth more
+  than the bug: `seed.ts` set `lastIndexedSha: pr.headSha` *specifically* so a
+  fresh install would not show it, so every demo and every seeded test looked
+  correct and the defect only appeared against imported PRs. **A fixture written
+  to make a derived state not fire is a smell — check whether the state can ever
+  correctly fire on real data.** The comparison is gone; `partial` now reflects
+  the indexer's own verdict only. (`src/modules/blast/helpers.ts:44`,
+  `src/db/seed.ts:360`)
+
 - **2026-08-03** — A feature that resolves its model with
   `getFeatureModelOverride(...) ?? SOME_LOCAL_CONSTANT` **silently diverges from
   the Settings screen**. That screen renders
@@ -249,6 +265,21 @@ an entry can age — verify before relying on one.
   (`src/modules/reviews/run-executor.ts:213`)
 
 ## Recurring errors & fixes
+
+- **2026-08-10** — Every `octokit.rest.*.list*` call here is a **single page**
+  unless it goes through `octokit.paginate`, and `per_page: 100` is GitHub's
+  maximum, not a safety margin — so it reads as deliberate while silently
+  truncating. `pulls.listFiles` capped `pr_files` at 100 rows for any PR with
+  more changed files, and GitHub returns them **path-sorted**, so the dropped
+  tail is whatever sorts last: on this repo's own 125-file branch that was every
+  single `server/src/modules/**` and `server/test/**` file, i.e. the entire
+  substance of the change. There is no error and no truncation flag; the only
+  symptom is downstream features looking thin. `pr_files` feeds blast radius,
+  smart-diff grouping, `diff-loader`'s patch reconstruction and prior-PRs
+  overlap, so one missing `paginate` degrades four features at once. Confirm with
+  `SELECT count(*) FROM pr_files WHERE pr_id = …` — exactly 100 is the tell.
+  `listCommits` had the identical defect (GitHub caps it at 250).
+  (`src/adapters/github/octokit.ts:79`)
 
 - **2026-08-10** — A testcontainers fixture must be owned by **one** outer
   `describe`. Vitest runs an `afterAll` registered inside a `describe` as soon as

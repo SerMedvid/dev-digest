@@ -205,11 +205,15 @@ describe('BlastService.get — partial and degraded', () => {
     expect(res.changed_symbols).toHaveLength(2);
   });
 
-  it('an index built at another commit is partial/index_stale', async () => {
+  it('an index built at another commit is STILL ok — that is not staleness', async () => {
+    // Regression guard. This case used to be `partial`/`index_stale`, which
+    // meant every pull request was warned about: the index is built from the
+    // clone's default-branch HEAD and `headSha` is the PR branch's tip, so the
+    // two differ by construction and re-indexing could never make them agree.
     const { svc } = build({ state: { status: 'full', lastIndexedSha: 'older-sha' } });
     const res = await svc.get('ws-1', 'pr-1');
-    expect(res.status).toBe('partial');
-    expect(res.reason).toBe('index_stale');
+    expect(res.status).toBe('ok');
+    expect(res.reason).toBeNull();
     expect(res.changed_symbols).toHaveLength(2);
   });
 

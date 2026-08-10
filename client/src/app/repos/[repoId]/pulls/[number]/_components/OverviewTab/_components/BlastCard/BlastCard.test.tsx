@@ -177,7 +177,7 @@ describe("BlastCard — states", () => {
   });
 
   it("partial still renders the tree, with a warning above it", async () => {
-    stubFetch(200, { ...OK_MAP, status: "partial", reason: "index_stale" });
+    stubFetch(200, { ...OK_MAP, status: "partial", reason: "index_partial" });
     renderCard(card());
 
     expect(await screen.findByText(/some callers may be missing/i)).toBeInTheDocument();

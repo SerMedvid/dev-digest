@@ -4,7 +4,7 @@
   "retry": "Retry",
   "viewGraph": "Graph",
   "empty": "No indexed symbols in the changed files.",
-  "partialWarning": "The index is incomplete or behind this PR ({reason}) — some callers may be missing.",
+  "partialWarning": "The code index is incomplete ({reason}) — some callers may be missing.",
   "degradedTitle": "Index not usable",
   "degradedBody": "This repository has no usable index ({reason}), so callers can't be resolved. This is not the same as \"nothing calls it\".",
   "explain": "Explain",

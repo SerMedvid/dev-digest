@@ -4,10 +4,8 @@ export const BLAST_REASON = {
   noFiles: 'no_files',
   /** The facade could not use the index and gave no reason of its own. */
   noData: 'no_data',
-  /** The index exists but is incomplete. */
+  /** The index exists but is incomplete — the indexer's own verdict. */
   indexPartial: 'index_partial',
-  /** The index is complete but was built against a different commit. */
-  indexStale: 'index_stale',
 } as const;
 
 /**

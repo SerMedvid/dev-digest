@@ -161,8 +161,19 @@ The one decision this module exists to make, in
 | Facade returned `degraded: true` (no usable index, ripgrep fallback) | `degraded` | the facade's own reason (`no_data`, …) |
 | `pr_files` is empty (PR never imported) | `degraded` | `no_files` |
 | Index state is `partial` | `partial` | `index_partial` |
-| `last_indexed_sha` ≠ the PR's `head_sha` | `partial` | `index_stale` |
 | Otherwise, including zero symbols over a full index | `ok` | `null` |
+
+> **Superseded (2026-08-10).** A fifth row used to read
+> *`last_indexed_sha` ≠ the PR's `head_sha` → `partial` / `index_stale`*. It was
+> removed, along with the `index_stale` reason itself, because it fired on
+> **every** pull request: the index is built from the clone's default-branch
+> HEAD while `head_sha` is the PR branch's tip, and a PR exists precisely
+> because those two differ. Re-indexing could never make them agree, so the
+> warning was permanent and carried no information — which devalued the one
+> signal this card has for "the map is incomplete". `seed.ts` had been rigging
+> `last_indexed_sha` to the seeded PR's head, which is why a fresh install never
+> showed it and the defect stayed invisible until real PRs were imported.
+> **`partial` now reflects the indexer's own verdict and nothing else.**
 
 Order matters. The facade's verdict wins over index metadata: if it fell back
 to ripgrep, no amount of `repo_index_state` makes its arrays mean anything. And
@@ -226,7 +237,7 @@ The house rule: degrade visibly, never fail the read.
 | Situation | Behaviour |
 |---|---|
 | Repo never indexed / index `failed` | **200** `status: degraded, reason: no_data` — the card explains, the MCP tool passes it through |
-| Index `partial` or behind the PR's head | **200** `status: partial`, map served, warning rendered |
+| Index `partial` (the indexer's own verdict) | **200** `status: partial`, map served, warning rendered |
 | PR not imported (`pr_files` empty) | **200** `status: degraded, reason: no_files`, repo-intel never called |
 | Docs-only PR / no indexed symbols | **200** `status: ok`, empty arrays — a true empty, not a failure |
 | Summary requested on a degraded map | **422** `blast_degraded`, nothing persisted, **no model call and no model resolution** |
@@ -243,7 +254,8 @@ The house rule: degrade visibly, never fail the read.
 | 2 | No AST or import-graph rebuild at request time | `blast-routes.it.test.ts` runs with **no clone on disk** — every fixture is a persisted index row |
 | 3 | The read path calls no LLM | `blast-routes.it.test.ts` asserts the `MockLLMProvider` call count is unchanged across every GET, and `blast-service.test.ts` gives the service a `model` dep that throws if resolved |
 | 4 | Empty-because-nothing vs empty-because-blind are distinct | [`blast-service.test.ts`](../test/blast-service.test.ts) ("zero symbols over a full index is ok-and-empty, not degraded" vs the degraded cases) |
-| 5 | `partial` and `degraded` are distinct, and `partial` still serves the map | `blast-service.test.ts` ("a partial index serves the map", "an index built at another commit is partial/index_stale") |
+| 5 | `partial` and `degraded` are distinct, and `partial` still serves the map | `blast-service.test.ts` ("a partial index serves the map") |
+| 5a | An index built at a different commit is **`ok`** — that is not staleness | `blast-service.test.ts` ("an index built at another commit is STILL ok — that is not staleness") |
 | 6 | The optional summary is exactly one call, cached at the head | [`blast-summary.test.ts`](../test/blast-summary.test.ts) + `blast-routes.it.test.ts` ("derives once, caches, and serves the cached value") |
 | 7 | A degraded map is never explained | `blast-summary.test.ts` ("refuses a degraded map … before any model call" — asserts model *resolutions* is 0, not just calls) |
 | 8 | The reverse BFS is bounded, cycle-safe and deterministic | [`repo-intel-reverse-bfs.it.test.ts`](../test/repo-intel-reverse-bfs.it.test.ts) |

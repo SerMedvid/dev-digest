@@ -36,14 +36,19 @@ export function toWire(
   // Everything below is a REAL map. It is served either way; `partial` only
   // adds "some callers may be missing" — silently downgrading it to an empty
   // `ok` would be the one thing this feature exists to prevent.
+  //
+  // `partial` reflects the INDEXER'S OWN VERDICT and nothing else. There used
+  // to be a second branch here comparing `state.lastIndexedSha` to the PR's
+  // `headSha`, which fired on literally every pull request: the index is built
+  // from the clone's default-branch HEAD, while `headSha` is the PR branch's
+  // tip, and a PR exists precisely because those differ. Re-indexing could not
+  // clear it. A warning that is always on carries no information and trains the
+  // reader to ignore the one signal this card has for "the map is incomplete".
   let status: BlastRadiusResponse['status'] = 'ok';
   let reason: string | null = null;
   if (state.status === 'partial') {
     status = 'partial';
     reason = BLAST_REASON.indexPartial;
-  } else if (state.lastIndexedSha !== headSha) {
-    status = 'partial';
-    reason = BLAST_REASON.indexStale;
   }
 
   // The facade hands back ONE flat caller list tagged with `viaSymbol`; the

@@ -40,11 +40,15 @@ export interface BlastResultShape {
   reason?: string;
 }
 
-/** Mirror of repo-intel's `IndexState`, narrowed to what status derivation reads. */
+/**
+ * Mirror of repo-intel's `IndexState`, narrowed to what status derivation reads
+ * — which since the always-firing `index_stale` was removed is the indexer's own
+ * verdict and nothing else. `lastIndexedSha` is deliberately NOT here: comparing
+ * it to a PR's head sha is what produced a permanent, meaningless `partial`.
+ */
 export interface IndexStateShape {
   /** repo-intel's `IndexStatus`: 'full' | 'partial' | 'degraded' | 'failed'. */
   status: string;
-  lastIndexedSha: string;
 }
 
 /** The pull fields blast needs; `reviewRepo.getPull`'s row satisfies it. */

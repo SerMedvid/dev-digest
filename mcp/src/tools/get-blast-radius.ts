@@ -20,8 +20,8 @@ export const blastRadiusTool: ToolDef = {
     '(with file:line), and the HTTP endpoints and scheduled jobs downstream — including ones ' +
     'reached indirectly, through a file that imports a changed file. Use it to judge what a ' +
     'change can affect beyond the files it touches. The result is read from a prebuilt index, ' +
-    'so check "status": "ok" means the map is complete, "partial" means the index is incomplete ' +
-    'or behind this PR so callers may be missing, and "degraded" means the index could not be ' +
+    'so check "status": "ok" means the map is complete, "partial" means the index itself is ' +
+    'incomplete so callers may be missing, and "degraded" means the index could not be ' +
     'read at all — empty arrays then mean "unknown", never "nothing calls this".',
   inputSchema: Args.shape,
   annotations: {
