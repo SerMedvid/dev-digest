@@ -147,6 +147,36 @@ describe('BlastService.get — ok', () => {
     );
   });
 
+  it('attributes a declaring file’s own facts to its symbols even with zero callers', async () => {
+    // The degenerate case the union alone cannot explain: no resolved callers
+    // (stale index), yet the changed file itself declares an endpoint. The
+    // symbol must carry its own file's facts or the header counter points at
+    // chips that never render.
+    const { svc } = build({
+      map: {
+        changedSymbols: [
+          { file: 'src/api/public/items.ts', name: 'listItems', kind: 'function', line: 9 },
+        ],
+        callers: [],
+        impactedEndpoints: ['GET /api/public/items'],
+        impactedCrons: ['job:refresh-items'],
+        factsByFile: {
+          'src/api/public/items.ts': {
+            endpoints: ['GET /api/public/items'],
+            crons: ['job:refresh-items'],
+          },
+        },
+        degraded: false,
+      },
+    });
+    const res = await svc.get('ws-1', 'pr-1');
+
+    const [listItems] = res.changed_symbols;
+    expect(listItems!.callers).toEqual([]);
+    expect(listItems!.endpoints).toEqual(['GET /api/public/items']);
+    expect(listItems!.crons).toEqual(['job:refresh-items']);
+  });
+
   it('zero symbols over a full index is ok-and-empty, not degraded', async () => {
     const { svc } = build({
       map: {

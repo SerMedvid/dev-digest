@@ -182,11 +182,16 @@ groups it under the symbol each caller reaches
 preserved, which is rank-descending — the facade sorted it that way, so the
 tree and the graph agree on prominence.
 
-Per-symbol `endpoints`/`crons` come from `factsByFile` over **that symbol's own
-caller files**; the top-level unions are the BFS-widened set. The per-symbol
-lists are therefore a strict subset, which is deliberate: the card can say
-"this symbol reaches that endpoint" without overclaiming, while the header
-counters still show everything the change can touch.
+Per-symbol `endpoints`/`crons` come from `factsByFile` over **the symbol's own
+declaring file plus that symbol's caller files**; the top-level unions are the
+BFS-widened set. The per-symbol lists are therefore a subset, which is
+deliberate: the card can say "this symbol reaches that endpoint" without
+overclaiming, while the header counters still show everything the change can
+touch. The declaring file is seeded in so a symbol with zero resolved callers
+(e.g. a stale index) still carries the facts its own file declares — without
+it, the header counter names endpoints that no chip and no graph node can show
+([`blast-service.test.ts`](../test/blast-service.test.ts) "attributes a
+declaring file's own facts to its symbols even with zero callers").
 
 ### 3.4 The summary prompt
 

@@ -65,12 +65,15 @@ export function toWire(
   const facts = result.factsByFile ?? {};
   const changed_symbols: BlastSymbolC[] = result.changedSymbols.map((s) => {
     // Per-symbol attribution is narrower than the top-level union by design:
-    // it covers only files that actually call THIS symbol, while the union is
-    // BFS-widened. The card can therefore say "this symbol reaches that
-    // endpoint" without overclaiming.
+    // it covers the symbol's own declaring file plus the files that actually
+    // call THIS symbol, while the union is BFS-widened. The declaring file is
+    // seeded in so that a symbol with zero resolved callers (stale index)
+    // still carries the endpoints/crons its own file declares — otherwise the
+    // header counter names facts no chip can show. Either way the card can
+    // say "this symbol reaches that endpoint" without overclaiming.
     const endpoints = new Set<string>();
     const crons = new Set<string>();
-    for (const file of callerFilesBySymbol.get(s.name) ?? []) {
+    for (const file of [s.file, ...(callerFilesBySymbol.get(s.name) ?? [])]) {
       const f = facts[file];
       if (!f) continue;
       for (const e of f.endpoints) endpoints.add(e);
