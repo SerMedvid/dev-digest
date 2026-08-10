@@ -15,6 +15,9 @@ export const s = {
     // `SectionLabel` adds its own 14px below the heading, so the title keeps
     // more air than the body sections do, which is what you want of a heading.
     gap: 22,
+    // Grid item: `min-width: auto` would let a long unbroken token widen the
+    // column past its track. See the same note on `BlastCard`'s card.
+    minWidth: 0,
   } satisfies CSSProperties,
   statement: {
     margin: 0,

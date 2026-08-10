@@ -54,11 +54,11 @@ and every MCP tool will return the same "API is not reachable" error.
 ### 2. Install this package
 
 ```bash
-cd mcp && npm ci
+cd mcp && pnpm install
 ```
 
-**npm, not pnpm** — this package has its own `package-lock.json`, like
-`reviewer-core/` and `e2e/`. Running `pnpm install` writes a second lockfile.
+**pnpm, not npm** — this package has its own `pnpm-lock.yaml`, like `server/`
+and `client/`. Running `npm install` here writes a second lockfile.
 
 ### 3. Check it in isolation, before wiring any client
 
@@ -84,12 +84,12 @@ For the same check with a UI — browse the tool schemas, fill arguments in a fo
 re-run a call without retyping the frame — use the MCP Inspector:
 
 ```bash
-cd mcp && npm run inspect
+cd mcp && pnpm run inspect
 ```
 
 It spawns its own copy of the server, opens a browser, and speaks the same stdio
 protocol the printf check does. The Inspector is **not** a dependency of this
-package: the script fetches it with `npx --yes` so `npm ci` — and CI — stay lean.
+package: the script fetches it with `npx --yes` so `pnpm install` — and CI — stay lean.
 The server itself still resolves from the local `tsx`, so the thing you inspect
 is the version in your working tree.
 
@@ -130,7 +130,7 @@ Remove the entry (or list it in `enabledMcpjsonServers`) when you want it back;
 either way it takes effect on the next client session. Related key:
 `enableAllProjectMcpServers` approves every `.mcp.json` server without asking.
 
-Starting `npm start` in a terminal is **not** a way to "have it running" — with
+Starting `pnpm start` in a terminal is **not** a way to "have it running" — with
 no client on the other end of stdin it idles and serves nobody. A client always
 spawns its own process.
 
@@ -154,10 +154,79 @@ failing at boot.
 | `devdigest_run_agent_on_pr` | **yes** | Start a review, wait for it, return the findings — one call |
 | `devdigest_get_findings` | no | Read a review that already ran |
 | `devdigest_get_conventions` | no | The repository's extracted house rules |
-| `devdigest_get_blast_radius` | no | **Not implemented** — returns an error by design |
+| `devdigest_get_blast_radius` | no | What a PR's changes reach: changed symbols, their callers, the endpoints and jobs downstream |
 
 Only `devdigest_run_agent_on_pr` costs money and takes minutes; everything else
 is a read.
+
+`devdigest_get_blast_radius` always carries a `status`. `ok` means the map is
+complete; `partial` means the index is incomplete or behind the PR's head, so
+callers may be missing; `degraded` means the index could not be read at all —
+its empty arrays mean *unknown*, never *nothing calls this*. The projection
+spells that out in a `note` rather than leaving the model to infer it.
+
+## The CLI — `devdigest review`
+
+A second entry point in this package, sharing `src/api.ts`, `src/config.ts` and
+`src/errors.ts` with the MCP server. `.mcp.json` and the server itself are
+untouched.
+
+```bash
+cd mcp
+pnpm review -- --mode working              # the workspace's default agent
+pnpm review -- --mode working --agent "Security Reviewer"
+```
+
+It reviews your **local working tree** with the same reviewer, the same
+grounding gate and the same blocker count DevDigest runs on a pull request —
+before you push. There is no PR, and nothing is persisted: no runs, no reviews,
+no findings.
+
+### What is reviewed, and what is not
+
+`git diff HEAD` — staged **and** unstaged changes to **tracked** files. That is
+the entire review input.
+
+**Untracked files are not reviewed.** `git diff HEAD` cannot see them. They are
+counted and reported on stderr:
+
+```
+2 untracked file(s) not reviewed (git diff HEAD does not see them — stage or commit to include).
+```
+
+Stage or commit them to include them. The exclusion is deliberate — synthesising
+a diff for them would review something git does not consider part of the change.
+
+### Exit codes
+
+The contract, also printed by `--help`:
+
+| Code | Meaning |
+|---|---|
+| `0` | the review ran and found no blockers (also: nothing to review) |
+| `1` | the review ran and found blockers, per the agent's `ci_fail_on` |
+| `2` | the review **could not run** — not a git repo, API unreachable, non-200, unknown agent, bad flags |
+
+The `1` / `2` split is the point: a CI step must be able to tell "your code has
+problems" from "this tool did not work".
+
+### Streams
+
+stdout carries the review payload **only**, so a later CI step can parse it.
+Every diagnostic — the untracked warning, errors, progress — goes to stderr,
+the same discipline the MCP server applies to its JSON-RPC channel.
+
+### Modes
+
+`--mode` is required. Only `working` is implemented; `staged` and `branch` are
+accepted by the parser and exit `2` with a message naming them, so adding one
+later is a single branch rather than a redesign.
+
+### Configuration
+
+`DEVDIGEST_API_URL` (default `http://localhost:3001`) — the same variable the
+MCP server uses. With the API down the CLI exits `2` and names both the URL and
+`cd server && pnpm dev`.
 
 ## Troubleshooting
 
@@ -165,7 +234,7 @@ is a read.
 |---|---|---|
 | Every tool says "The DevDigest API is not reachable" | the API is not running, or is on another port | start it (step 1); if the port differs, set `DEVDIGEST_API_URL` |
 | `list_agents` errors with "No reviewer agents are configured" | database migrated but never seeded | `cd server && pnpm db:seed` |
-| Client shows the server as failed, no tools | deps not installed | `cd mcp && npm ci` |
+| Client shows the server as failed, no tools | deps not installed | `cd mcp && pnpm install` |
 | A PR resolves but reports "not imported yet" | the PR exists on GitHub but was never opened in the studio | open it once in the studio, then retry |
 | Findings come back but `agents` is `["unknown"]` | that review predates agent attribution (seeded/imported rows carry `agent_name: null`) | expected; the `agent` filter cannot narrow such a review |
 | Protocol errors / garbled JSON from the client | something wrote to stdout | see the stdout rule below |
@@ -174,8 +243,8 @@ is a read.
 
 ```bash
 cd mcp
-npm test           # vitest, hermetic — the API is faked (test/helpers/fake-api.ts)
-npm run typecheck
+pnpm test          # vitest, hermetic — the API is faked (test/helpers/fake-api.ts)
+pnpm typecheck
 ```
 
 Both are hermetic: no Postgres, no Docker, no running API. `mcp.yml` runs

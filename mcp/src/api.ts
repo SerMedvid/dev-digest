@@ -1,5 +1,7 @@
 import type {
+  AdhocReviewRef,
   AgentRef,
+  BlastRadiusRef,
   ConventionsRef,
   PullRef,
   RepoRef,
@@ -40,6 +42,9 @@ export interface ApiClient {
   listRuns(prId: string): Promise<RunRef[]>;
   listReviews(prId: string): Promise<ReviewRef[]>;
   getConventions(repoId: string): Promise<ConventionsRef>;
+  getBlastRadius(prId: string): Promise<BlastRadiusRef>;
+  /** Stateless review of a raw unified diff — the `devdigest review` CLI. */
+  reviewAdhoc(diff: string, agent?: string): Promise<AdhocReviewRef>;
 }
 
 export class HttpApiClient implements ApiClient {
@@ -101,5 +106,17 @@ export class HttpApiClient implements ApiClient {
 
   getConventions(repoId: string): Promise<ConventionsRef> {
     return this.request<ConventionsRef>(`/repos/${repoId}/conventions`);
+  }
+
+  getBlastRadius(prId: string): Promise<BlastRadiusRef> {
+    return this.request<BlastRadiusRef>(`/pulls/${prId}/blast`);
+  }
+
+  reviewAdhoc(diff: string, agent?: string): Promise<AdhocReviewRef> {
+    return this.request<AdhocReviewRef>('/reviews/adhoc', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ diff, ...(agent ? { agent } : {}) }),
+    });
   }
 }

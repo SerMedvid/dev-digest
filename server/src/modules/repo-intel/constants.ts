@@ -30,6 +30,14 @@ export const EXCLUDED_DIRS = [
 export const MAX_CALLERS_PER_SYMBOL = 20;
 
 /**
+ * How far blast walks `file_edges` backwards from the changed files when
+ * attributing endpoints/crons. Two levels catches "route file imports a helper
+ * that imports the changed file" without the fan-out a deeper walk brings on a
+ * hub module. One query per level, via `file_edges_repo_to_idx`.
+ */
+export const BLAST_BFS_DEPTH = 2;
+
+/**
  * [T1] Bumped whenever the AST extractor or symbol schema changes. A mismatch
  * with `repo_index_state.indexer_version` forces a full reindex.
  *

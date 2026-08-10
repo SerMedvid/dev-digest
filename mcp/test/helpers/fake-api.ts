@@ -1,6 +1,8 @@
 import type { ApiClient } from '../../src/api.js';
 import type {
+  AdhocReviewRef,
   AgentRef,
+  BlastRadiusRef,
   ConventionsRef,
   PullRef,
   RepoRef,
@@ -17,6 +19,8 @@ export interface FakeApiSeed {
   reviews: ReviewRef[];
   conventions: ConventionsRef;
   started: StartedRun[];
+  blast: BlastRadiusRef;
+  adhoc: AdhocReviewRef;
 }
 
 const DEFAULT_SEED: FakeApiSeed = {
@@ -36,6 +40,41 @@ const DEFAULT_SEED: FakeApiSeed = {
   reviews: [],
   conventions: { scan: { status: 'done' }, candidates: [] },
   started: [{ run_id: 'run-1', agent_id: 'agent-1', agent_name: 'Security Reviewer' }],
+  blast: {
+    status: 'ok',
+    reason: null,
+    head_sha: 'a1b2c3d4e5f6',
+    changed_symbols: [
+      {
+        name: 'rateLimit',
+        kind: 'function',
+        file: 'src/middleware/ratelimit.ts',
+        line: 12,
+        callers: [
+          { file: 'src/api/public/index.ts', line: 23, symbol: 'publicRouter', rank: 0.92 },
+          { file: 'src/api/public/webhooks.ts', line: 45, symbol: 'handleWebhook', rank: 0.71 },
+        ],
+        endpoints: ['GET /api/public/items'],
+        crons: [],
+      },
+    ],
+    endpoints: ['GET /api/public/items', 'GET /api/public/health'],
+    crons: ['job:reset-rate-buckets'],
+    summary: null,
+  },
+  adhoc: {
+    review: {
+      verdict: 'approve',
+      summary: 'Nothing blocking.',
+      score: 92,
+      findings: [],
+    },
+    blockers: 0,
+    dropped: [],
+    scope_dropped: [],
+    agent: { name: 'Security Reviewer', ci_fail_on: 'critical' },
+    model: 'claude-opus-5',
+  },
 };
 
 /**
@@ -76,6 +115,14 @@ export function makeFakeApi(seed: Partial<FakeApiSeed> = {}): ApiClient & { call
     async getConventions(repoId) {
       calls.push(`getConventions:${repoId}`);
       return s.conventions;
+    },
+    async getBlastRadius(prId) {
+      calls.push(`getBlastRadius:${prId}`);
+      return s.blast;
+    },
+    async reviewAdhoc(diff, agent) {
+      calls.push(`reviewAdhoc:${diff.length}:${agent ?? '-'}`);
+      return s.adhoc;
     },
   };
 }

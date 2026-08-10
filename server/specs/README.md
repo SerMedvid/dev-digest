@@ -39,6 +39,11 @@ Conventions:
   endpoints, the five sources and their caps, the computed confidence tiers,
   what lands in `pr_intent`, the `intent` prompt slot and the deterministic
   scope gate's exact drop rule.
+- [`prior-prs.md`](prior-prs.md) — `GET /pulls/:id/prior-prs`: merged and closed
+  PRs whose files overlap the PR in view, the ordering and caps, and the
+  `uncomparable_prs` disclosure that keeps an empty list from reading as an
+  all-clear. Client half:
+  [`client/specs/blast-radius-card.md`](../../client/specs/blast-radius-card.md).
 - [`smart-diff.md`](smart-diff.md) — grouping a PR's changed files into
   `core`/`wiring`/`boilerplate`, the deterministic ordering and split
   suggestion, the on-demand per-file summary endpoint, and what lands in

@@ -76,13 +76,22 @@ export class OctokitGitHubClient implements GitHubClient {
             repo: repo.name,
             pull_number: n,
           });
-          const { data: files } = await this.octokit.rest.pulls.listFiles({
+          // PAGINATED, not a single page. `per_page: 100` is GitHub's maximum,
+          // so a single call silently truncates any PR with more than 100
+          // changed files — and because the API returns them path-sorted, the
+          // dropped tail is whatever sorts last (here: every `server/**` file).
+          // `pr_files` feeds blast radius, smart-diff and the review's diff
+          // reconstruction, so a truncated list corrupts all three at once with
+          // no error to notice. GitHub caps this endpoint at 3000 files.
+          const files = await this.octokit.paginate(this.octokit.rest.pulls.listFiles, {
             owner: repo.owner,
             repo: repo.name,
             pull_number: n,
             per_page: 100,
           });
-          const { data: commits } = await this.octokit.rest.pulls.listCommits({
+          // Same defect, same fix: a PR with more than 100 commits truncated
+          // `pr_commits`. GitHub caps this endpoint at 250 commits.
+          const commits = await this.octokit.paginate(this.octokit.rest.pulls.listCommits, {
             owner: repo.owner,
             repo: repo.name,
             pull_number: n,

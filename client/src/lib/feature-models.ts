@@ -59,4 +59,13 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
     defaultProvider: "openrouter",
     defaultModel: "google/gemini-2.5-flash-lite",
   },
+  {
+    id: "blast_summary",
+    label: "PR Review · Blast summary",
+    description: "Explains the blast-radius map in one paragraph, on demand.",
+    // Flash-class: one bounded call per PR head over the computed map, and only
+    // when the user clicks Explain — same reasoning as review_intent.
+    defaultProvider: "openrouter",
+    defaultModel: "google/gemini-2.5-flash-lite",
+  },
 ];

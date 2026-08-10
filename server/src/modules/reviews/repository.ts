@@ -24,6 +24,7 @@ import * as pullRepo from './repository/pull.repo.js';
 
 export type { PrFindingsSummary } from './repository/review.repo.js';
 export type { IntentUpsert, StoredIntent } from './repository/pull.repo.js';
+export type { PriorPrRow } from './repository/pull.repo.js';
 
 export class ReviewRepository {
   constructor(private db: Db) {}
@@ -40,6 +41,27 @@ export class ReviewRepository {
 
   getPrFiles(prId: string): Promise<(typeof t.prFiles.$inferSelect)[]> {
     return pullRepo.getPrFiles(this.db, prId);
+  }
+
+  /** Merged/closed PRs in this repo whose files intersect `paths`. */
+  getPriorPrsTouching(args: {
+    workspaceId: string;
+    repoId: string;
+    excludePrId: string;
+    paths: string[];
+    statuses: readonly string[];
+    limit: number;
+  }): Promise<pullRepo.PriorPrRow[]> {
+    return pullRepo.getPriorPrsTouching(this.db, args);
+  }
+
+  /** Same-repo PRs with no stored file rows — the ones that cannot be compared. */
+  countPrsWithoutFiles(args: {
+    workspaceId: string;
+    repoId: string;
+    excludePrId: string;
+  }): Promise<number> {
+    return pullRepo.countPrsWithoutFiles(this.db, args);
   }
 
   // ---- reviews + findings -------------------------------------------------

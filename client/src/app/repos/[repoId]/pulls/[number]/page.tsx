@@ -148,9 +148,28 @@ export default function PRDetailPage() {
         onRunsStarted={() => invalidateActiveRuns()}
       />
 
-      <div style={{ padding: "24px 32px 44px", display: "flex", flexDirection: "column", gap: 24, maxWidth: 1080, margin: "0 auto" }}>
+      {/* Overview fills the window; the reading tabs stay measure-limited.
+          Its Intent | Blast grid needs two 420px tracks plus the gutter before
+          it yields a second column, which a 1080 cap all but forbids — while
+          Findings and Diff are prose and code, where an unbounded line length
+          is a readability regression. Padding is the container's own, so the
+          content never sits flush against the window edge. */}
+      <div
+        style={{
+          padding: "24px 32px 44px",
+          display: "flex",
+          flexDirection: "column",
+          gap: 24,
+          ...(tab === "overview" ? {} : { maxWidth: 1080, margin: "0 auto" }),
+        }}
+      >
         {tab === "overview" && (
-          <OverviewTab prBody={pr.body} prId={prId} headSha={pr.head_sha} />
+          <OverviewTab
+            prBody={pr.body}
+            prId={prId}
+            headSha={pr.head_sha}
+            repoFullName={repoFullName}
+          />
         )}
 
         {tab === "findings" && (

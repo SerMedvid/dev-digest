@@ -13,6 +13,42 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-10** — `DepCruiseGraph.buildEdges` returned **zero edges on Windows,
+  silently**, and one line caused it: `toRel` ended `return relative(root, abs)`,
+  which emits NATIVE separators, while `pipeline/walk.ts:119` deliberately
+  normalises its paths to POSIX (`.split(sep).join('/')`) "so DB rows are
+  platform-agnostic". `buildEdges` then tests `fileSet.has(from)` against that
+  POSIX set, missed on every module, and returned `[]` **without throwing** — so
+  `graphFailed` stayed unset, `clean` stayed true, and the run reported
+  `status: 'full'` with `edgesWritten: 0`. The damage is not limited to the
+  graph: `resolveReferences` resolves `references.decl_file` *through* those
+  edges, so all 6416 references stayed NULL, and since `getResolvedCallers`
+  filters `inArray(references.declFile, …)` — and NULL never matches an `IN`
+  list — **blast radius reported 0 callers for every symbol in the repo**. Linux
+  `relative()` already returns POSIX, so CI was green throughout. Measured on
+  this repo: 0 → 514 edges and 0 → 640 resolved references from that one
+  `.split(sep).join('/')`. The general rule: any adapter handing paths back to
+  the indexer owes the same POSIX normalisation the walker does, and a graph
+  stage that yields nothing for hundreds of files should not be able to report
+  `full`. (`src/adapters/depgraph/index.ts:111`,
+  `src/modules/repo-intel/pipeline/full.ts:216`)
+
+- **2026-08-10** — Deriving a PR-scoped status by comparing
+  `repo_index_state.lastIndexedSha` to the pull request's `headSha` is
+  **structurally always true**, and blast shipped that way: the index is built
+  from the clone's default-branch HEAD (`git rev-parse HEAD`, the clone is synced
+  to `origin/<defaultBranch>`), while `headSha` is the PR branch's tip — a pull
+  request exists precisely because those differ. So `partial`/`index_stale` fired
+  on every PR forever and re-indexing could not clear it, which devalued the
+  card's only "the map is incomplete" signal. What kept it hidden is worth more
+  than the bug: `seed.ts` set `lastIndexedSha: pr.headSha` *specifically* so a
+  fresh install would not show it, so every demo and every seeded test looked
+  correct and the defect only appeared against imported PRs. **A fixture written
+  to make a derived state not fire is a smell — check whether the state can ever
+  correctly fire on real data.** The comparison is gone; `partial` now reflects
+  the indexer's own verdict only. (`src/modules/blast/helpers.ts:44`,
+  `src/db/seed.ts:360`)
+
 - **2026-08-03** — A feature that resolves its model with
   `getFeatureModelOverride(...) ?? SOME_LOCAL_CONSTANT` **silently diverges from
   the Settings screen**. That screen renders
@@ -119,6 +155,36 @@ an entry can age — verify before relying on one.
   `ContainerOverrides`. (`src/modules/repo-intel/service.ts:104`)
 
 ## Codebase patterns & tool notes
+
+- **2026-08-10** — `dependency-cruiser`'s `cruise()` returns `module.source` and
+  `dependency.resolved` as **cwd-relative POSIX** strings, never absolute — even
+  when you hand it absolute paths. Two consequences. (1) A test fixture for this
+  adapter must live **under `process.cwd()`**, not `os.tmpdir()`: on Windows
+  `%TEMP%` is on `C:` while the package may be on `D:`, cruise cannot express
+  that relative to cwd, and it dies with a nonsense `ENOENT` on a path like
+  `D:\…\server\C:\Users\…`. `test/depgraph-paths.test.ts` creates its repo under
+  cwd for exactly this reason, and the fixture files must be **nested** (a
+  separator has to appear in the relative path or a separator bug cannot show).
+  (2) The same cross-drive limit applies in production: a `DEVDIGEST_CLONE_DIR`
+  on a different drive from the server's cwd would make the graph stage throw
+  rather than merely return empty. Today's clone dir sits under the package, so
+  it works. (`src/adapters/depgraph/index.ts:61`, `test/depgraph-paths.test.ts`)
+
+- **2026-08-09** — The `declFiles` parameter of
+  [`RepoIntelRepository.getResolvedCallers`](src/modules/repo-intel/repository.ts)
+  is **the PR's whole changed-file list**, not one symbol's declaration file —
+  `tryPersistentBlast` passes `changedFiles` straight through. So filtering
+  self-references with `notInArray(references.fromPath, declFiles)` reads
+  correctly and is wrong: it drops every caller the PR *also* touches, which on
+  a real multi-file diff is most of them (the seeded nine-file PR #482 went from
+  four callers of `rateLimit` to one). The self-reference filter has to be
+  column-to-column — `ne(references.fromPath, references.declFile)` — because
+  only `decl_file` names the file that actually declares the symbol. The same
+  confusion bites the fact-file set: `getReverseDependents` excludes its own
+  inputs by contract, so `changedFiles` must be unioned back in explicitly or a
+  changed route file's own endpoints/crons are attributed to nothing.
+  (`src/modules/repo-intel/repository.ts:527`,
+  `src/modules/repo-intel/service.ts:394`)
 
 - **2026-08-06** — `GET /pulls/:id` **deletes and re-inserts every `pr_files` row
   on each request** (and the same for `pr_commits`), so nothing per-file can be
@@ -233,6 +299,50 @@ an entry can age — verify before relying on one.
   (`src/modules/reviews/run-executor.ts:213`)
 
 ## Recurring errors & fixes
+
+- **2026-08-10** — Every `octokit.rest.*.list*` call here is a **single page**
+  unless it goes through `octokit.paginate`, and `per_page: 100` is GitHub's
+  maximum, not a safety margin — so it reads as deliberate while silently
+  truncating. `pulls.listFiles` capped `pr_files` at 100 rows for any PR with
+  more changed files, and GitHub returns them **path-sorted**, so the dropped
+  tail is whatever sorts last: on this repo's own 125-file branch that was every
+  single `server/src/modules/**` and `server/test/**` file, i.e. the entire
+  substance of the change. There is no error and no truncation flag; the only
+  symptom is downstream features looking thin. `pr_files` feeds blast radius,
+  smart-diff grouping, `diff-loader`'s patch reconstruction and prior-PRs
+  overlap, so one missing `paginate` degrades four features at once. Confirm with
+  `SELECT count(*) FROM pr_files WHERE pr_id = …` — exactly 100 is the tell.
+  `listCommits` had the identical defect (GitHub caps it at 250).
+  (`src/adapters/github/octokit.ts:79`)
+
+- **2026-08-10** — A testcontainers fixture must be owned by **one** outer
+  `describe`. Vitest runs an `afterAll` registered inside a `describe` as soon as
+  *that* block's tests finish — before the next sibling `describe` runs — so a
+  file laid out as two top-level `d(...)` blocks sharing a module-level `db` hands
+  the second block a closed pool. It does not surface as a teardown error: every
+  `app.inject` returns **500 `write CONNECTION_ENDED localhost:<port>`**, which
+  reads like a route bug, and the query-level tests above it all pass. Nest the
+  second block instead, as [`test/blast-routes.it.test.ts`](test/blast-routes.it.test.ts)
+  does — one outer `d(...)` holding `beforeAll`/`afterAll`, plain `describe`s
+  inside. Worth knowing alongside it: when `startPg()` itself fails (the reaper
+  is flaky on Windows), the module-level `db` and id vars stay `undefined`, so
+  `buildApp({ db: undefined })` quietly connects to the *dev* database from
+  `config.databaseUrl` and the route 422s on a `/pulls/undefined/...` uuid — a
+  container failure can therefore masquerade as an assertion failure two suites
+  away. (`test/blast-prior-prs.it.test.ts:63`)
+
+- **2026-08-09** — A repo-intel fixture whose `changedFiles` has **one entry**
+  cannot distinguish "this symbol's declaration file" from "the set of changed
+  files" — every predicate over the two is trivially equivalent, so a filter
+  that confuses them passes. Two blast defects lived through a green
+  hand-built route it-test for exactly this reason and only appeared when the
+  same endpoint was pointed at the seeded nine-file PR #482. When testing
+  anything in `repo-intel` that takes a file list, make the fixture's list
+  contain a file that is *also* a caller/dependent of another file in it —
+  that overlap is the normal case in a real PR and the only shape that
+  exercises the distinction. Asserting the whole file set a query was asked
+  for (rather than just the result) is what localises it.
+  (`test/blast-routes.it.test.ts:396`, `test/repo-intel-blast.test.ts:140`)
 
 - **2026-08-06** — The hermetic/integration lane split excludes by **filename, not
   by `describe`**, so a Docker-free block placed inside an `*.it.test.ts` file

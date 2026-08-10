@@ -88,3 +88,65 @@ export interface ConventionsRef {
   scan: { status: string } | null;
   candidates: ConventionRef[];
 }
+
+/**
+ * Blast radius — a structural mirror of the server's `BlastRadiusResponse`
+ * (`contracts/blast.ts`). Declared here rather than imported: `mcp/` resolves
+ * no `@devdigest/shared` alias, and the tool only ever reads these fields.
+ */
+export interface BlastCallerRef {
+  file: string;
+  line: number;
+  /** The ENCLOSING symbol at the call site, not the one being called. */
+  symbol: string;
+  rank: number;
+}
+
+export interface BlastSymbolRef {
+  name: string;
+  kind: string;
+  file: string;
+  line: number | null;
+  callers: BlastCallerRef[];
+  endpoints: string[];
+  crons: string[];
+}
+
+export interface BlastRadiusRef {
+  /** `partial`/`degraded` mean the map is incomplete — never launder them. */
+  status: 'ok' | 'partial' | 'degraded';
+  reason: string | null;
+  head_sha: string;
+  changed_symbols: BlastSymbolRef[];
+  endpoints: string[];
+  crons: string[];
+  summary: string | null;
+}
+
+/**
+ * Working-tree review — a structural mirror of `POST /reviews/adhoc`'s body.
+ * Only the fields the CLI renders; the server also returns token counts and
+ * cost, which the CLI does not print.
+ */
+export interface AdhocFinding {
+  severity: 'CRITICAL' | 'WARNING' | 'SUGGESTION';
+  title: string;
+  file: string;
+  start_line: number;
+  end_line: number;
+}
+
+export interface AdhocReviewRef {
+  review: {
+    verdict: string;
+    summary: string;
+    score: number;
+    findings: AdhocFinding[];
+  };
+  blockers: number;
+  /** Reasons the grounding gate dropped a finding — surfaced, never hidden. */
+  dropped: string[];
+  scope_dropped: string[];
+  agent: { name: string; ci_fail_on: string };
+  model: string;
+}

@@ -354,23 +354,79 @@ describe('devdigest_run_agent_on_pr', () => {
 });
 
 describe('devdigest_get_blast_radius', () => {
-  it('reports that it is not implemented and points at what is', async () => {
-    const result = await blastRadiusTool.handler(
-      { repo: 'acme/payments-api', pr: 482 },
-      deps(),
-    );
-    expect(result.isError).toBe(true);
-    expect(result.content[0]!.text).toContain('not implemented');
-    expect(result.content[0]!.text).toContain('devdigest_get_findings');
-  });
-
-  it('says so in its description too, so the model does not waste a call', () => {
-    expect(blastRadiusTool.description.toLowerCase()).toContain('not implemented');
-  });
-
-  it('never touches the API', async () => {
+  it('resolves the PR and projects the map', async () => {
     const api = makeFakeApi();
-    await blastRadiusTool.handler({ repo: 'acme/payments-api', pr: 482 }, deps(api));
-    expect(api.calls).toEqual([]);
+    const result = await blastRadiusTool.handler({ repo: 'acme/payments-api', pr: 482 }, deps(api));
+
+    expect(result.isError).toBeUndefined();
+    expect(api.calls).toContain('getBlastRadius:pr-1');
+
+    const body = result.structuredContent as Record<string, unknown>;
+    expect(body['status']).toBe('ok');
+    expect(body['repo']).toBe('acme/payments-api');
+    expect(body['pr']).toBe(482);
+
+    const symbols = body['symbols'] as Array<Record<string, unknown>>;
+    expect(symbols[0]!['name']).toBe('rateLimit');
+    expect(symbols[0]!['caller_count']).toBe(2);
+    expect(symbols[0]!['top_callers']).toEqual([
+      'src/api/public/index.ts:23 (publicRouter)',
+      'src/api/public/webhooks.ts:45 (handleWebhook)',
+    ]);
+    expect(body['crons']).toEqual(['job:reset-rate-buckets']);
+  });
+
+  it('passes a degraded status through instead of laundering it into an empty success', async () => {
+    const api = makeFakeApi({
+      blast: {
+        status: 'degraded',
+        reason: 'no_data',
+        head_sha: 'a1b2c3d4e5f6',
+        changed_symbols: [],
+        endpoints: [],
+        crons: [],
+        summary: null,
+      },
+    });
+    const result = await blastRadiusTool.handler({ repo: 'acme/payments-api', pr: 482 }, deps(api));
+
+    // Not an error — reading an unusable index is a successful read.
+    expect(result.isError).toBeUndefined();
+    const body = result.structuredContent as Record<string, unknown>;
+    expect(body['status']).toBe('degraded');
+    expect(body['reason']).toBe('no_data');
+    // And the empty arrays are explained, so a model can't read them as "clear".
+    expect(String(body['note'])).toContain('"unknown"');
+  });
+
+  it('warns when the index is only partial', async () => {
+    const api = makeFakeApi({
+      blast: {
+        status: 'partial',
+        reason: 'index_stale',
+        head_sha: 'a1b2c3d4e5f6',
+        changed_symbols: [],
+        endpoints: [],
+        crons: [],
+        summary: null,
+      },
+    });
+    const result = await blastRadiusTool.handler({ repo: 'acme/payments-api', pr: 482 }, deps(api));
+    const body = result.structuredContent as Record<string, unknown>;
+    expect(body['status']).toBe('partial');
+    expect(String(body['note'])).toContain('may be missing');
+  });
+
+  it('errors with the resolver hint on an unknown repo slug, without calling blast', async () => {
+    const api = makeFakeApi();
+    const result = await blastRadiusTool.handler({ repo: 'acme/nope', pr: 482 }, deps(api));
+    expect(result.isError).toBe(true);
+    expect(api.calls.some((c) => c.startsWith('getBlastRadius'))).toBe(false);
+  });
+
+  it('no longer advertises itself as unimplemented', () => {
+    expect(blastRadiusTool.description.toLowerCase()).not.toContain('not implemented');
+    expect(blastRadiusTool.description.length).toBeGreaterThan(80);
+    expect(blastRadiusTool.annotations.title).toBe("Map a pull request's blast radius");
   });
 });

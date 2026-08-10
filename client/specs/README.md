@@ -37,6 +37,12 @@ Conventions:
 - [`finding-deep-links.md`](finding-deep-links.md) — the two ways out of that
   breakdown card: `file:line` to the PR's Files-changed view on GitHub, title to
   the finding itself on the PR detail page. Client-only; no server half.
+- [`blast-radius-card.md`](blast-radius-card.md) — the PR Overview tab's blast
+  card: which symbols the PR changed, who calls them, and what sits downstream;
+  its status states, the collapsible symbol rows, and the force-directed graph
+  dialog, plus the prior-PRs section inside its border. Producers are
+  `GET /pulls/:id/blast` and `GET /pulls/:id/prior-prs`; server half of the
+  latter is [`server/specs/prior-prs.md`](../../server/specs/prior-prs.md).
 - [`smart-diff-display.md`](smart-diff-display.md) — the Files changed tab's
   default rendering: files grouped by role, findings marked inline, collapse
   precedence, the order toggle, and the on-demand per-file summary. Server

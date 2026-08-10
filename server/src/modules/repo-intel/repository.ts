@@ -13,10 +13,11 @@
  * raw-SQL probes below MUST swallow `undefined_table` (Postgres 42P01) so the
  * facade keeps returning degraded — never throws.
  */
-import { and, asc, desc, eq, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, ne, sql } from 'drizzle-orm';
 import type { Db } from '../../db/client.js';
 import * as t from '../../db/schema.js';
 import { clampIndexedName } from '../../db/schema/context.js';
+import { BLAST_BFS_DEPTH } from './constants.js';
 import type { DegradedReason, FileRankRow, IndexState, IndexStatus } from './types.js';
 
 /** Chunk size for batched inserts — same value blast already uses. */
@@ -526,8 +527,58 @@ export class RepoIntelRepository {
           eq(t.references.repoId, repoId),
           inArray(t.references.declFile, declFiles),
           inArray(t.references.toSymbol, names),
+          // A symbol referenced from its OWN declaration file (recursion, a
+          // re-export, a local call) is not a blast caller — blast is about who
+          // is affected ELSEWHERE. The persistent path used to leak these.
+          //
+          // Compared column-to-column, NOT against `declFiles`: `declFiles` is
+          // the PR's whole changed-file list, and a file can be both a caller
+          // and part of the diff. Excluding the list would drop exactly the
+          // callers a reviewer most wants to see — every caller that this PR
+          // also touches.
+          ne(t.references.fromPath, t.references.declFile),
         ),
       );
+  }
+
+  /**
+   * Files that (transitively, within `maxDepth` hops) import any of `files`.
+   *
+   * Breadth-first over `file_edges` in the reverse direction, ONE query per
+   * level — never per file — served by `file_edges_repo_to_idx (repo_id,
+   * to_file)`. The input files are never returned, the visited set makes import
+   * cycles terminate, and the result is sorted so the same graph always yields
+   * the same array.
+   */
+  async getReverseDependents(
+    repoId: string,
+    files: string[],
+    maxDepth = BLAST_BFS_DEPTH,
+  ): Promise<string[]> {
+    if (files.length === 0 || maxDepth < 1) return [];
+
+    // Seeded with the inputs so they are never reported as their own dependents.
+    const visited = new Set<string>(files);
+    const found = new Set<string>();
+    let frontier = [...new Set(files)];
+
+    for (let depth = 0; depth < maxDepth && frontier.length > 0; depth++) {
+      const rows = await this.db
+        .selectDistinct({ fromFile: t.fileEdges.fromFile })
+        .from(t.fileEdges)
+        .where(and(eq(t.fileEdges.repoId, repoId), inArray(t.fileEdges.toFile, frontier)));
+
+      const next: string[] = [];
+      for (const r of rows) {
+        if (visited.has(r.fromFile)) continue;
+        visited.add(r.fromFile);
+        found.add(r.fromFile);
+        next.push(r.fromFile);
+      }
+      frontier = next;
+    }
+
+    return [...found].sort();
   }
 
   /** Per-file facts (endpoints/crons) for the given files. */

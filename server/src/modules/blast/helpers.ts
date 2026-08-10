@@ -1,0 +1,137 @@
+import type { BlastRadiusResponse, BlastSymbolC, PriorPrC } from '@devdigest/shared';
+import { BLAST_REASON } from './constants.js';
+import type { BlastResultShape, IndexStateShape, PriorPrShape } from './ports.js';
+
+/**
+ * Pure mapping from repo-intel's `BlastResult` to the wire contract. Nothing
+ * here reads the database or calls a model — the whole read path's honesty
+ * (what `status` and `reason` say) is decided by these two functions.
+ */
+
+/** A map we could not compute at all. Arrays are empty because we are blind. */
+export function degradedWire(headSha: string, reason: string): BlastRadiusResponse {
+  return {
+    status: 'degraded',
+    reason,
+    head_sha: headSha,
+    changed_symbols: [],
+    endpoints: [],
+    crons: [],
+    summary: null,
+  };
+}
+
+export function toWire(
+  result: BlastResultShape,
+  state: IndexStateShape,
+  headSha: string,
+  summary: string | null,
+): BlastRadiusResponse {
+  // The facade's own verdict wins: if it fell back to ripgrep, no amount of
+  // index metadata makes the arrays below mean anything.
+  if (result.degraded) {
+    return { ...degradedWire(headSha, result.reason ?? BLAST_REASON.noData), summary: null };
+  }
+
+  // Everything below is a REAL map. It is served either way; `partial` only
+  // adds "some callers may be missing" — silently downgrading it to an empty
+  // `ok` would be the one thing this feature exists to prevent.
+  //
+  // `partial` reflects the INDEXER'S OWN VERDICT and nothing else. There used
+  // to be a second branch here comparing `state.lastIndexedSha` to the PR's
+  // `headSha`, which fired on literally every pull request: the index is built
+  // from the clone's default-branch HEAD, while `headSha` is the PR branch's
+  // tip, and a PR exists precisely because those differ. Re-indexing could not
+  // clear it. A warning that is always on carries no information and trains the
+  // reader to ignore the one signal this card has for "the map is incomplete".
+  let status: BlastRadiusResponse['status'] = 'ok';
+  let reason: string | null = null;
+  if (state.status === 'partial') {
+    status = 'partial';
+    reason = BLAST_REASON.indexPartial;
+  }
+
+  // The facade hands back ONE flat caller list tagged with `viaSymbol`; the
+  // wire groups it under the symbol each caller reaches. Order inside a group
+  // is preserved, which is rank-descending — the facade sorted it that way.
+  const callersBySymbol = new Map<string, BlastSymbolC['callers']>();
+  const callerFilesBySymbol = new Map<string, Set<string>>();
+  for (const c of result.callers) {
+    const list = callersBySymbol.get(c.viaSymbol);
+    const entry = { file: c.file, line: c.line, symbol: c.symbol, rank: c.rank };
+    if (list) list.push(entry);
+    else callersBySymbol.set(c.viaSymbol, [entry]);
+
+    const files = callerFilesBySymbol.get(c.viaSymbol);
+    if (files) files.add(c.file);
+    else callerFilesBySymbol.set(c.viaSymbol, new Set([c.file]));
+  }
+
+  const facts = result.factsByFile ?? {};
+  const changed_symbols: BlastSymbolC[] = result.changedSymbols.map((s) => {
+    // Per-symbol attribution is narrower than the top-level union by design:
+    // it covers the symbol's own declaring file plus the files that actually
+    // call THIS symbol, while the union is BFS-widened. The declaring file is
+    // seeded in so that a symbol with zero resolved callers (stale index)
+    // still carries the endpoints/crons its own file declares — otherwise the
+    // header counter names facts no chip can show. Either way the card can
+    // say "this symbol reaches that endpoint" without overclaiming.
+    const endpoints = new Set<string>();
+    const crons = new Set<string>();
+    for (const file of [s.file, ...(callerFilesBySymbol.get(s.name) ?? [])]) {
+      const f = facts[file];
+      if (!f) continue;
+      for (const e of f.endpoints) endpoints.add(e);
+      for (const c of f.crons) crons.add(c);
+    }
+    return {
+      name: s.name,
+      kind: s.kind,
+      file: s.file,
+      line: s.line ?? null,
+      callers: callersBySymbol.get(s.name) ?? [],
+      endpoints: [...endpoints],
+      crons: [...crons],
+    };
+  });
+
+  // Most-reached symbol first. Two reasons this belongs here rather than in the
+  // card: `getSymbolRows` carries no ORDER BY, so without it the order is
+  // whatever Postgres happened to return — unstable between runs and untestable
+  // — and every consumer (the card, the graph dialog, the MCP tool) should agree
+  // on what "first" means. It matters most on a large PR: "changed symbols" is
+  // every symbol declared in every touched file, so the handful that anything
+  // actually calls would otherwise sit buried among dozens that nothing does.
+  // Name breaks ties, compared directly rather than via `localeCompare`, whose
+  // result depends on the host's locale.
+  changed_symbols.sort(
+    (a, b) =>
+      b.callers.length - a.callers.length || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0),
+  );
+
+  return {
+    status,
+    reason,
+    head_sha: headSha,
+    changed_symbols,
+    endpoints: [...result.impactedEndpoints],
+    crons: [...result.impactedCrons],
+    summary,
+  };
+}
+
+/**
+ * Row → wire. The cap lands here rather than in the query so `overlap_count`
+ * can stay the true total while `overlap_files` is only what the UI will draw.
+ */
+export function toPriorPrWire(row: PriorPrShape, maxFiles: number): PriorPrC {
+  return {
+    number: row.number,
+    title: row.title,
+    author: row.author,
+    status: row.status,
+    overlap_count: row.overlapCount,
+    overlap_files: row.overlapFiles.slice(0, maxFiles),
+    updated_at: row.updatedAt ? row.updatedAt.toISOString() : null,
+  };
+}
