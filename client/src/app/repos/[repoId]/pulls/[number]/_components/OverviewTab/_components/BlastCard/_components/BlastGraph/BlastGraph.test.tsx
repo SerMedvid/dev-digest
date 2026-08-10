@@ -6,6 +6,7 @@ import type { BlastRadiusResponse } from "@devdigest/shared";
 import messages from "../../../../../../../../../../../../messages/en/blast.json";
 import { BlastGraph } from "./BlastGraph";
 import { layoutBlastGraph } from "./helpers";
+import { GRAPH_WIDTH, GRAPH_HEIGHT, NODE_MARGIN } from "./constants";
 import { callerHref } from "../../helpers";
 
 const HEAD = "a1b2c3d4e5f6";
@@ -49,40 +50,59 @@ function renderGraph(repoFullName: string | null = REPO) {
 
 describe("layoutBlastGraph", () => {
   it("is deterministic — same input, identical geometry", () => {
-    const a = layoutBlastGraph(MAP, href, 720);
-    const b = layoutBlastGraph(MAP, href, 720);
-    expect(a).toEqual(b);
+    // The simulation is seeded from a fixed spiral and run to completion, so
+    // two renders of one response must produce the same picture.
+    expect(layoutBlastGraph(MAP, href)).toEqual(layoutBlastGraph(MAP, href));
   });
 
-  it("places the three columns at distinct, ascending x", () => {
-    const { nodes } = layoutBlastGraph(MAP, href, 720);
-    const xByCol = new Map<number, number>();
+  it("places every node inside the canvas", () => {
+    const { nodes } = layoutBlastGraph(MAP, href);
+    expect(nodes.length).toBeGreaterThan(0);
     for (const n of nodes) {
-      const seen = xByCol.get(n.col);
-      // Every node in a column shares one x — that is what makes it a column.
-      if (seen !== undefined) expect(n.x).toBe(seen);
-      else xByCol.set(n.col, n.x);
+      expect(Number.isFinite(n.x)).toBe(true);
+      expect(Number.isFinite(n.y)).toBe(true);
+      expect(n.x).toBeGreaterThanOrEqual(NODE_MARGIN);
+      expect(n.x).toBeLessThanOrEqual(GRAPH_WIDTH - NODE_MARGIN);
+      expect(n.y).toBeGreaterThanOrEqual(NODE_MARGIN);
+      expect(n.y).toBeLessThanOrEqual(GRAPH_HEIGHT - NODE_MARGIN);
     }
-    const xs = [xByCol.get(0)!, xByCol.get(1)!, xByCol.get(2)!];
-    expect(xs[0]).toBeLessThan(xs[1]!);
-    expect(xs[1]).toBeLessThan(xs[2]!);
   });
 
-  it("stacks callers in the input's rank-descending order", () => {
-    const { nodes } = layoutBlastGraph(MAP, href, 720);
-    const callers = nodes.filter((n) => n.kind === "caller");
-    expect(callers.map((n) => n.label)).toEqual([
-      "src/api/public/index.ts",
-      "src/api/public/webhooks.ts",
-      "src/server.ts",
-    ]);
-    // Higher rank sits higher on the canvas, so the graph and the tree agree.
-    const ys = callers.map((n) => n.y);
-    expect(ys).toEqual([...ys].sort((a, b) => a - b));
+  it("emits one node per symbol, caller and fact, deduped", () => {
+    const { nodes } = layoutBlastGraph(MAP, href);
+    const byKind = (k: string) => nodes.filter((n) => n.kind === k).length;
+    expect(byKind("symbol")).toBe(1);
+    expect(byKind("caller")).toBe(3);
+    expect(byKind("endpoint")).toBe(1);
+    expect(byKind("cron")).toBe(1);
+    expect(new Set(nodes.map((n) => n.id)).size).toBe(nodes.length);
+  });
+
+  it("emits one edge per symbol→caller and caller→fact pair, deduped", () => {
+    const { edges } = layoutBlastGraph(MAP, href);
+    // 3 symbol→caller, plus 3 callers × (1 endpoint + 1 cron).
+    expect(edges).toHaveLength(9);
+    expect(new Set(edges.map((e) => e.id)).size).toBe(edges.length);
+    for (const e of edges) {
+      expect(Number.isFinite(e.x1)).toBe(true);
+      expect(Number.isFinite(e.y2)).toBe(true);
+    }
+  });
+
+  it("draws no node for a fact the BFS widened past every caller", () => {
+    // The response's top-level unions are a SUPERSET of the per-symbol
+    // attributions. Drawing the extra one would assert a path the data does
+    // not claim, so it stays in the counters and out of the graph.
+    const widened: BlastRadiusResponse = {
+      ...MAP,
+      endpoints: [...MAP.endpoints, "GET /api/public/health"],
+    };
+    const { nodes } = layoutBlastGraph(widened, href);
+    expect(nodes.some((n) => n.label === "GET /api/public/health")).toBe(false);
   });
 
   it("builds node hrefs with the same helper the tree uses", () => {
-    const { nodes } = layoutBlastGraph(MAP, href, 720);
+    const { nodes } = layoutBlastGraph(MAP, href);
     const caller = nodes.find((n) => n.label === "src/api/public/index.ts")!;
     expect(caller.href).toBe(callerHref(REPO, HEAD, "src/api/public/index.ts", 23));
     // Endpoint and cron nodes have no file behind them, so they never link.
@@ -92,36 +112,8 @@ describe("layoutBlastGraph", () => {
   });
 
   it("drops every href when the repo is unknown", () => {
-    const { nodes } = layoutBlastGraph(MAP, () => null, 720);
+    const { nodes } = layoutBlastGraph(MAP, () => null);
     expect(nodes.every((n) => n.href === null)).toBe(true);
-  });
-
-  it("emits one edge per symbol→caller and caller→fact pair, deduped", () => {
-    const { edges } = layoutBlastGraph(MAP, href, 720);
-    // 3 symbol→caller, plus 3 callers × (1 endpoint + 1 cron).
-    expect(edges).toHaveLength(9);
-    expect(new Set(edges.map((e) => e.id)).size).toBe(edges.length);
-    for (const e of edges) expect(e.path.startsWith("M")).toBe(true);
-  });
-
-  it("grows in height with the tallest column", () => {
-    const tall: BlastRadiusResponse = {
-      ...MAP,
-      changed_symbols: [
-        {
-          ...MAP.changed_symbols[0]!,
-          callers: Array.from({ length: 20 }, (_, i) => ({
-            file: `src/caller${i}.ts`,
-            line: i + 1,
-            symbol: `fn${i}`,
-            rank: 1 - i / 100,
-          })),
-        },
-      ],
-    };
-    expect(layoutBlastGraph(tall, href, 720).height).toBeGreaterThan(
-      layoutBlastGraph(MAP, href, 720).height,
-    );
   });
 });
 
@@ -132,10 +124,14 @@ describe("BlastGraph", () => {
     expect(svg.tagName.toLowerCase()).toBe("svg");
   });
 
+  it("draws one line per edge", () => {
+    const { container } = renderGraph();
+    expect(container.querySelectorAll("line")).toHaveLength(9);
+  });
+
   it("links caller and symbol nodes, never endpoint or cron nodes", () => {
     renderGraph();
-    const links = screen.getAllByRole("link");
-    const labels = links.map((l) => l.textContent ?? "");
+    const labels = screen.getAllByRole("link").map((l) => l.textContent ?? "");
     expect(labels.some((x) => x.includes("src/api/public/index.ts"))).toBe(true);
     expect(labels.some((x) => x.includes("GET /api/public/items"))).toBe(false);
     expect(labels.some((x) => x.includes("job:reset-rate-buckets"))).toBe(false);

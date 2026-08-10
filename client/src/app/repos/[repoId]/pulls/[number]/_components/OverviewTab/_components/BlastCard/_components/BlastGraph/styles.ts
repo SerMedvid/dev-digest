@@ -1,24 +1,23 @@
 import type { CSSProperties } from "react";
-import { GRAPH_MAX_HEIGHT } from "./constants";
 
 export const s = {
-  /** Scrolls rather than shrinking text once the graph outgrows the card. */
-  scroller: {
-    maxHeight: GRAPH_MAX_HEIGHT,
-    overflowY: "auto",
-    overflowX: "auto",
+  /** The svg scales to the dialog's width; the viewBox fixes the coordinates. */
+  svg: {
+    width: "100%",
+    height: "auto",
+    display: "block",
   } satisfies CSSProperties,
   edge: {
-    fill: "none",
     stroke: "var(--border-strong)",
     strokeWidth: 1,
   } satisfies CSSProperties,
 } as const;
 
-/** Node dot, tinted per column so the three layers read apart at a glance. */
+/** Node dot, tinted per kind so the layers read apart at a glance. The legend
+    in the dialog names exactly these four colours. */
 export const nodeDot: Record<string, CSSProperties> = {
-  symbol: { fill: "var(--text-primary)" },
-  caller: { fill: "var(--info)" },
+  symbol: { fill: "var(--accent)" },
+  caller: { fill: "var(--text-muted)" },
   endpoint: { fill: "var(--ok)" },
   cron: { fill: "var(--warn)" },
 };
@@ -29,7 +28,7 @@ export const label: CSSProperties = {
 };
 
 export const labelPrimary: CSSProperties = {
-  fontSize: 11,
+  fontSize: 12,
   fontWeight: 600,
   fill: "var(--text-primary)",
 };

@@ -226,6 +226,28 @@ an entry can age — verify before relying on one.
 
 ## Recurring errors & fixes
 
+- **2026-08-10** — A **local green build is not evidence this package builds**.
+  [`.github/workflows/client.yml`](../.github/workflows/client.yml) runs
+  `pnpm install --frozen-lockfile` with `working-directory: client`, so CI has
+  *only* `client/node_modules` — any node_modules above this package exists on
+  contributors' machines and nowhere else. An import satisfied from up there
+  passes `pnpm typecheck` and `pnpm test` locally and fails in CI with `TS2307:
+  Cannot find module` plus vite's `Failed to resolve import`. This had already
+  shipped on `feat/blast-radius`: `BlastGraph/helpers.ts` imported `d3-scale`
+  and `d3-shape` while both were declared only in a **repo-root**
+  `package.json` + `pnpm-lock.yaml` that the root `CLAUDE.md` explicitly rules
+  out ("not a monorepo, no root package.json"). Two things follow. First, the
+  `.npmrc`'s `node-linker=hoisted` does **not** make packages under
+  `node_modules/.pnpm/node_modules` importable from `src/` — being listed there
+  is not resolution, and `recharts` → `victory-vendor` pulling a d3 module in
+  transitively buys this package nothing. Second, the only cheap way to settle
+  whether a bare specifier actually resolves is a throwaway vitest file that
+  imports it and running `pnpm exec vitest run` on that file; `ls node_modules`
+  and `require.resolve` both answer a different question than vite's resolver
+  does. Suspect this whenever a d3-ish or otherwise transitive-looking import
+  works and was never added with `pnpm add`.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/BlastCard/_components/BlastGraph/helpers.ts:1`)
+
 - **2026-07-29** — `next dev` here can keep serving a **stale chunk** after an
   edit: the webpack watcher misses the change, a reload recompiles some other
   entry, and the page silently renders the old component — so a "still broken"

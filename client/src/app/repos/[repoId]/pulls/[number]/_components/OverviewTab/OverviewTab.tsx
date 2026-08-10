@@ -17,8 +17,10 @@ interface OverviewTabProps {
 export function OverviewTab({ prBody, prId, headSha, repoFullName }: OverviewTabProps) {
   return (
     <>
-      <IntentCard prId={prId} headSha={headSha} />
-      <BlastCard prId={prId} headSha={headSha} repoFullName={repoFullName} />
+      <div style={s.grid}>
+        <IntentCard prId={prId} headSha={headSha} />
+        <BlastCard prId={prId} headSha={headSha} repoFullName={repoFullName} />
+      </div>
       {prBody && (
         <section>
           <SectionLabel icon="MessageSquare">Description</SectionLabel>

@@ -78,7 +78,7 @@ describe("BlastCard — data", () => {
     stubFetch(200, OK_MAP);
     renderCard(card());
 
-    expect(await screen.findByText("rateLimit")).toBeInTheDocument();
+    expect(await screen.findByText("rateLimit()")).toBeInTheDocument();
     expect(screen.getByText("src/middleware/ratelimit.ts:12")).toBeInTheDocument();
     expect(screen.getByText("src/api/public/index.ts:23")).toBeInTheDocument();
     expect(screen.getByText("publicRouter")).toBeInTheDocument();
@@ -109,7 +109,7 @@ describe("BlastCard — data", () => {
   it("counts callers across symbols, and endpoints from the widened union", async () => {
     stubFetch(200, OK_MAP);
     renderCard(card());
-    await screen.findByText("rateLimit");
+    await screen.findByText("rateLimit()");
 
     // Each counter is `<span><span>N</span><span>label</span></span>`.
     const counter = (label: string) => screen.getByText(label).parentElement;
@@ -154,7 +154,7 @@ describe("BlastCard — states", () => {
     renderCard(card());
 
     expect(await screen.findByText(/some callers may be missing/i)).toBeInTheDocument();
-    expect(screen.getByText("rateLimit")).toBeInTheDocument();
+    expect(screen.getByText("rateLimit()")).toBeInTheDocument();
   });
 
   it("degraded explains itself and renders no tree, no counters, no Explain", async () => {
@@ -194,41 +194,27 @@ describe("BlastCard — states", () => {
   });
 });
 
-describe("BlastCard — Tree | Graph toggle", () => {
-  it("starts on the tree and switches to the graph without a refetch", async () => {
+describe("BlastCard — graph dialog", () => {
+  it("opens the graph over the card without a refetch, and closes again", async () => {
     const fetchMock = stubFetchWithExplain(OK_MAP, {});
     renderCard(card());
 
-    await screen.findByText("rateLimit");
-    expect(screen.queryByRole("img", { name: /blast radius graph/i })).not.toBeInTheDocument();
+    await screen.findByText("rateLimit()");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     const before = fetchMock.mock.calls.length;
 
     fireEvent.click(screen.getByRole("button", { name: /^graph$/i }));
-    expect(screen.getByRole("img", { name: /blast radius graph/i })).toBeInTheDocument();
-    // Both views render the SAME response — toggling must cost no request.
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // The tree is still mounted behind the dialog — it was never a view switch.
+    expect(screen.getByText("rateLimit()")).toBeInTheDocument();
+    // Both surfaces render the SAME response — opening must cost no request.
     expect(fetchMock.mock.calls).toHaveLength(before);
 
-    fireEvent.click(screen.getByRole("button", { name: /^tree$/i }));
-    expect(screen.queryByRole("img", { name: /blast radius graph/i })).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /close/i }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("marks the active view as pressed", async () => {
-    stubFetch(200, OK_MAP);
-    renderCard(card());
-    await screen.findByText("rateLimit");
-
-    expect(screen.getByRole("button", { name: /^tree$/i })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-    fireEvent.click(screen.getByRole("button", { name: /^graph$/i }));
-    expect(screen.getByRole("button", { name: /^graph$/i })).toHaveAttribute(
-      "aria-pressed",
-      "true",
-    );
-  });
-
-  it("hides the toggle entirely on a degraded map", async () => {
+  it("hides the graph action entirely on a degraded map", async () => {
     stubFetch(200, {
       status: "degraded",
       reason: "no_data",
@@ -244,7 +230,7 @@ describe("BlastCard — Tree | Graph toggle", () => {
     expect(screen.queryByRole("button", { name: /^graph$/i })).not.toBeInTheDocument();
   });
 
-  it("hides the toggle when there are no symbols to draw", async () => {
+  it("hides the graph action when there are no symbols to draw", async () => {
     stubFetch(200, {
       status: "ok",
       reason: null,
@@ -258,6 +244,35 @@ describe("BlastCard — Tree | Graph toggle", () => {
 
     await screen.findByText(/No indexed symbols/i);
     expect(screen.queryByRole("button", { name: /^graph$/i })).not.toBeInTheDocument();
+  });
+});
+
+describe("BlastCard — symbol disclosure", () => {
+  it("opens the first symbol and leaves the rest closed", async () => {
+    stubFetch(200, {
+      ...OK_MAP,
+      changed_symbols: [
+        OK_MAP.changed_symbols[0],
+        {
+          name: "bucketKey",
+          kind: "function",
+          file: "src/middleware/bucket.ts",
+          line: 4,
+          callers: [{ file: "src/server.ts", line: 88, symbol: "boot", rank: 0.5 }],
+          endpoints: [],
+          crons: [],
+        },
+      ],
+    });
+    renderCard(card());
+
+    await screen.findByText("rateLimit()");
+    // First symbol's caller is visible, second symbol's is not.
+    expect(screen.getByText("src/api/public/index.ts:23")).toBeInTheDocument();
+    expect(screen.queryByText("src/server.ts:88")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /bucketKey/ }));
+    expect(screen.getByText("src/server.ts:88")).toBeInTheDocument();
   });
 });
 

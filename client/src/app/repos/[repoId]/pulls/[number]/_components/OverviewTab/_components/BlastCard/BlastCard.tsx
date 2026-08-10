@@ -3,12 +3,12 @@
 import React from "react";
 import { useTranslations } from "next-intl";
 import { SectionLabel, Button, Skeleton } from "@devdigest/ui";
-import type { BlastSymbolC } from "@devdigest/shared";
 import { useBlastRadius, useBlastSummary } from "@/lib/hooks/blast";
 import { ApiError } from "@/lib/api";
-import { BlastGraph } from "./_components/BlastGraph";
-import { callerHref } from "./helpers";
-import { s, toggleButton } from "./styles";
+import { CounterRow } from "./_components/CounterRow";
+import { SymbolRow } from "./_components/SymbolRow";
+import { BlastGraphDialog } from "./_components/BlastGraphDialog";
+import { s } from "./styles";
 
 interface BlastCardProps {
   prId: string | null;
@@ -18,45 +18,23 @@ interface BlastCardProps {
   repoFullName: string | null;
 }
 
-/** One `file:line`, linked when we know where to point and plain text when not. */
-function FileRef({
-  href,
-  file,
-  line,
-}: {
-  href: string | null;
-  file: string;
-  line: number | null;
-}) {
-  const label = line == null ? file : `${file}:${line}`;
-  // A plain `<a className="mono">`, not `MonoLink` — that primitive hardcodes
-  // `fontSize: 13` inline, which no wrapper can override, and these rows are
-  // 12 (INSIGHTS 2026-08-02).
-  return href ? (
-    <a className="mono" href={href} target="_blank" rel="noopener noreferrer">
-      {label}
-    </a>
-  ) : (
-    <span className="mono">{label}</span>
-  );
-}
-
 /**
  * What this PR's changes reach: the symbols it touched, who calls them, and the
  * endpoints and jobs downstream — all read from the index, so the card renders
  * without a model call.
  *
  * The states that matter are the ones that distinguish "nothing is there" from
- * "we cannot see": `degraded` renders an explanation and NO tree, because an
- * empty tree beside a "0 callers" counter reads as an all-clear.
+ * "we cannot see": `degraded` renders an explanation and NO tree and NO
+ * counters, because an empty tree beside a "0 callers" counter reads as an
+ * all-clear.
  */
 export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
   const t = useTranslations("blast");
   const { data, isLoading, isError, error, refetch, isFetching } = useBlastRadius(prId);
   const explain = useBlastSummary(prId);
-  // Plain local state, tree by default, no URL param: which view you are on is
-  // presentation, not a shareable location.
-  const [view, setView] = React.useState<"tree" | "graph">("tree");
+  // Plain local state, no URL param: whether the graph is open is presentation,
+  // not a shareable location.
+  const [graphOpen, setGraphOpen] = React.useState(false);
 
   const explainError = explain.isError
     ? explain.error instanceof ApiError
@@ -68,7 +46,7 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
     // Keeps the card's footprint so the page doesn't shift once data lands.
     return (
       <section style={s.card}>
-        <SectionLabel icon="Zap">{t("title")}</SectionLabel>
+        <SectionLabel icon="Workflow">{t("title")}</SectionLabel>
         <Skeleton height={14} width="45%" />
         <Skeleton height={72} />
       </section>
@@ -78,7 +56,7 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
   if (isError) {
     return (
       <section style={s.card}>
-        <SectionLabel icon="Zap">{t("title")}</SectionLabel>
+        <SectionLabel icon="Workflow">{t("title")}</SectionLabel>
         <div style={s.warning}>
           {error instanceof ApiError ? error.message : t("loadError")}
         </div>
@@ -96,7 +74,7 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
   if (data.status === "degraded") {
     return (
       <section style={s.card}>
-        <SectionLabel icon="Zap">{t("title")}</SectionLabel>
+        <SectionLabel icon="Workflow">{t("title")}</SectionLabel>
         <div style={s.degraded}>
           <p style={s.degradedTitle}>{t("degradedTitle")}</p>
           <p style={s.degradedBody}>{t("degradedBody", { reason: data.reason ?? "" })}</p>
@@ -106,70 +84,35 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
   }
 
   const callerCount = data.changed_symbols.reduce((n, sym) => n + sym.callers.length, 0);
-  const counters: Array<[string, number]> = [
-    [t("stat.symbols"), data.changed_symbols.length],
-    [t("stat.callers"), callerCount],
-    [t("stat.endpoints"), data.endpoints.length],
-    [t("stat.crons"), data.crons.length],
-  ];
-
   const hasMap = data.changed_symbols.length > 0;
 
   return (
     <section style={s.card}>
-      {/* The toggle rides in the heading's `right` slot, like IntentCard's
-          action. It only exists when there is a map to draw, so the graph
-          needs no degraded or empty variant of its own. */}
-      <SectionLabel
-        icon="Zap"
-        right={
-          hasMap ? (
-            <div style={s.viewToggle}>
-              {(["tree", "graph"] as const).map((v) => (
-                <button
-                  key={v}
-                  type="button"
-                  aria-pressed={view === v}
-                  style={toggleButton(view === v)}
-                  onClick={() => setView(v)}
-                >
-                  {t(`view.${v}`)}
-                </button>
-              ))}
-            </div>
-          ) : undefined
-        }
-      >
-        {t("title")}
-      </SectionLabel>
+      <SectionLabel icon="Workflow">{t("title")}</SectionLabel>
 
       {data.status === "partial" && (
         <p style={s.warning}>{t("partialWarning", { reason: data.reason ?? "" })}</p>
       )}
 
-      <div style={s.counters}>
-        {counters.map(([label, value]) => (
-          <span key={label}>
-            <span style={s.counterValue}>{value}</span>
-            <span>{label}</span>
-          </span>
-        ))}
-      </div>
+      <CounterRow
+        symbols={data.changed_symbols.length}
+        callers={callerCount}
+        endpoints={data.endpoints.length}
+        crons={data.crons.length}
+        onOpenGraph={hasMap ? () => setGraphOpen(true) : null}
+      />
 
       {!hasMap ? (
         <p style={s.emptyNote}>{t("empty")}</p>
-      ) : view === "graph" ? (
-        // The same `data` object the tree just rendered — toggling views costs
-        // no request.
-        <BlastGraph data={data} headSha={headSha} repoFullName={repoFullName} />
       ) : (
         <div style={s.tree}>
-          {data.changed_symbols.map((sym) => (
-            <SymbolBlock
+          {data.changed_symbols.map((sym, i) => (
+            <SymbolRow
               key={`${sym.file}:${sym.name}`}
               sym={sym}
               headSha={headSha}
               repoFullName={repoFullName}
+              defaultOpen={i === 0}
             />
           ))}
         </div>
@@ -195,60 +138,17 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
           </Button>
         </div>
       )}
-    </section>
-  );
-}
 
-function SymbolBlock({
-  sym,
-  headSha,
-  repoFullName,
-}: {
-  sym: BlastSymbolC;
-  headSha: string;
-  repoFullName: string | null;
-}) {
-  return (
-    <div style={s.symbolBlock}>
-      <div style={s.symbolHeader}>
-        <span style={s.symbolName}>{sym.name}</span>
-        <span style={s.symbolKind}>{sym.kind}</span>
-        <FileRef
-          href={callerHref(repoFullName, headSha, sym.file, sym.line)}
-          file={sym.file}
-          line={sym.line}
+      {graphOpen && (
+        // Mounted only while open — the same `data` object the tree just
+        // rendered, so opening costs no request.
+        <BlastGraphDialog
+          data={data}
+          headSha={headSha}
+          repoFullName={repoFullName}
+          onClose={() => setGraphOpen(false)}
         />
-      </div>
-
-      {sym.callers.length > 0 && (
-        <ul style={s.callerList}>
-          {sym.callers.map((c) => (
-            <li key={`${c.file}:${c.line}:${c.symbol}`} style={s.callerRow}>
-              <FileRef
-                href={callerHref(repoFullName, headSha, c.file, c.line)}
-                file={c.file}
-                line={c.line}
-              />
-              <span style={s.callerSymbol}>{c.symbol}</span>
-            </li>
-          ))}
-        </ul>
       )}
-
-      {(sym.endpoints.length > 0 || sym.crons.length > 0) && (
-        <div style={s.chips}>
-          {sym.endpoints.map((e) => (
-            <span key={e} style={s.chip}>
-              {e}
-            </span>
-          ))}
-          {sym.crons.map((c) => (
-            <span key={c} style={s.cronChip}>
-              {c}
-            </span>
-          ))}
-        </div>
-      )}
-    </div>
+    </section>
   );
 }

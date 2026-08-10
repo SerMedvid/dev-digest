@@ -1,18 +1,19 @@
-/** Fixed x for each column: symbols → callers → endpoints/crons. */
-export const COLUMN_X = [90, 330, 590] as const;
+/** The drawing box, sized for the dialog rather than a card column. */
+export const GRAPH_WIDTH = 1120;
+export const GRAPH_HEIGHT = 620;
 
-/** Drawing box. `width` is the layout's argument; this is the fallback. */
-export const GRAPH_WIDTH = 720;
+/** Keeps a node's label inside the viewBox after the simulation settles. */
+export const NODE_MARGIN = 60;
 
-/** Vertical breathing room around the stacked nodes. */
-export const ROW_HEIGHT = 34;
-export const PADDING_Y = 24;
+/** Force parameters. Tuned so a ~20-node map fills the box without clumping. */
+export const LINK_DISTANCE = 110;
+export const LINK_STRENGTH = 0.55;
+export const CHARGE_STRENGTH = -340;
+export const COLLIDE_RADIUS = 48;
 
-/** Minimum height, so a one-node graph still looks like a diagram. */
-export const MIN_GRAPH_HEIGHT = 120;
+/** Ticks to run before reading positions. d3's own default alpha decay settles
+    in ~300; running them synchronously is what makes the layout reproducible. */
+export const SIMULATION_TICKS = 300;
 
-/** The card scrolls the svg vertically past this rather than shrinking text. */
-export const GRAPH_MAX_HEIGHT = 420;
-
-/** Label truncation — a full path would overrun its column. */
+/** Label truncation — a full path would overrun its node. */
 export const MAX_LABEL_CHARS = 30;

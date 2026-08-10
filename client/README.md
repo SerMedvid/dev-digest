@@ -50,6 +50,17 @@ error) and re-derives through `POST /pulls/:id/intent`, both via
 the card says so and the button becomes **Re-derive**. Server contract:
 [`../server/specs/intent.md`](../server/specs/intent.md).
 
+Beside it on the same tab sits the **blast radius card**: which symbols the PR
+changed, who calls them, and the endpoints and jobs downstream of those callers —
+read from the code index, so the card renders without a model call. Symbol rows
+collapse (the first opens on mount) and a **Graph** button opens the same
+response as a force-directed diagram in a modal. It reads
+`GET /pulls/:id/blast`, whose `status` distinguishes "nothing there" from "we
+could not see", and explains the map on demand through
+`POST /pulls/:id/blast/summary`, both via
+[`src/lib/hooks/blast.ts`](src/lib/hooks/blast.ts). Client journey and states:
+[`specs/blast-radius-card.md`](specs/blast-radius-card.md).
+
 The **Files changed** tab defaults to Smart Diff: the PR's files grouped into
 Core / Wiring / Boilerplate, with findings marked inline and mechanical files
 (lock files, generated output) collapsed by default. `?order=original` falls

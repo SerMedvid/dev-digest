@@ -20,12 +20,9 @@ importers:
       '@tanstack/react-query':
         specifier: ^5.62.8
         version: 5.101.0(react@19.2.7)
-      d3-scale:
-        specifier: ^4.0.2
-        version: 4.0.2
-      d3-shape:
-        specifier: ^3.2.0
-        version: 3.2.0
+      d3-force:
+        specifier: ^3.0.0
+        version: 3.0.0
       diff:
         specifier: ^9.0.0
         version: 9.0.0
@@ -69,12 +66,9 @@ importers:
       '@testing-library/react':
         specifier: ^16.1.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react-dom@19.2.3(@types/react@19.2.16))(@types/react@19.2.16)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@types/d3-scale':
-        specifier: ^4.0.9
-        version: 4.0.9
-      '@types/d3-shape':
-        specifier: ^3.1.8
-        version: 3.1.8
+      '@types/d3-force':
+        specifier: ^3.0.10
+        version: 3.0.10
       '@types/node':
         specifier: ^22.10.0
         version: 22.19.19

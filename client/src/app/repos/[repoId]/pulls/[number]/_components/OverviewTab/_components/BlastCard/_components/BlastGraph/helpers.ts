@@ -1,197 +1,223 @@
-import { scalePoint } from "d3-scale";
-import { linkHorizontal } from "d3-shape";
+import {
+  forceCenter,
+  forceCollide,
+  forceLink,
+  forceManyBody,
+  forceSimulation,
+  type SimulationLinkDatum,
+  type SimulationNodeDatum,
+} from "d3-force";
 import type { BlastRadiusResponse } from "@devdigest/shared";
 import {
-  COLUMN_X,
+  CHARGE_STRENGTH,
+  COLLIDE_RADIUS,
+  GRAPH_HEIGHT,
   GRAPH_WIDTH,
+  LINK_DISTANCE,
+  LINK_STRENGTH,
   MAX_LABEL_CHARS,
-  MIN_GRAPH_HEIGHT,
-  PADDING_Y,
-  ROW_HEIGHT,
+  NODE_MARGIN,
+  SIMULATION_TICKS,
 } from "./constants";
 
 /**
  * Layout for the blast graph. **d3 does the maths, React owns the DOM** — this
  * module returns plain data and never touches a node, so there is no
  * d3-selection anywhere and no enter/exit lifecycle competing with React's.
- * It is also why the layout is testable in jsdom without rendering.
  *
- * The layout is layered, not force-directed: every edge in the data flows
- * left-to-right (symbol → its callers → what those callers expose), so exact
- * column placement is possible and nothing has to be iterated or relaxed. Two
- * renders of the same response therefore produce identical geometry.
+ * The simulation is run to completion synchronously rather than animated: the
+ * nodes are seeded on a fixed spiral, ticked a fixed number of times, and read
+ * once. Two renders of the same response therefore produce identical geometry,
+ * and the layout is exercisable in jsdom with no rAF loop.
  */
 
 export type GraphNodeKind = "symbol" | "caller" | "endpoint" | "cron";
 
 export interface GraphNode {
   id: string;
-  col: 0 | 1 | 2;
+  kind: GraphNodeKind;
   label: string;
   sub?: string;
+  /** `null` when the repo is unknown, or for endpoint/cron nodes (never link). */
+  href: string | null;
   x: number;
   y: number;
-  /** `null` when the repo is unknown, or for endpoint/cron nodes (never links). */
-  href: string | null;
-  kind: GraphNodeKind;
 }
 
 export interface GraphEdge {
   id: string;
-  /** SVG path `d`, from d3-shape's `linkHorizontal`. */
-  path: string;
+  x1: number;
+  y1: number;
+  x2: number;
+  y2: number;
 }
 
 export interface BlastGraphLayout {
   nodes: GraphNode[];
   edges: GraphEdge[];
+  width: number;
   height: number;
 }
 
-/** A long path would overrun its column; the tail is the identifying part. */
+/** What the simulation mutates: our fields plus d3's x/y/vx/vy. */
+interface SimNode extends SimulationNodeDatum {
+  id: string;
+  kind: GraphNodeKind;
+  label: string;
+  sub?: string;
+  href: string | null;
+}
+
+type SimLink = SimulationLinkDatum<SimNode> & { id: string };
+
+/** A long path would overrun its node; the tail is the identifying part. */
 function truncate(label: string): string {
   if (label.length <= MAX_LABEL_CHARS) return label;
   return `…${label.slice(label.length - MAX_LABEL_CHARS + 1)}`;
 }
 
-const link = linkHorizontal<
-  { source: [number, number]; target: [number, number] },
-  [number, number]
->()
-  .source((d) => d.source)
-  .target((d) => d.target);
+function clamp(v: number, lo: number, hi: number): number {
+  return Math.min(hi, Math.max(lo, v));
+}
+
+/** Rounded so a float's last bit can never make two equal layouts compare unequal. */
+function round(v: number): number {
+  return Math.round(v * 100) / 100;
+}
 
 /**
- * `scalePoint` over an explicit domain of ids, so a column's vertical order is
- * exactly the order the data carries — rank-descending callers, symbols in
- * response order. The graph and the tree therefore agree on prominence.
+ * The graph the data asserts, before any geometry. Endpoints and crons hang off
+ * the CALLER that exposes them, so an edge always means "reachable through that
+ * caller"; facts the BFS widened past every individual caller stay out entirely,
+ * because drawing them would assert a path the response does not claim.
  */
-function stack(ids: string[], height: number): Map<string, number> {
-  const scale = scalePoint<string>()
-    .domain(ids)
-    .range([PADDING_Y, Math.max(PADDING_Y, height - PADDING_Y)])
-    .padding(0.5);
-  const out = new Map<string, number>();
-  for (const id of ids) out.set(id, scale(id) ?? height / 2);
-  return out;
+function buildGraph(
+  data: BlastRadiusResponse,
+  href: (file: string, line: number | null) => string | null,
+): { nodes: SimNode[]; links: SimLink[] } {
+  const nodes: SimNode[] = [];
+  const links: SimLink[] = [];
+  const seenNode = new Set<string>();
+  const seenLink = new Set<string>();
+
+  const addNode = (n: SimNode) => {
+    if (seenNode.has(n.id)) return;
+    seenNode.add(n.id);
+    nodes.push(n);
+  };
+  const addLink = (source: string, target: string) => {
+    const id = `${source}->${target}`;
+    if (seenLink.has(id)) return;
+    seenLink.add(id);
+    links.push({ id, source, target });
+  };
+
+  for (const sym of data.changed_symbols) {
+    const symId = `sym:${sym.file}:${sym.name}`;
+    addNode({
+      id: symId,
+      kind: "symbol",
+      label: sym.name,
+      sub: sym.kind,
+      href: href(sym.file, sym.line),
+    });
+
+    for (const c of sym.callers) {
+      const callerId = `call:${c.file}:${c.line}`;
+      addNode({
+        id: callerId,
+        kind: "caller",
+        label: truncate(c.file),
+        sub: `${c.symbol}:${c.line}`,
+        href: href(c.file, c.line),
+      });
+      addLink(symId, callerId);
+
+      for (const e of sym.endpoints) {
+        const id = `ep:${e}`;
+        addNode({ id, kind: "endpoint", label: e, href: null });
+        addLink(callerId, id);
+      }
+      for (const cr of sym.crons) {
+        const id = `cron:${cr}`;
+        addNode({ id, kind: "cron", label: cr, href: null });
+        addLink(callerId, id);
+      }
+    }
+  }
+
+  return { nodes, links };
+}
+
+/**
+ * Seed positions on a golden-angle spiral around the centre. d3 would seed its
+ * own phyllotaxis, but doing it here guarantees no two nodes ever start
+ * coincident — the one place d3's forces reach for `Math.random()` (`jiggle`).
+ */
+function seed(nodes: SimNode[], width: number, height: number): void {
+  const radius = Math.min(width, height) / 2 - NODE_MARGIN;
+  nodes.forEach((n, i) => {
+    const angle = i * 2.399963229728653; // golden angle, radians
+    const r = radius * Math.sqrt((i + 1) / nodes.length);
+    n.x = width / 2 + r * Math.cos(angle);
+    n.y = height / 2 + r * Math.sin(angle);
+  });
+}
+
+/** After `forceLink` runs, `source`/`target` are node objects, not ids. */
+function endpointOf(v: SimLink["source"], nodes: Map<string, SimNode>): SimNode | undefined {
+  return typeof v === "object" ? (v as SimNode) : nodes.get(String(v));
 }
 
 export function layoutBlastGraph(
   data: BlastRadiusResponse,
   href: (file: string, line: number | null) => string | null,
   width: number = GRAPH_WIDTH,
+  height: number = GRAPH_HEIGHT,
 ): BlastGraphLayout {
-  const symbolIds: string[] = [];
-  const callerIds: string[] = [];
-  const factIds: string[] = [];
+  const { nodes: simNodes, links } = buildGraph(data, href);
+  if (simNodes.length === 0) return { nodes: [], edges: [], width, height };
 
-  interface Pending {
-    id: string;
-    col: 0 | 1 | 2;
-    label: string;
-    sub?: string;
-    href: string | null;
-    kind: GraphNodeKind;
-  }
-  const pending: Pending[] = [];
-  const edgePairs: Array<{ from: string; to: string }> = [];
-  const seen = new Set<string>();
+  seed(simNodes, width, height);
 
-  const push = (n: Pending, bucket: string[]) => {
-    if (seen.has(n.id)) return;
-    seen.add(n.id);
-    pending.push(n);
-    bucket.push(n.id);
-  };
+  const simulation = forceSimulation(simNodes)
+    .force(
+      "link",
+      forceLink<SimNode, SimLink>(links)
+        .id((d) => d.id)
+        .distance(LINK_DISTANCE)
+        .strength(LINK_STRENGTH),
+    )
+    .force("charge", forceManyBody().strength(CHARGE_STRENGTH))
+    .force("center", forceCenter(width / 2, height / 2))
+    .force("collide", forceCollide(COLLIDE_RADIUS))
+    .stop();
 
-  for (const sym of data.changed_symbols) {
-    const symId = `sym:${sym.file}:${sym.name}`;
-    push(
-      {
-        id: symId,
-        col: 0,
-        label: sym.name,
-        sub: sym.kind,
-        href: href(sym.file, sym.line),
-        kind: "symbol",
-      },
-      symbolIds,
-    );
+  simulation.tick(SIMULATION_TICKS);
 
-    for (const c of sym.callers) {
-      const callerId = `call:${c.file}:${c.line}`;
-      push(
-        {
-          id: callerId,
-          col: 1,
-          label: truncate(c.file),
-          sub: `${c.symbol}:${c.line}`,
-          href: href(c.file, c.line),
-          kind: "caller",
-        },
-        callerIds,
-      );
-      edgePairs.push({ from: symId, to: callerId });
-
-      // Endpoints and crons hang off the CALLER that exposes them, so an edge
-      // in this column always means "reachable through that caller". Facts the
-      // BFS widened past any individual caller stay out of the graph — the
-      // header counters carry those, and inventing an edge for them would draw
-      // a relationship the data does not assert.
-      for (const e of sym.endpoints) {
-        const factId = `ep:${e}`;
-        push({ id: factId, col: 2, label: e, href: null, kind: "endpoint" }, factIds);
-        edgePairs.push({ from: callerId, to: factId });
-      }
-      for (const cr of sym.crons) {
-        const factId = `cron:${cr}`;
-        push({ id: factId, col: 2, label: cr, href: null, kind: "cron" }, factIds);
-        edgePairs.push({ from: callerId, to: factId });
-      }
-    }
+  const byId = new Map(simNodes.map((n) => [n.id, n]));
+  for (const n of simNodes) {
+    n.x = clamp(round(n.x ?? width / 2), NODE_MARGIN, width - NODE_MARGIN);
+    n.y = clamp(round(n.y ?? height / 2), NODE_MARGIN, height - NODE_MARGIN);
   }
 
-  const tallest = Math.max(symbolIds.length, callerIds.length, factIds.length);
-  const height = Math.max(MIN_GRAPH_HEIGHT, tallest * ROW_HEIGHT + PADDING_Y * 2);
-
-  const y = new Map<string, number>([
-    ...stack(symbolIds, height),
-    ...stack(callerIds, height),
-    ...stack(factIds, height),
-  ]);
-
-  // Columns are fixed, but the last one is pinned inside `width` so a narrow
-  // card does not push the endpoint labels off the canvas.
-  const columnX: [number, number, number] = [
-    COLUMN_X[0],
-    COLUMN_X[1],
-    Math.min(COLUMN_X[2], Math.max(COLUMN_X[1] + 120, width - 130)),
-  ];
-
-  const nodes: GraphNode[] = pending.map((n) => ({
+  const nodes: GraphNode[] = simNodes.map((n) => ({
     id: n.id,
-    col: n.col,
+    kind: n.kind,
     label: n.label,
     ...(n.sub === undefined ? {} : { sub: n.sub }),
-    x: columnX[n.col],
-    y: y.get(n.id) ?? height / 2,
     href: n.href,
-    kind: n.kind,
+    x: n.x ?? 0,
+    y: n.y ?? 0,
   }));
 
-  const byId = new Map(nodes.map((n) => [n.id, n]));
-  const edgeSeen = new Set<string>();
   const edges: GraphEdge[] = [];
-  for (const { from, to } of edgePairs) {
-    const id = `${from}->${to}`;
-    if (edgeSeen.has(id)) continue;
-    const a = byId.get(from);
-    const b = byId.get(to);
+  for (const l of links) {
+    const a = endpointOf(l.source, byId);
+    const b = endpointOf(l.target, byId);
     if (!a || !b) continue;
-    edgeSeen.add(id);
-    const path = link({ source: [a.x, a.y], target: [b.x, b.y] });
-    if (path) edges.push({ id, path });
+    edges.push({ id: l.id, x1: a.x ?? 0, y1: a.y ?? 0, x2: b.x ?? 0, y2: b.y ?? 0 });
   }
 
-  return { nodes, edges, height };
+  return { nodes, edges, width, height };
 }
