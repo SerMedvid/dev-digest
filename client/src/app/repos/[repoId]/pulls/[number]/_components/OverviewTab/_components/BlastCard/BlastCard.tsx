@@ -8,6 +8,7 @@ import { ApiError } from "@/lib/api";
 import { CounterRow } from "./_components/CounterRow";
 import { SymbolRow } from "./_components/SymbolRow";
 import { BlastGraphDialog } from "./_components/BlastGraphDialog";
+import { PriorPrs } from "./_components/PriorPrs";
 import { s } from "./styles";
 
 interface BlastCardProps {
@@ -79,6 +80,8 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
           <p style={s.degradedTitle}>{t("degradedTitle")}</p>
           <p style={s.degradedBody}>{t("degradedBody", { reason: data.reason ?? "" })}</p>
         </div>
+        {/* Reads `pr_files`, never the index — so it answers here too. */}
+        <PriorPrs prId={prId} repoFullName={repoFullName} />
       </section>
     );
   }
@@ -151,6 +154,8 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
           <p style={s.summary}>{data.summary}</p>
         </div>
       )}
+
+      <PriorPrs prId={prId} repoFullName={repoFullName} />
 
       {graphOpen && (
         // Mounted only while open — the same `data` object the tree just

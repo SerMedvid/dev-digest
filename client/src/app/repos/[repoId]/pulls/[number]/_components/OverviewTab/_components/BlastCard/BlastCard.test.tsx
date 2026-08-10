@@ -58,6 +58,33 @@ function stubFetchWithExplain(map: unknown, onPost: unknown) {
   return fetchMock;
 }
 
+/** GET /blast returns `map`; GET /prior-prs returns `prior`. */
+function stubFetchWithPriorPrs(map: unknown, prior: unknown) {
+  const fetchMock = vi.fn(async (url: string) => ({
+    ok: true,
+    status: 200,
+    statusText: "OK",
+    json: async () => (String(url).includes("/prior-prs") ? prior : map),
+  }));
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
+const PRIOR = {
+  prs: [
+    {
+      number: 478,
+      title: "Rate-limit public routes",
+      author: "sergii",
+      status: "merged",
+      overlap_count: 2,
+      overlap_files: ["src/middleware/ratelimit.ts"],
+      updated_at: "2026-08-01T00:00:00.000Z",
+    },
+  ],
+  uncomparable_prs: 0,
+};
+
 function renderCard(ui: React.ReactElement) {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -273,6 +300,59 @@ describe("BlastCard — symbol disclosure", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /bucketKey/ }));
     expect(screen.getByText("src/server.ts:88")).toBeInTheDocument();
+  });
+});
+
+describe("BlastCard — prior PRs", () => {
+  it("renders the section beside the map", async () => {
+    stubFetchWithPriorPrs(OK_MAP, PRIOR);
+    renderCard(card());
+
+    await screen.findByText("rateLimit()");
+    expect(await screen.findByText(/Prior PRs touching these files/i)).toBeInTheDocument();
+    expect(screen.getByText(/Rate-limit public routes/)).toBeInTheDocument();
+  });
+
+  it("renders it on a degraded map too — it reads no index", async () => {
+    stubFetchWithPriorPrs(
+      {
+        status: "degraded",
+        reason: "no_data",
+        head_sha: HEAD,
+        changed_symbols: [],
+        endpoints: [],
+        crons: [],
+        summary: null,
+      },
+      PRIOR,
+    );
+    renderCard(card());
+
+    await screen.findByText(/Index not usable/i);
+    expect(await screen.findByText(/Prior PRs touching these files/i)).toBeInTheDocument();
+  });
+
+  it("keeps the map rendered when the prior-PRs read fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (String(url).includes("/prior-prs")) {
+          return {
+            ok: false,
+            status: 500,
+            statusText: "Server Error",
+            json: async () => ({ error: { message: "boom" } }),
+          };
+        }
+        return { ok: true, status: 200, statusText: "OK", json: async () => OK_MAP };
+      }),
+    );
+    renderCard(card());
+
+    // The secondary read failed; the primary one must be untouched.
+    expect(await screen.findByText("rateLimit()")).toBeInTheDocument();
+    expect(await screen.findByText(/Couldn't load prior PRs/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /retry/i })).not.toBeInTheDocument();
   });
 });
 

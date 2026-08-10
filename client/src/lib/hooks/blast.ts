@@ -3,7 +3,11 @@
 
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api";
-import type { BlastRadiusResponse, BlastSummaryResponse } from "@devdigest/shared";
+import type {
+  BlastRadiusResponse,
+  BlastSummaryResponse,
+  PriorPrsResponse,
+} from "@devdigest/shared";
 
 /**
  * The blast map. Unlike `usePrIntent` there is no 404-is-empty case: the
@@ -31,5 +35,20 @@ export function useBlastSummary(prId: string | null | undefined) {
         prev ? { ...prev, summary: rec.summary } : prev,
       );
     },
+  });
+}
+
+/**
+ * Which merged or closed PRs have already touched this PR's files.
+ *
+ * Its own query, not part of `useBlastRadius`: the card must be able to render
+ * the map when this fails, and the map must not pay for this join on every
+ * render. Same `enabled` guard as its sibling.
+ */
+export function usePriorPrs(prId: string | null | undefined) {
+  return useQuery({
+    queryKey: ["pr-prior-prs", prId],
+    queryFn: () => api.get<PriorPrsResponse>(`/pulls/${prId}/prior-prs`),
+    enabled: !!prId,
   });
 }
