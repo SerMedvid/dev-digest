@@ -13,6 +13,26 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-10** — `DepCruiseGraph.buildEdges` returned **zero edges on Windows,
+  silently**, and one line caused it: `toRel` ended `return relative(root, abs)`,
+  which emits NATIVE separators, while `pipeline/walk.ts:119` deliberately
+  normalises its paths to POSIX (`.split(sep).join('/')`) "so DB rows are
+  platform-agnostic". `buildEdges` then tests `fileSet.has(from)` against that
+  POSIX set, missed on every module, and returned `[]` **without throwing** — so
+  `graphFailed` stayed unset, `clean` stayed true, and the run reported
+  `status: 'full'` with `edgesWritten: 0`. The damage is not limited to the
+  graph: `resolveReferences` resolves `references.decl_file` *through* those
+  edges, so all 6416 references stayed NULL, and since `getResolvedCallers`
+  filters `inArray(references.declFile, …)` — and NULL never matches an `IN`
+  list — **blast radius reported 0 callers for every symbol in the repo**. Linux
+  `relative()` already returns POSIX, so CI was green throughout. Measured on
+  this repo: 0 → 514 edges and 0 → 640 resolved references from that one
+  `.split(sep).join('/')`. The general rule: any adapter handing paths back to
+  the indexer owes the same POSIX normalisation the walker does, and a graph
+  stage that yields nothing for hundreds of files should not be able to report
+  `full`. (`src/adapters/depgraph/index.ts:111`,
+  `src/modules/repo-intel/pipeline/full.ts:216`)
+
 - **2026-08-10** — Deriving a PR-scoped status by comparing
   `repo_index_state.lastIndexedSha` to the pull request's `headSha` is
   **structurally always true**, and blast shipped that way: the index is built
@@ -135,6 +155,20 @@ an entry can age — verify before relying on one.
   `ContainerOverrides`. (`src/modules/repo-intel/service.ts:104`)
 
 ## Codebase patterns & tool notes
+
+- **2026-08-10** — `dependency-cruiser`'s `cruise()` returns `module.source` and
+  `dependency.resolved` as **cwd-relative POSIX** strings, never absolute — even
+  when you hand it absolute paths. Two consequences. (1) A test fixture for this
+  adapter must live **under `process.cwd()`**, not `os.tmpdir()`: on Windows
+  `%TEMP%` is on `C:` while the package may be on `D:`, cruise cannot express
+  that relative to cwd, and it dies with a nonsense `ENOENT` on a path like
+  `D:\…\server\C:\Users\…`. `test/depgraph-paths.test.ts` creates its repo under
+  cwd for exactly this reason, and the fixture files must be **nested** (a
+  separator has to appear in the relative path or a separator bug cannot show).
+  (2) The same cross-drive limit applies in production: a `DEVDIGEST_CLONE_DIR`
+  on a different drive from the server's cwd would make the graph stage throw
+  rather than merely return empty. Today's clone dir sits under the package, so
+  it works. (`src/adapters/depgraph/index.ts:61`, `test/depgraph-paths.test.ts`)
 
 - **2026-08-09** — The `declFiles` parameter of
   [`RepoIntelRepository.getResolvedCallers`](src/modules/repo-intel/repository.ts)
