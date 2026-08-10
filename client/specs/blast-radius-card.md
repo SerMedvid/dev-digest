@@ -27,14 +27,17 @@ The card reads top to bottom:
 
 1. A section label carrying the `Workflow` icon, with **Explain** in its right
    slot — the card's one action, and its one paid call.
-2. A **counter row** — symbols, callers, endpoints, cron/jobs, each with an icon,
+2. The cached summary, under a `What this touches` label, once one exists at
+   this head. At that point the Explain button in the header is gone. It leads
+   the card rather than trailing it: a reviewer who reads one thing here should
+   read the prose answer, and it sits directly under the button that produced
+   it, with the counters and tree backing it up underneath.
+3. A **counter row** — symbols, callers, endpoints, cron/jobs, each with an icon,
    and a `Graph` button pushed to the far edge
    ([`CounterRow.tsx`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/_components/CounterRow/CounterRow.tsx)).
-3. One **collapsible row per changed symbol**, each opening to its declaration
+4. One **collapsible row per changed symbol**, each opening to its declaration
    site, its callers, and its own endpoint and cron chips
    ([`SymbolRow.tsx`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/_components/SymbolRow/SymbolRow.tsx)).
-4. The cached summary, under a `What this touches` label, once one exists at
-   this head. At that point the Explain button in the header is gone.
 5. **Prior PRs touching these files** — a titled list of the merged and closed
    PRs that have already been in these paths, each linking out to GitHub
    ([`PriorPrs.tsx`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/_components/PriorPrs/PriorPrs.tsx)).
@@ -200,7 +203,7 @@ not claim.
 | 14 | `degraded` renders no tree, no counters, no graph action, no Explain | `BlastCard.test.tsx` ("degraded explains itself and renders no tree, no counters, no Explain"; "hides the graph action entirely on a degraded map") |
 | 15 | `ok` with no symbols is a distinct empty state, counters still present | `BlastCard.test.tsx` ("ok-with-no-symbols is a true empty state, distinct from degraded") |
 | 16 | A load error offers Retry, and every retry is a GET | `BlastCard.test.tsx` ("surfaces a load error and retries the GET (not a paid POST)") |
-| 17 | Explain posts once; the button disappears once a summary exists; a failure is an inline alert | `BlastCard.test.tsx` (— Explain, three cases) |
+| 17 | Explain posts once; the button disappears once a summary exists; a failure is an inline alert; the summary renders above the counters | `BlastCard.test.tsx` (— Explain, four cases, incl. "puts the summary above the counters — the answer before the detail") |
 | 18 | Overview renders two columns, collapsing to one when narrow | **Not verified** — no automated test is possible at this tier and no browser check has been done; see Known gaps |
 | 19 | A prior PR renders with its overlap count and author, linked to GitHub with `rel="noopener noreferrer"` | `PriorPrs.test.tsx` ("lists a prior PR with its overlap, linked to GitHub") |
 | 20 | Prior-PR rows render as plain text, never a dead link, when the repo is unknown | `PriorPrs.test.tsx` ("renders plain text — never a dead link…") |

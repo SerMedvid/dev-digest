@@ -375,6 +375,16 @@ describe("BlastCard — Explain", () => {
     expect(posts).toHaveLength(1);
   });
 
+  it("puts the summary above the counters — the answer before the detail", async () => {
+    stubFetch(200, { ...OK_MAP, summary: "Already explained." });
+    renderCard(card());
+
+    const title = await screen.findByText("What this touches");
+    const counters = screen.getByText("symbols");
+    // The prose answer leads; the counters and tree back it up underneath.
+    expect(title.compareDocumentPosition(counters) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("hides the button once a summary is present — no paid re-run at the same head", async () => {
     stubFetch(200, { ...OK_MAP, summary: "Already explained." });
     renderCard(card());

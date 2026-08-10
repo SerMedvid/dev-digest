@@ -118,6 +118,22 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
         <p style={s.warning}>{t("partialWarning", { reason: data.reason ?? "" })}</p>
       )}
 
+      {explainError && (
+        <div style={s.warning} role="alert">
+          {explainError}
+        </div>
+      )}
+
+      {/* The prose answer leads, with the counters and tree backing it up
+          underneath — a reviewer who reads only one thing should read this, and
+          it sits directly under the Explain button that produced it. */}
+      {data.summary && (
+        <div>
+          <div style={s.summaryTitle}>{t("summaryTitle")}</div>
+          <p style={s.summary}>{data.summary}</p>
+        </div>
+      )}
+
       <CounterRow
         symbols={data.changed_symbols.length}
         callers={callerCount}
@@ -139,19 +155,6 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
               defaultOpen={i === 0}
             />
           ))}
-        </div>
-      )}
-
-      {explainError && (
-        <div style={s.warning} role="alert">
-          {explainError}
-        </div>
-      )}
-
-      {data.summary && (
-        <div>
-          <div style={s.summaryTitle}>{t("summaryTitle")}</div>
-          <p style={s.summary}>{data.summary}</p>
         </div>
       )}
 
