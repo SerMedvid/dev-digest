@@ -25,14 +25,16 @@ The collapse is `auto-fit` + `minmax`, not a media query — the inline
 
 The card reads top to bottom:
 
-1. A section label carrying the `Workflow` icon.
+1. A section label carrying the `Workflow` icon, with **Explain** in its right
+   slot — the card's one action, and its one paid call.
 2. A **counter row** — symbols, callers, endpoints, cron/jobs, each with an icon,
    and a `Graph` button pushed to the far edge
    ([`CounterRow.tsx`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/_components/CounterRow/CounterRow.tsx)).
 3. One **collapsible row per changed symbol**, each opening to its declaration
    site, its callers, and its own endpoint and cron chips
    ([`SymbolRow.tsx`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/_components/SymbolRow/SymbolRow.tsx)).
-4. **Explain**, or the cached summary once one exists at this head.
+4. The cached summary, under a `What this touches` label, once one exists at
+   this head. At that point the Explain button in the header is gone.
 
 The `Graph` button opens the same data as a force-directed diagram in a modal
 over the card. It is an action, not a view switch: the card behind it keeps
@@ -108,6 +110,14 @@ not claim.
   the graph cannot disagree about where a location points
   ([`helpers.ts`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/helpers.ts)).
   Endpoint and cron nodes never link: there is no file behind them.
+- **Long paths wrap rather than widen the card.** A path is one token with no
+  break opportunity — browsers do not break at `/` — and both cards are grid
+  items, whose default `min-width: auto` refuses to shrink below their content.
+  Left alone the two combine to push a deep path straight through the card's
+  border. The fix is a `minWidth: 0` chain down every container that holds a
+  path, plus `overflowWrap: anywhere` on the leaf that holds it. Any new
+  path-bearing row here needs both; neither is observable in jsdom, which
+  computes no layout.
 - **Graph.** Opens in a modal, closes on the modal's own close control or its
   backdrop. The layout is a `d3-force` simulation seeded on a fixed spiral and
   ticked to completion **synchronously** inside a `useMemo`, never animated —
@@ -115,10 +125,12 @@ not claim.
   render loop, and the geometry is assertable without an animation-frame shim.
   d3 computes numbers only; React renders every element
   ([`BlastGraph/helpers.ts`](../src/app/repos/%5BrepoId%5D/pulls/%5Bnumber%5D/_components/OverviewTab/_components/BlastCard/_components/BlastGraph/helpers.ts)).
-- **Explain.** One model call, only on an explicit click, never on render. Once a
-  summary exists at the current head the button is replaced by the summary — no
+- **Explain.** One model call, only on an explicit click, never on render. It
+  sits in the section heading's right slot. Once a summary exists at the current
+  head the button is gone and the summary renders in the card body — there is no
   "Regenerate", which would be a paid call producing the answer already on
-  screen.
+  screen. A failed Explain surfaces as an inline `role="alert"` and the button
+  stays, so the user can retry once the cause is fixed.
 - Nothing on this card is optimistic; the summary appears only after the server
   answers.
 
@@ -130,7 +142,7 @@ not claim.
 | 2 | No Graph button when there is no map to draw | `CounterRow.test.tsx` ("renders no Graph button…"); `BlastCard.test.tsx` ("hides the graph action when there are no symbols to draw") |
 | 3 | A function renders `name()`; a non-function renders bare plus its kind | `SymbolRow.test.tsx` ("renders a function kind as callable…", "never draws a non-function kind as callable…") |
 | 4 | Rows collapse and expand, toggling `aria-expanded`; first symbol open on mount | `SymbolRow.test.tsx` (— collapse); `BlastCard.test.tsx` ("opens the first symbol and leaves the rest closed") |
-| 5 | The declaration `file:line` appears in the expanded body under `declared at` | `SymbolRow.test.tsx` ("keeps the declaration link the comp drops") |
+| 5 | The declaration `file:line` appears in the expanded body, marked by a return arrow and carrying no visible `declared at` wording, but still named for assistive tech | `SymbolRow.test.tsx` ("keeps the declaration link the comp drops") |
 | 6 | Every caller link is SHA-pinned, `rel="noopener noreferrer"` | `SymbolRow.test.tsx` ("SHA-pins every caller link"); `BlastCard.test.tsx` ("SHA-pins every caller link…") |
 | 7 | Rows render as plain text, never a dead link, when the repo is unknown | `SymbolRow.test.tsx`, `BlastCard.test.tsx`, `BlastGraph.test.tsx` (all three surfaces) |
 | 8 | Per-symbol endpoint and cron chips render that symbol's own attribution | `SymbolRow.test.tsx` ("renders this symbol's own endpoint and cron chips") |

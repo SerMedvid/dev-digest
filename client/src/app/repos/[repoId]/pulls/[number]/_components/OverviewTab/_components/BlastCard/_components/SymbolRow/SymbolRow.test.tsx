@@ -87,7 +87,10 @@ describe("SymbolRow — collapse", () => {
 describe("SymbolRow — body", () => {
   it("keeps the declaration link the comp drops", () => {
     renderRow();
-    expect(screen.getByText(/declared at/i)).toBeInTheDocument();
+    // The design shows no "declared at" wording — the return arrow carries it,
+    // and keeps the row named for anyone who cannot see the icon.
+    expect(screen.queryByText(/declared at/i)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(/declared at/i)).toBeInTheDocument();
     const link = screen.getByRole("link", { name: "src/middleware/ratelimit.ts:12" });
     expect(link).toHaveAttribute(
       "href",

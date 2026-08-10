@@ -88,7 +88,28 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
 
   return (
     <section style={s.card}>
-      <SectionLabel icon="Workflow">{t("title")}</SectionLabel>
+      {/* Explain rides in the heading's `right` slot rather than the card's
+          foot. It is the card's one action, and it disappears the moment a
+          summary exists at this head — a re-run would be a paid call producing
+          the answer already on screen. */}
+      <SectionLabel
+        icon="Workflow"
+        right={
+          data.summary ? undefined : (
+            <Button
+              size="sm"
+              kind="tertiary"
+              icon="Sparkles"
+              onClick={() => explain.mutate()}
+              disabled={explain.isPending}
+            >
+              {explain.isPending ? t("explaining") : t("explain")}
+            </Button>
+          )
+        }
+      >
+        {t("title")}
+      </SectionLabel>
 
       {data.status === "partial" && (
         <p style={s.warning}>{t("partialWarning", { reason: data.reason ?? "" })}</p>
@@ -124,18 +145,10 @@ export function BlastCard({ prId, headSha, repoFullName }: BlastCardProps) {
         </div>
       )}
 
-      {data.summary ? (
+      {data.summary && (
         <div>
           <div style={s.summaryTitle}>{t("summaryTitle")}</div>
           <p style={s.summary}>{data.summary}</p>
-        </div>
-      ) : (
-        // No "Regenerate" once a summary exists at this head: it would be a paid
-        // call producing the answer already on screen.
-        <div>
-          <Button onClick={() => explain.mutate()} disabled={explain.isPending}>
-            {explain.isPending ? t("explaining") : t("explain")}
-          </Button>
         </div>
       )}
 

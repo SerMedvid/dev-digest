@@ -23,11 +23,13 @@ function FileRef({ href, file, line }: { href: string | null; file: string; line
   // `fontSize: 13` inline, which no wrapper can override, and these rows are
   // 12 (INSIGHTS 2026-08-02).
   return href ? (
-    <a className="mono" href={href} target="_blank" rel="noopener noreferrer">
+    <a className="mono" style={s.fileRef} href={href} target="_blank" rel="noopener noreferrer">
       {label}
     </a>
   ) : (
-    <span className="mono">{label}</span>
+    <span className="mono" style={s.fileRef}>
+      {label}
+    </span>
   );
 }
 
@@ -71,7 +73,15 @@ export function SymbolRow({ sym, headSha, repoFullName, defaultOpen }: SymbolRow
       {open && (
         <div id={bodyId} style={s.body}>
           <div style={s.declared}>
-            <span>{t("declaredAt")}</span>
+            {/* The design carries no "declared at" wording — the return arrow
+                is the label. It keeps that meaning for assistive tech, which
+                would otherwise get an unnamed row, via `aria-label`. */}
+            <Icon.CornerDownRight
+              size={12}
+              role="img"
+              aria-label={t("declaredAt")}
+              style={s.declaredIcon}
+            />
             <FileRef
               href={callerHref(repoFullName, headSha, sym.file, sym.line)}
               file={sym.file}

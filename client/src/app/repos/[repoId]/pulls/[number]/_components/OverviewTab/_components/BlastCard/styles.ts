@@ -15,6 +15,11 @@ export const s = {
     display: "flex",
     flexDirection: "column",
     gap: 18,
+    // A grid item defaults to `min-width: auto`, which refuses to shrink below
+    // its content — one long file path then widens the whole column and spills
+    // past the border. This card is full of paths, so it must be allowed to
+    // shrink and let them wrap instead.
+    minWidth: 0,
   } satisfies CSSProperties,
   tree: {
     display: "flex",
