@@ -59,6 +59,29 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-10** — `get count` is a **single instantaneous DOM read** taken in
+  its own process, with none of the polling every `wait` form does — so a
+  `get count` immediately after a click asserts on whatever the DOM happened to
+  be at that instant, and has no retry if the re-render lands a beat later. Two
+  compounding weaknesses: `stdoutIncludes` is a *substring* check, so an
+  expected `"2"` also passes on `12`, `20` or `32`, and an expected `"1"` passes
+  on `10`–`19`. Assert **presence** with `wait "<css selector>"` (polls, exits
+  non-zero on timeout) and keep `get count` for **absence**, which has no wait
+  form. Applied in flow `09`'s post-click step; the selector was proven to
+  discriminate live in both states — it times out on the collapsed card and
+  passes after the click. (`specs/09-pr-smart-diff.flow.json`)
+
+- **2026-08-10** — `find text <value>` resolves the **innermost** element
+  containing the string, not an ancestor: on a FileCard header the chain ends at
+  the `<span class="mono">` holding the path, so the click lands on the filename
+  and bubbles to the header's `onClick`, and cannot stray onto a sibling control
+  like the summary pill (which `stopPropagation`s and would call a model).
+  Verified by `find text … hover` then
+  `eval "document.querySelectorAll(':hover')"`, which prints the resolution
+  chain — the way to check what any locator will actually click.
+  (`specs/09-pr-smart-diff.flow.json:29`,
+  `../client/src/components/diff-viewer/FileCard/FileCard.tsx:140`)
+
 - **2026-08-10** — Names the mechanism behind the 2026-08-05 innerText entry
   below, which recurred in flow `09`: the uppercase is not per-screen CSS but
   [`@devdigest/ui`](../client/src/vendor/ui/primitives/SectionLabel.tsx)'s

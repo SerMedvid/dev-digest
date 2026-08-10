@@ -4,6 +4,7 @@
   "steps": [
     { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
     { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["wait", "--text", "Add rate limiting to public API endpoints"], "label": "the PR row has rendered — the guard flow 02 carries and flows 04/05 lack; `wait --url` only proves the route changed, not that the list has painted, and the click below fails outright when it lands first (e2e/INSIGHTS.md 2026-08-05)" },
     { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
     { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
     { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
@@ -29,9 +30,8 @@
       "label": "click the collapsed package-lock.json card's header — FileCard's header <div onClick={toggle}> wraps the filename <span> (one level deeper since the header's path and its finding dot share a wrapper), so clicking the visible filename text bubbles to the same toggle handler a real click on the row triggers; neither seeded boilerplate file carries a finding, so this is a plain collapse-toggle click, not a finding-badge click (see the flow's own description for why)"
     },
     {
-      "cmd": ["get", "count", "section section:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > div"],
-      "label": "package-lock.json's FileCard now renders 2 direct child <div>s (header + body) instead of 1 — the SAME selector that proved it collapsed earlier in this flow, re-run after the click, now asserting the click genuinely expanded it rather than the file having been open all along",
-      "assert": { "stdoutIncludes": "2" }
+      "cmd": ["wait", "section section:nth-of-type(3) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2)"],
+      "label": "package-lock.json's FileCard now has a 2nd direct child <div> — its body, which FileCard renders only while open — so the click genuinely expanded a file the step above proved was collapsed. Deliberately `wait <selector>` and not `get count … 2`: every other assertion in this suite polls until its timeout, while a bare `get count` is one instantaneous DOM read from a separate process taken immediately after the click, with no retry if the re-render lands a beat later. The `get count` form above stays because absence has no wait form; this one asserts presence, so it doesn't need it"
     }
   ]
 }
