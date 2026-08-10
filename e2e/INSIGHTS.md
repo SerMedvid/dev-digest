@@ -37,6 +37,26 @@ an entry can age — verify before relying on one.
   static HTML fixture in both states (present and absent) before trusting it.
   (`specs/09-pr-smart-diff.flow.json`, `specs/08-pr-intent.flow.json:20`)
 
+- **2026-08-10** — **Supersedes the "Applied in flow `09`'s post-click step"
+  claim in the 2026-08-10 `get count` entry under _Codebase patterns & tool
+  notes_: that step no longer exists.** Flow `09`'s "clicking the collapsed
+  package-lock.json card expands it" case was removed. It failed in the
+  maintainer's environment in both forms — `get count … 2` and then a polling
+  `wait` on the body selector — while passing in every environment where it
+  could be reproduced: 6/6 back-to-back replays, 20/20 rapid toggles (counts
+  alternated `1,2,1,2…`, so the DOM read never lagged the click), and two
+  full-suite runs against a freshly-seeded hermetic stack. Ruled out and
+  therefore not worth re-investigating: file ordering within a group
+  (`../server/src/modules/smart-diff/helpers.ts:85` sorts by findings desc,
+  lines desc, path asc — a total order, `package-lock.json` first on every DB),
+  the click straying onto the summary pill that `stopPropagation`s, and a
+  refetch remounting the tab and re-seeding the open state
+  (`page.tsx` gates on `isLoading`, false during background refetches, and the
+  seed effect is ref-guarded per PR). **Do not re-add the step without a
+  reproduction first** — two rounds of fixing it blind have now cost more than
+  the coverage is worth, and no expand-on-click path is covered e2e at all
+  (the badge one has no seeded target either). (`specs/09-pr-smart-diff.flow.json`)
+
 - **2026-08-06** — An e2e assertion can be _valid_ and still prove nothing, and
   the collapse rules are where that bites. Flow `09` clicked a finding badge and
   then waited for the revealed line — but `src/config.ts` is `wiring` **with** a
