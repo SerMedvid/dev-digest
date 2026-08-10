@@ -59,6 +59,19 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-10** — Names the mechanism behind the 2026-08-05 innerText entry
+  below, which recurred in flow `09`: the uppercase is not per-screen CSS but
+  [`@devdigest/ui`](../client/src/vendor/ui/primitives/SectionLabel.tsx)'s
+  `SectionLabel` primitive, which hardcodes `textTransform: "uppercase"` on its
+  children. **Every** section caption on every screen therefore renders
+  uppercase — `wait --text "REVIEWER-ORDERED DIFF"`, never the catalogue's
+  `Reviewer-ordered diff`. The trap is that jsdom does not apply
+  `text-transform`, so the client unit test asserting the catalogue casing
+  passes while the flow times out; a green `client` suite is not evidence about
+  casing. (`specs/09-pr-smart-diff.flow.json:12`,
+  `../client/src/vendor/ui/primitives/SectionLabel.tsx:22`,
+  `../client/src/app/repos/[repoId]/pulls/[number]/_components/DiffTab/_components/SmartDiffViewer/SmartDiffViewer.test.tsx:323`)
+
 - **2026-08-05** — `wait --text` matches the **rendered** innerText, so CSS
   `text-transform: uppercase` wins: the Intent card's headings must be asserted
   as `IN SCOPE` / `LOW CONFIDENCE`, and the DOM-cased `In scope` times out. Dump
