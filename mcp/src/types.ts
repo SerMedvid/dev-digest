@@ -24,11 +24,15 @@ export interface PullRef {
   title: string;
 }
 
+/**
+ * `GET /agents` also returns the agent's `provider`. It is deliberately not
+ * declared: no tool accepts it and nothing downstream reads it, so leaving it
+ * off the type is what keeps it from reaching the model (see `list-agents.ts`).
+ */
 export interface AgentRef {
   id: string;
   name: string;
   description: string;
-  provider: string;
   model: string;
   enabled: boolean;
 }

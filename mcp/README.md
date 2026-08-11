@@ -11,6 +11,10 @@ MCP client ──stdio──▶ @devdigest/mcp ──HTTP──▶ DevDigest API
 Because reviews run in the API process, a review started from an MCP client
 streams live into the DevDigest studio exactly as one started from the UI.
 
+Before working here, read [`INSIGHTS.md`](INSIGHTS.md) — the non-obvious things
+earlier sessions learned in this package. Append to it via the
+`engineering-insights` skill.
+
 ## It is NOT part of the app lifecycle
 
 This is the thing to get right, because the two look connected and are not:
@@ -108,6 +112,7 @@ For a client that wants an explicit command, the equivalent is:
 command: npx
 args:    --yes tsx mcp/src/main.ts     # cwd = repo root
 env:     DEVDIGEST_API_URL=http://localhost:3001
+timeout: 180000                        # ms — see Configuration
 ```
 
 ### 5. Confirm the client sees it
@@ -145,6 +150,25 @@ spawns its own process.
 A trailing slash on `DEVDIGEST_API_URL` is stripped; a non-numeric or
 non-positive value for either number falls back to its default rather than
 failing at boot.
+
+### The client's tool timeout has to outlast the wait budget
+
+`run_agent_on_pr` blocks for up to `DEVDIGEST_WAIT_SECONDS` before it gives up
+and hands the run id back. That budget and the client's per-call timeout are two
+independent clocks, and the client's wins: if it fires first the model gets a
+timeout it cannot act on, while the review keeps running in the API process and
+still lands in the studio.
+
+So [`.mcp.json`](../.mcp.json) pins `"timeout": 180000` — the 120s budget plus
+headroom for the start call, the last poll and the findings fetch. It is a
+per-server override of Claude Code's `MCP_TOOL_TIMEOUT`, in **milliseconds**, and
+a value below 1000 is ignored rather than honoured. Raising
+`DEVDIGEST_WAIT_SECONDS` means raising this alongside it.
+
+Other clients neither read `.mcp.json` nor share that default — the MCP
+TypeScript SDK's own is 60s (`DEFAULT_REQUEST_TIMEOUT_MSEC`), which is what the
+Inspector uses, so a review driven from `pnpm run inspect` gives up client-side
+at 60s while the API keeps working.
 
 ## Tools
 

@@ -63,6 +63,7 @@ to find it:
 | React/Vite UI, routing, client state, the design system | [`client/INSIGHTS.md`](../../../client/INSIGHTS.md) |
 | The review pipeline, prompts, the grounding gate, scoring | [`reviewer-core/INSIGHTS.md`](../../../reviewer-core/INSIGHTS.md) |
 | Agent-browser flows, the hermetic runner, flaky waits | [`e2e/INSIGHTS.md`](../../../e2e/INSIGHTS.md) |
+| MCP tools & their projections, the `devdigest review` CLI, MCP-client behaviour | [`mcp/INSIGHTS.md`](../../../mcp/INSIGHTS.md) |
 | Spans packages, tooling, portability, cross-cutting conventions | [`INSIGHTS.md`](../../../INSIGHTS.md) (repo root) |
 
 When it could go in two places, file it where someone would **look for it**.

@@ -82,7 +82,6 @@ describe('resolveAgent', () => {
           id: 'agent-1',
           name: 'Security Reviewer',
           description: '',
-          provider: 'anthropic',
           model: 'claude-opus-5',
           enabled: false,
         },

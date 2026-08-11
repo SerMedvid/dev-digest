@@ -30,7 +30,7 @@ export const listAgentsTool: ToolDef = {
           name: a.name,
           description: a.description,
           enabled: a.enabled,
-          model: `${a.provider}/${a.model}`,
+          model: a.model,
         })),
       });
     } catch (err) {

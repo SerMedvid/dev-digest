@@ -31,7 +31,6 @@ const DEFAULT_SEED: FakeApiSeed = {
       id: 'agent-1',
       name: 'Security Reviewer',
       description: 'Finds security defects',
-      provider: 'anthropic',
       model: 'claude-opus-5',
       enabled: true,
     },

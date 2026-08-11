@@ -34,9 +34,11 @@ describe('tool registry', () => {
 });
 
 describe('devdigest_list_agents', () => {
-  it('returns the configured agents with the id the other tools accept', async () => {
+  it('returns the configured agents with the id the other tools accept, and nothing else', async () => {
     const result = await listAgentsTool.handler({}, deps());
     expect(result.isError).toBeUndefined();
+    // Exhaustive on purpose: the projection is the whole privacy boundary, so a
+    // field added to the handler has to be added here too. `provider` is not it.
     expect(result.structuredContent).toEqual({
       agents: [
         {
@@ -44,7 +46,7 @@ describe('devdigest_list_agents', () => {
           name: 'Security Reviewer',
           description: 'Finds security defects',
           enabled: true,
-          model: 'anthropic/claude-opus-5',
+          model: 'claude-opus-5',
         },
       ],
     });

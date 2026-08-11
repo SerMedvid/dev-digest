@@ -5,7 +5,8 @@
 			"args": ["--yes", "tsx", "mcp/src/main.ts"],
 			"env": {
 				"DEVDIGEST_API_URL": "http://localhost:3001"
-			}
+			},
+			"timeout": 180000
 		}
 	}
 }
