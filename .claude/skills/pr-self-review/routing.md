@@ -18,6 +18,7 @@ the set of reviewers has to be identical on two runs of the same diff.
 | `client/src/**/*.tsx` | react-best-practices · frontend-architecture |
 | `client/**/*.test.tsx` | react-testing-library |
 | `server/src/vendor/shared/**`, `client/src/vendor/shared/**` | zod · typescript-expert |
+| `mcp/src/**` | typescript-expert · zod |
 
 Three rules govern the table:
 
@@ -59,6 +60,7 @@ A lane without this context reliably reports the deliberate gaps as defects.
 | `reviewer-core/**` | `cd reviewer-core && npm run typecheck` · `npm test` · **and** `cd server && pnpm typecheck` |
 | `client/**` | `cd client && pnpm typecheck` · `pnpm test` |
 | `e2e/**` | `cd e2e && npm run typecheck` only |
+| `mcp/**` | `cd mcp && pnpm typecheck` · `pnpm test` |
 | `server/src/vendor/shared/**` or `client/src/vendor/shared/**` | typecheck **both** `server` and `client` |
 
 Three notes:
@@ -66,8 +68,8 @@ Three notes:
 - **The `reviewer-core` row is not redundant.** `server` type-checks against
   `../reviewer-core/src` through a path alias, so a breaking change there can
   only surface as a `server` type error.
-- **`pnpm` for `server`/`client`, `npm` for `reviewer-core`/`e2e`.** The wrong
-  one writes a second lockfile, which is blocker **B7**.
+- **`pnpm` for `server`/`client`/`mcp`, `npm` for `reviewer-core`/`e2e`.** The
+  wrong one writes a second lockfile, which is blocker **B7**.
 - **A missing baseline is not a violation.** If `arch:check` prints
   `Can't open '.dependency-cruiser-known-violations.json' for reading`, report
   "run `pnpm arch:baseline`" and do **not** raise B1 for it.

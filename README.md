@@ -12,7 +12,7 @@ aliases, not published modules):
 | Folder           | Package                     | What it is                                            | Port |
 |------------------|-----------------------------|-------------------------------------------------------|------|
 | `server/`        | `@devdigest/api`            | Fastify API + Drizzle/Postgres (pgvector)             | 3001 |
-| `client/`        | `@devdigest/web`            | Next.js 15 web app (the studio)                       | 3000 |
+| `client/`        | `@devdigest/web`            | Next.js 15 web app (the studio)                       | 3002 |
 | `reviewer-core/` | `@devdigest/reviewer-core`  | Pure review engine: diff → prompt → LLM → findings    | —    |
 | `e2e/`           | `@devdigest/e2e`            | Deterministic browser e2e (agent-browser)             | —    |
 | `mcp/`           | `@devdigest/mcp`            | Local MCP server: reviews, findings, conventions (pnpm) | —    |
@@ -28,7 +28,7 @@ project context into reviews) lives inside the server at
 ```mermaid
 flowchart LR
   subgraph Studio["Local studio (your machine)"]
-    WEB["client/<br/>Next.js · :3000"]
+    WEB["client/<br/>Next.js · :3002"]
     API["server/<br/>Fastify · :3001"]
     PG[("Postgres<br/>pgvector")]
     WEB -->|"REST /repos /pulls /agents /runs …"| API
@@ -108,9 +108,9 @@ This script:
 2. creates `server/.env` and `client/.env` from `.env.example` if missing,
 3. installs deps in `server/` and `client/` (only when `node_modules` is absent),
 4. applies DB migrations and seeds demo data,
-5. launches the API (`:3001`) and the web app (`:3000`).
+5. launches the API (`:3001`) and the web app (`:3002`).
 
-Open **http://localhost:3000**. Press **Ctrl-C** to stop the dev servers —
+Open **http://localhost:3002**. Press **Ctrl-C** to stop the dev servers —
 Postgres keeps running (`docker compose down` to stop it).
 
 Flags: `--no-seed` · `--no-client` · `--db-only` · `--help`.
@@ -128,7 +128,7 @@ pnpm db:migrate          # apply migrations (NOT run automatically on boot)
 pnpm db:seed             # idempotent demo data (optional)
 pnpm dev                 # API on :3001
 
-cd ../client && pnpm install && pnpm dev               # web on :3000
+cd ../client && pnpm install && pnpm dev               # web on :3002
 ```
 
 ## Useful scripts

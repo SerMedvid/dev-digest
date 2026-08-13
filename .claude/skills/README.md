@@ -20,6 +20,7 @@ Reusable AI skills that provide specialized knowledge and workflows. Canonical l
 | [mermaid-diagram](mermaid-diagram/SKILL.md) | Shared | Mermaid diagrams in markdown (flowcharts, sequence, ERD, …) |
 | [engineering-insights](engineering-insights/SKILL.md) | Shared | Capture durable session knowledge into a module's `INSIGHTS.md` |
 | [pr-self-review](pr-self-review/SKILL.md) | Shared | Pre-PR gate — routes the branch diff to the skills that govern it, blocks `gh pr create` on a critical finding |
+| [impl-sdd](impl-sdd/SKILL.md) | Shared | Executes an approved plan — implementation, traceability, three-axis review, bounded remediation. Writes no spec and no plan; never commits |
 
 ## What Are Skills?
 

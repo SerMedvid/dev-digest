@@ -21,7 +21,7 @@ This is the thing to get right, because the two look connected and are not:
 
 | | Starts what | Started by | Lives as long as |
 |---|---|---|---|
-| [`scripts/dev.sh`](../scripts/dev.sh) | Postgres, API `:3001`, web `:3000` | you, in a terminal | the terminal |
+| [`scripts/dev.sh`](../scripts/dev.sh) | Postgres, API `:3001`, web `:3002` | you, in a terminal | the terminal |
 | [`.mcp.json`](../.mcp.json) | this MCP server | your **MCP client** (Claude Code), per session | the client session |
 
 `scripts/dev.sh` does **not** start the MCP server and must never be changed to
@@ -39,7 +39,7 @@ Assumes a clone with nothing installed and nothing running.
 ### 1. Bring up the app the MCP server talks to
 
 ```bash
-./scripts/dev.sh            # docker → migrate → seed → API :3001 + web :3000
+./scripts/dev.sh            # docker → migrate → seed → API :3001 + web :3002
 ./scripts/dev.sh --no-client   # same without Next.js — enough for MCP
 ```
 

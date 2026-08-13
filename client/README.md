@@ -13,7 +13,7 @@ dashboard screens.)
   (`@devdigest/shared`).
 - **API base:** `NEXT_PUBLIC_API_BASE` (default `http://localhost:3001`), used by
   `src/lib/api.ts`. Every data hook lives in `src/lib/hooks/*`.
-- **Run:** `pnpm dev` (`:3000`). **Test:** `pnpm test` (vitest + jsdom, fetch
+- **Run:** `pnpm dev` (`:3002`). **Test:** `pnpm test` (vitest + jsdom, fetch
   mocked — no API needed). **Typecheck:** `pnpm typecheck`.
 
 ## UI route map

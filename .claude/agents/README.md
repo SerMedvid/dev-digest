@@ -14,7 +14,8 @@ domain knowledge loaded on demand; agents are the workers that load them.
 | Agent | Model | Tools | Responsibility |
 |---|---|---|---|
 | [researcher](researcher.md) | `sonnet` | Read, Grep, Glob, Bash, WebSearch, WebFetch | Answers a question with quoted evidence — repo, external, or both. Never edits. |
-| [planner](planner.md) | inherit | Read, Grep, Glob, Bash, Write, Skill | Turns a request into a Development Plan file. Never touches application code. |
+| [specreator](specreator.md) | inherit | Read, Grep, Glob, Bash, Write, Edit, Skill | Writes one EARS specification into `docs/superpowers/specs/`, after a phase that only reviews the design and asks. Never a plan, never code, never `<pkg>/specs/`. |
+| [implementation-planner](implementation-planner.md) | inherit | Read, Grep, Glob, Bash, Write, Skill | Reviews the requirements, then turns them into an Implementation Plan in `docs/superpowers/plans/`. Never writes a spec, never touches application code. |
 | [implementer](implementer.md) | inherit | Read, Write, Edit, Grep, Glob, Bash, Skill, TodoWrite | Executes an approved plan across the four packages, with its own tests. Never commits. |
 | [architecture-reviewer](architecture-reviewer.md) | inherit | Read, Grep, Glob, Bash, Skill | Read-only boundary verdict with `file:line` evidence: Onion, `client/` layering, `reviewer-core` purity, the two shared copies, alias-only imports. Fixes nothing. |
 | [plan-verifier](plan-verifier.md) | inherit | Read, Grep, Glob, Bash | Read-only item-by-item traceability of an implementation against its plan, spec, or requirements. No code review. |
@@ -34,14 +35,24 @@ repo's convention, not a platform limit; widening it is a deliberate change to
 | Agent | Consumes | Produces |
 |---|---|---|
 | researcher | a question; optional `mode: repo` / `mode: external` | a report in the chat — findings with evidence, `Not established`, search coverage. No files. |
-| planner | a request; a spec from `<pkg>/specs/` or [`../../docs/superpowers/specs/`](../../docs/superpowers/specs/) | one plan file — `docs/superpowers/plans/YYYY-MM-DD-<feature>.md` (preferred) or `docs/plans/<name>-plan.md` plus its index entry — and a 10–15 line digest |
+| specreator | a feature request, plus design files **by path** (PNG/JPG/PDF/HTML) and the answers to its phase-1 questions | **Phase 1:** a report in the chat — design review, uncovered corner cases, module-interaction risks, UX proposals, numbered questions with recommended defaults. No files. **Phase 2:** one spec — `docs/superpowers/specs/SPEC-YYYY-MM-DD-<feature>.md`, with permanent `AC-N` ids, a `Verified by` lane per row and a `Decisions and assumptions` table recording who settled what — plus its row in that folder's [`README.md`](../../docs/superpowers/specs/README.md) index, and a 10–15 line digest |
+| implementation-planner | a request or requirement list; a spec from `<pkg>/specs/` or [`../../docs/superpowers/specs/`](../../docs/superpowers/specs/), read-only; and the caller's answer to its execution-mode question | one plan file — `docs/superpowers/plans/YYYY-MM-DD-<feature>.md`, the single adopted format — carrying `Execution mode:`, `Requirements review`, `Recommendations` and a `Satisfies:` line of `AC-N` ids per task, plus a 10–15 line digest. Never a spec file, never a file in the legacy `docs/plans/`. |
 | implementer | a plan path; the plan's cited spec | code and tests in the working tree, ticked `- [x]` checkboxes, and a report: changed files, verification output, deviations, not-done, plan defects, insight candidates |
 | architecture-reviewer | a review surface (branch diff, files, or a package) | a report in the chat — a verdict row per boundary B1–B6, findings with `file:line`, quoted code and a severity, verbatim `arch:check` output, what it did not review. No files. |
 | plan-verifier | an implementation surface **and** an item source (plan, spec, or written requirements) | a report in the chat — one row per item with a four-value status and evidence, a `Could not verify` table, plan defects, and a `Coverage:` line. No files. |
 | doc-writer | material to document (a shipped feature, a plan, a spec, a review) and optionally a destination folder | documentation files in the working tree, the folder README's index or "Empty on purpose" line updated, plus a report: placement rationale, diagrams, claims with evidence |
 
-The handoff between `planner` and `implementer` is deliberately **a file, not a
-chat message** — see [Sources](#sources).
+The handoff between `implementation-planner` and `implementer` is deliberately
+**a file, not a chat message** — see [Sources](#sources).
+
+## Orchestration
+
+The agents do not call each other. [`/impl-sdd`](../skills/impl-sdd/SKILL.md) is
+the controller that dispatches them in order once a plan is approved — execute,
+trace, review, remediate — and it is the only place that order is written down.
+`specreator` and `implementation-planner` stay outside it and are run by hand:
+both end in a human judgement, and a command that swallowed them would be asking
+for approval twice inside its own control flow.
 
 ## Responsibility boundaries
 
@@ -50,11 +61,31 @@ What each agent must *not* do matters as much as what it does.
 - **researcher** reads and reports. No `Write`, no `Edit`; its `Bash` grant is
   read-only inspection (`git log`, `git show`, listing). It never delegates to
   deep research — it *is* the research primitive.
-- **planner** names skills, it does not apply them. Its `Skill` grant covers
-  process skills only (`superpowers:writing-plans`, `superpowers:brainstorming`);
-  loading project implementation skills would burn the context it needs for
-  reading code. `Write` is scoped by prompt rule to the plan file. No `Edit`, so
-  it cannot alter an existing source file at all.
+- **specreator** owns [`../../docs/superpowers/specs/`](../../docs/superpowers/specs/)
+  and nothing else. Its `Write`/`Edit` grant is scoped by prompt rule to that one
+  folder — the spec, the folder's `README.md` index, and a `Superseded-by:` line
+  in a spec it replaces; `Bash` is read-only, and a shell redirect is named in its
+  body as a non-loophole. It writes **no** plan (sequencing the work is what makes
+  a spec a plan), **no** `<pkg>/specs/**` (see `doc-writer` below), and it does
+  not promote its own `Status` past `draft` — approval is the user's act. Phase 1
+  is a hard no-write gate: a UI feature with no design file path supplied is a
+  question, never an analysis of a design it was not shown.
+- **implementation-planner** names skills, it does not apply them. Its `Skill`
+  grant covers one process skill (`superpowers:writing-plans`); loading project
+  implementation skills would burn the context it needs for reading code, and
+  spec-producing skills like `superpowers:brainstorming` are outside its
+  contract. `Write` is scoped by prompt rule to the plan file. No `Edit`, so it
+  cannot alter an existing source file at all. It **reviews** the requirements
+  it is given and recommends alternatives, but it does not author the spec: a
+  missing or thin spec is reported as a gap for the caller or `doc-writer`, and
+  it plans the request as stated unless the caller adopts a recommendation. It
+  also **asks, on every plan, how the plan should be executed** — a fresh
+  subagent per task (`superpowers:subagent-driven-development`, or the caller
+  dispatching `implementer` per phase) or one single implementer pass
+  (`superpowers:executing-plans`) — because multi-agent execution requires every
+  task to be readable cold. It recommends one and records the answer in the
+  plan's `Execution mode:` header field; **launching either is the caller's act,
+  not the planner's**.
 - **implementer** verifies four mechanical things — typecheck, tests,
   `arch:check`, plan coverage — and **does not** judge architecture or security.
   That is left to separate blackbox reviewers, which is the one role split
@@ -76,7 +107,9 @@ What each agent must *not* do matters as much as what it does.
   to prevent. It never ticks a checkbox — that stays the implementer's one
   permitted plan edit.
 - **doc-writer** owns `<pkg>/docs/` and `<pkg>/specs/` and never `docs/plans/`
-  (the planner's), `CLAUDE.md`, or `INSIGHTS.md`. It reads the destination
+  (the implementation-planner's), `CLAUDE.md`, or `INSIGHTS.md`. `specs/` is the
+  clean inverse of the planner's boundary: doc-writer may write a spec, the
+  planner may only read one. It reads the destination
   folder's README before writing, and it will not reconstruct a spec from shipped
   behaviour when no statement of intent exists.
 
@@ -95,11 +128,11 @@ prohibitions are written into each agent's body. See the 2026-08-05 entry in
 
 ## Relationship to skills
 
-Neither `planner` nor `implementer` carries its own list of coding rules. Both
-read [`../skills/README.md`](../skills/README.md) first and route from *place in
-the codebase* → *skill*; the planner writes the resulting skill names into each
-task, the implementer invokes them before touching the file. One catalog, two
-readers, no drift.
+Neither `implementation-planner` nor `implementer` carries its own list of coding
+rules. Both read [`../skills/README.md`](../skills/README.md) first and route from
+*place in the codebase* → *skill*; the planner writes the resulting skill names
+into each task, the implementer invokes them before touching the file. One
+catalog, two readers, no drift.
 
 Two project skills are outside that loop by design:
 [`pr-self-review`](../skills/pr-self-review/SKILL.md) runs after the work as a
@@ -114,12 +147,17 @@ The three review-and-document agents narrow that loop deliberately.
 must cite the rule it applies rather than paraphrase it from memory.
 `plan-verifier` is granted **no `Skill` tool at all**, so nothing can pull it
 toward the code review its contract forbids. `doc-writer` invokes exactly one,
-[`mermaid-diagram`](../skills/mermaid-diagram/SKILL.md).
+[`mermaid-diagram`](../skills/mermaid-diagram/SKILL.md), and so does `specreator`
+— for the diagram in its `## Module interactions` section. `specreator`'s
+`security` and `zod` knowledge is written into its body as rules
+(`wrapUntrusted`, `workspaceId` scoping, 404-not-403, reference the contract
+instead of restating it) rather than loaded as skills, for the same
+context-budget reason the planner does not load them.
 
 ## Sources
 
-The rules in `planner.md` and `implementer.md` are not house preference; each
-comes from something citable.
+The rules in `implementation-planner.md` and `implementer.md` are not house
+preference; each comes from something citable.
 
 **External — Claude Code and Anthropic guidance**
 
@@ -130,7 +168,7 @@ comes from something citable.
 | [code.claude.com/docs/en/skills](https://code.claude.com/docs/en/skills) | Progressive disclosure — descriptions load, bodies load on invocation, and an invoked skill's content persists for the rest of the session. Hence the planner's refusal to load implementation skills. |
 | [Effective context engineering](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents) | Section-delimited prompts and "the minimal set of information that fully outlines your expected behavior". Why a subagent returns a condensed report rather than its working context. |
 | [When to use multi-agent systems](https://claude.com/blog/building-multi-agent-systems-when-and-how-to-use-them) | That a planner/implementer/tester/reviewer split is a documented anti-pattern — "the subagents spent more tokens on coordination than on actual work" — and that context-centric decomposition plus a dedicated **verification** subagent is what works. The four mitigations in our split answer this directly. |
-| `superpowers` v6.2.0 `writing-plans` / `executing-plans` SKILL.md (plugin cache, not this repo) | The plan format the planner emits and the execution loop the implementer follows, including the `Step N: Commit`, worktree and `finishing-a-development-branch` steps our implementer must refuse. |
+| `superpowers` v6.2.0 `writing-plans` / `executing-plans` SKILL.md (plugin cache, not this repo) | The plan format the implementation-planner emits and the execution loop the implementer follows, including the `Step N: Commit`, worktree and `finishing-a-development-branch` steps our implementer must refuse. |
 
 **Internal — this repository**
 
@@ -138,14 +176,15 @@ comes from something citable.
 |---|---|
 | [`../../CLAUDE.md`](../../CLAUDE.md) | The guardrails both agents restate: two physical `@devdigest/shared` copies, per-package package managers, migrations not applied on boot, the `*.it.test.ts` lane split, `pathToFileURL` entrypoints, never `docker compose down -v`. |
 | `<pkg>/CLAUDE.md` | Package-local law — Onion layering and `arch:check` in [`../../server/CLAUDE.md`](../../server/CLAUDE.md), the purity rule in [`../../reviewer-core/CLAUDE.md`](../../reviewer-core/CLAUDE.md), determinism in [`../../e2e/CLAUDE.md`](../../e2e/CLAUDE.md). |
-| [`../../docs/plans/README.md`](../../docs/plans/README.md) | The fallback plan format, and the precedence rule both agents enforce: when a plan and a spec disagree, the spec wins. |
-| [`../../docs/plans/pr-findings-counters-plan.md`](../../docs/plans/pr-findings-counters-plan.md) · [`../../docs/superpowers/plans/2026-08-03-conventions-extractor-server.md`](../../docs/superpowers/plans/2026-08-03-conventions-extractor-server.md) | The two format precedents the planner extends, one per format. |
+| [`../../docs/plans/README.md`](../../docs/plans/README.md) | The precedence rule every agent here enforces — when a plan and a spec disagree, the spec wins — and that this folder is legacy: new plans go to `docs/superpowers/plans/`. |
+| [`../../docs/superpowers/plans/2026-08-03-conventions-extractor-server.md`](../../docs/superpowers/plans/2026-08-03-conventions-extractor-server.md) | The format precedent the implementation-planner extends — the single adopted plan shape, plus this repo's `Skills:` / `Verify:` / `Satisfies:` additions. |
+| [`../../docs/superpowers/specs/README.md`](../../docs/superpowers/specs/README.md) | The spec folder's own rules: `SPEC-YYYY-MM-DD-<feature>` ids, the fixed section order, permanent `AC-N` ids, and the `draft \| approved \| implemented \| superseded` vocabulary. |
 | `<pkg>/INSIGHTS.md` | Required reading for both agents before work in a package; append-only, and treated as high-confidence. |
 | [`researcher.md`](researcher.md) | The house style the other two follow: numbered contract, an explicit stop-and-ask gate, a fenced output template, a tool-discipline section. |
 
 ## Not in this set yet
 
-`planner.md` and `implementer.md` both hand off to an **architecture reviewer** and
+`implementation-planner.md` and `implementer.md` both hand off to an **architecture reviewer** and
 a **security reviewer**. The architecture reviewer now exists —
 [`architecture-reviewer.md`](architecture-reviewer.md). A **security reviewer does
 not**, so that half of the implementer's `For the review agents` hand-off is still
