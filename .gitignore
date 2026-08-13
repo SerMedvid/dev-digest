@@ -18,6 +18,7 @@ coverage/
 *.log
 .devdigest/cache/
 .devdigest/pr-self-review/
+.devdigest/impl-sdd/
 clones/
 playwright-report/
 test-results/
