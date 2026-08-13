@@ -64,6 +64,44 @@ Cross-package imports resolve through **tsconfig path aliases only** — TypeScr
 source is consumed directly (tsx in dev, vitest in tests). `reviewer-core` never
 emits JS; its `build` is `tsc --noEmit`.
 
+## Superpowers — what this repo uses, and what it does not
+
+The plugin is enabled in [`.claude/settings.json`](.claude/settings.json). Its own
+`using-superpowers` skill states that user instructions take precedence over
+skills, so this section is the policy.
+
+**Used:** `superpowers:writing-plans` and `superpowers:executing-plans` — the plan
+format and the execution loop, both already bent to this repo in
+[`.claude/agents/implementation-planner.md`](.claude/agents/implementation-planner.md)
+and [`.claude/agents/implementer.md`](.claude/agents/implementer.md) —
+plus `superpowers:test-driven-development`,
+`superpowers:systematic-debugging`,
+`superpowers:verification-before-completion`, and
+`superpowers:dispatching-parallel-agents`, which
+[`pr-self-review`](.claude/skills/pr-self-review/SKILL.md) needs to dispatch its
+review lanes.
+
+**Not used, and why:**
+
+- **`superpowers:brainstorming`** writes
+  `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` **and commits it**. That
+  folder now takes `SPEC-*.md` from
+  [`specreator`](.claude/agents/specreator.md), and no agent here commits.
+- **`superpowers:subagent-driven-development`** dispatches `general-purpose`
+  subagents with its own implementer prompt, so this repo's implementer — skill
+  routing, the per-package managers, `arch:check`, the two `vendor/shared`
+  copies — is bypassed; its implementer template also commits each task, and its
+  controller is told to rule on conflicts rather than stop.
+  [`/impl-sdd`](.claude/skills/impl-sdd/SKILL.md) is the executor here.
+- **`superpowers:finishing-a-development-branch`** merges, pushes and opens PRs.
+  All three are the caller's, and `gh pr create` is gated by the
+  `pr-self-review` hook.
+- **`superpowers:writing-skills`** competes with this repo's own conventions in
+  [`.claude/skills/README.md`](.claude/skills/README.md). Invoke it only when
+  deliberately authoring a skill.
+
+No agent in this repository commits, pushes, branches, or creates a worktree.
+
 ## Insights — read them, write them back
 
 Each package has an `INSIGHTS.md` next to its `CLAUDE.md`: durable, non-obvious
