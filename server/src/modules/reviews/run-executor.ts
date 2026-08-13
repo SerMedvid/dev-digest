@@ -2,6 +2,11 @@ import type { Container } from '../../platform/container.js';
 import type { Provider, Review, RunTrace, UnifiedDiff } from '@devdigest/shared';
 import { reviewPullRequest, countBlockers, renderIntent, hunkHeaderDigest } from '@devdigest/reviewer-core';
 import { RunLogger } from '../../platform/run-logger.js';
+import {
+  logSummaryLine,
+  logTruncatedLine,
+  logUnreadLine,
+} from '../../platform/project-context-log.js';
 import * as schema from '../../db/schema.js';
 import type { AgentRow } from '../../db/rows.js';
 import type { ReviewRepository, FindingRow, PullRow, ReviewRow } from './repository.js';
@@ -241,6 +246,51 @@ export class ReviewRunExecutor {
       if (skills.length > 0)
         runLog.info(`Injecting ${skills.length} linked skill(s) into the prompt`);
 
+      // Project context — the documents attached to this agent and to its
+      // enabled linked skills for THIS repository (AC-16). The service is
+      // reached off the container like every other collaborator, and its three
+      // Live Log formats come from `platform/project-context-log.ts`: this file
+      // may not import `modules/project-context/*`, type-only included, or
+      // `no-cross-module-internals` trips.
+      //
+      // Best-effort, like repo-intel above and UNLIKE skills: a failure logs one
+      // line and the prompt carries no `## Project context` section, rather than
+      // failing the run (AC-29, server/CLAUDE.md's degradation rule). The
+      // resolver never reads `agent.repoIntel`, so an agent with repo intel off
+      // still gets its documents (AC-21).
+      let specs: string[] = [];
+      let specsRead: string[] = [];
+      try {
+        const context = await this.container.projectContext.resolveForRun(
+          agent.id,
+          pull.repoId,
+          repo.clonePath,
+        );
+        specs = context.specs;
+        // Read entries in the AC-17 order, then the unread ones; each path
+        // appears exactly once across the two (AC-18, AC-67). Both lists are
+        // already formatted by the module — never reformatted here.
+        specsRead = [...context.readEntries, ...context.unreadEntries];
+        // Always emitted, zero included (AC-70, AC-72), and BEFORE the model
+        // call so the count is visible while the run is still in flight
+        // (AC-71). An `info` line, not a new event kind: every best-effort
+        // degradation in this file is one.
+        runLog.info(logSummaryLine(context.attached, context.readEntries.length));
+        for (const note of context.notes) {
+          if (note.kind === 'truncated') {
+            runLog.info(logTruncatedLine(note.path));
+          } else if (note.reason !== undefined) {
+            // `reason` is set on every `unread` note by the port's contract; the
+            // guard states that in the type system instead of asserting it away.
+            runLog.info(logUnreadLine(note.path, note.reason));
+          }
+        }
+      } catch (err) {
+        // One line, no section, run continues (AC-29). Paths and counts only —
+        // never document content, never the clone's absolute path.
+        runLog.info(`project context: resolution failed — ${(err as Error).message}`);
+      }
+
       const task = taskLine(pull) + rankNote;
 
       // ---- Engine: assemble → single-pass → grounding -----------------------
@@ -266,6 +316,12 @@ export class ReviewRunExecutor {
         // they are NOT delimiter-wrapped; assemblePrompt omits the section when
         // the array is empty.
         ...(skills.length > 0 ? { skills } : {}),
+        // Attached project-context documents. Untrusted, author-controlled
+        // content: `assemblePrompt` wraps each as `<untrusted source="spec-N">`
+        // (AC-23). Same omit-when-empty contract as the neighbours, and that
+        // omission is what keeps a run with nothing attached byte-identical to a
+        // pre-feature prompt (AC-22).
+        ...(specs.length > 0 ? { specs } : {}),
         // PR author's description/body — untrusted; assemblePrompt wraps +
         // truncates it. Omitted when the PR has no body.
         ...(pull.body ? { prDescription: pull.body } : {}),
@@ -348,7 +404,11 @@ export class ReviewRunExecutor {
         })),
         raw_output: outcome.raw,
         memory_pulled: [],
-        specs_read: [],
+        // Read entries then unread ones, each path once (AC-31, AC-32). Still a
+        // plain string array: `RunTrace` is structurally frozen, because
+        // `getRunTrace` reads `row.trace as RunTrace` unvalidated and an
+        // element-shape change would mistype every archived trace (AC-33).
+        specs_read: specsRead,
         // Persisted log = the run's FULL event buffer (incl. shared pre-work:
         // diff load + intent), not just events recorded inside this method.
         log: runLog.logFor(runId),
@@ -507,6 +567,9 @@ export class ReviewRunExecutor {
       tool_calls: [],
       raw_output: '',
       memory_pulled: [],
+      // Deliberately empty on the failure/cancel path: this trace is built from
+      // the buffer alone, and a run that never assembled a prompt read nothing.
+      // The Live Log lines are still in `log` below if resolution got that far.
       specs_read: [],
       log: this.container.runBus.buffer(runId).map((e) => ({ t: e.t, kind: e.kind, msg: e.msg })),
     };

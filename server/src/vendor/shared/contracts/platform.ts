@@ -103,6 +103,27 @@ export const FEATURE_MODELS: FeatureModelDef[] = [
   },
 ];
 
+// ---- Project context: root segments ----
+/**
+ * One configured project-context root — a single repo-relative directory name
+ * (`specs`, `docs`, `insights`, …). It carries no path separator and is never
+ * `.` or `..`, so a traversal attempt is rejected at the settings write
+ * boundary instead of being left for the walker to defend against.
+ *
+ * Declared above `Settings` because `SettingsKnown.context_roots` consumes it;
+ * the rest of the project-context contracts live further down the file.
+ */
+export const ContextRootSegment = z
+  .string()
+  .min(1)
+  .refine((s) => !s.includes('/') && !s.includes('\\'), {
+    message: 'a context root must be a single path segment (no "/" or "\\")',
+  })
+  .refine((s) => s !== '.' && s !== '..', {
+    message: 'a context root may not be "." or ".."',
+  });
+export type ContextRootSegment = z.infer<typeof ContextRootSegment>;
+
 // ---- Settings ----
 /**
  * Non-secret prefs/config. Secrets (API keys) are NOT stored here — they go
@@ -117,6 +138,11 @@ export const SettingsKnown = z.object({
   automatic_reviews: z.boolean().default(false),
   /** Per-feature model overrides (provider+model), keyed by FeatureModelId. */
   feature_models: z.record(FeatureModelId, FeatureModelChoice).default({}),
+  /**
+   * Repo-relative directories scanned for project-context documents. Typed (not
+   * left to `Settings.passthrough()`) so a separator or `..` is a 422 on write.
+   */
+  context_roots: z.array(ContextRootSegment).default(['specs', 'docs', 'insights']),
 });
 export type SettingsKnown = z.infer<typeof SettingsKnown>;
 
@@ -317,6 +343,141 @@ export const IndexStatus = z.object({
   chunks_indexed: z.number().int().nullish(),
 });
 export type IndexStatus = z.infer<typeof IndexStatus>;
+
+// ---- Project context ----
+/**
+ * Project-context documents: the markdown-ish files discovered under the
+ * configured `context_roots` of a repository clone, and the per-agent/per-skill
+ * attachments that decide which of them a review run reads.
+ *
+ * `ContextRootSegment` is declared further up, next to `SettingsKnown`.
+ */
+
+/** One discovered document. `path` is repo-relative POSIX; `root` is the matched root segment. */
+export const ContextDoc = z.object({
+  path: z.string().min(1),
+  root: z.string().min(1),
+  size_bytes: z.number().int().nonnegative(),
+  token_estimate: z.number().int().nonnegative(),
+  /** How many agents currently read this document (direct + inherited). */
+  used_by_agents: z.number().int().nonnegative(),
+});
+export type ContextDoc = z.infer<typeof ContextDoc>;
+
+/**
+ * The discovery result for one repository. `no_clone` means the repo row has no
+ * `clone_path` or the directory is gone — an empty list and HTTP 200, never a 5xx.
+ * `omitted` counts documents dropped by the per-list cap.
+ */
+export const ContextDocList = z.object({
+  status: z.enum(['ok', 'no_clone']),
+  roots: z.array(z.string()),
+  docs: z.array(ContextDoc),
+  omitted: z.number().int().nonnegative(),
+  scanned_at: z.string(),
+});
+export type ContextDocList = z.infer<typeof ContextDocList>;
+
+/** One document's text, capped; `truncated` ⇒ the byte cap was hit. */
+export const ContextDocContent = z.object({
+  path: z.string().min(1),
+  content: z.string(),
+  size_bytes: z.number().int().nonnegative(),
+  truncated: z.boolean(),
+});
+export type ContextDocContent = z.infer<typeof ContextDocContent>;
+
+/**
+ * One row of an agent's effective attachment set. `direct` rows are attached to
+ * the agent itself, `inherited` ones come from a skill (`skill_id`/`skill_name`
+ * name it; both null for a direct row). `missing` ⇒ attached but not on disk.
+ *
+ * `beyond_read_cap` ⇒ the row is stored and effective, but sorts past the
+ * per-run document cap, so **the run will not read it** and its tokens are not
+ * in the view's `token_estimate` — the editors mark it rather than letting it
+ * look like every other attached row. The server always sets the field; it is
+ * optional on the wire so a reader that predates it treats an absent value as
+ * `false`, which is what it meant before the flag existed.
+ */
+export const ContextAttachmentRow = z.object({
+  path: z.string().min(1),
+  root: z.string().min(1),
+  size_bytes: z.number().int().nonnegative(),
+  token_estimate: z.number().int().nonnegative(),
+  repo_id: z.string(),
+  source: z.enum(['direct', 'inherited']),
+  skill_id: z.string().nullable(),
+  skill_name: z.string().nullable(),
+  missing: z.boolean(),
+  beyond_read_cap: z.boolean().optional(),
+});
+export type ContextAttachmentRow = z.infer<typeof ContextAttachmentRow>;
+
+/**
+ * The attachment view behind the agent editor's Context tab: how many documents
+ * are attached directly, how many the agent effectively reads after dedupe, and
+ * how many were discovered in the clone.
+ *
+ * `token_estimate` counts only the rows the run will actually read — the ones
+ * without `beyond_read_cap` — because a footer that states tokens no run bills
+ * is a footer that disagrees with the trace.
+ *
+ * `version` is this owner-and-repository's **concurrency token**: opaque,
+ * compared for equality only, never parsed or ordered. Echo it back as
+ * `ContextAttachmentsUpdate.expected_version` and the replace is rejected with
+ * 409 if the stored state moved in between — which is the difference between a
+ * lost update and a conflict the user is told about. Every response carries it;
+ * it is optional on the wire only so a reader written before it existed still
+ * validates.
+ */
+export const ContextAttachmentsView = z.object({
+  direct_count: z.number().int().nonnegative(),
+  effective_count: z.number().int().nonnegative(),
+  discovered_count: z.number().int().nonnegative(),
+  token_estimate: z.number().int().nonnegative(),
+  version: z.string().min(1).optional(),
+  rows: z.array(ContextAttachmentRow),
+});
+export type ContextAttachmentsView = z.infer<typeof ContextAttachmentsView>;
+
+/**
+ * Body for replacing the attachment set of one agent/skill for one repository.
+ *
+ * Both bounds are the server's caps restated as literals, the way every other
+ * contract here does it (this file is copied verbatim into `client/`, so it
+ * cannot import `modules/project-context/constants.ts`): 1024 is
+ * `MAX_PATH_CHARS`, 500 is `MAX_LIST_DOCS`. A client cannot attach more
+ * documents than discovery will ever show it, and without the array bound the
+ * replace is a multi-row insert at 7 bind parameters per row — past ~9,360 paths
+ * that exceeds Postgres' 65,535-parameter ceiling, so an oversized body 500s
+ * instead of 422ing. `test/project-context-contracts.test.ts` pins both numbers.
+ *
+ * `expected_version` is the optimistic-concurrency token: the
+ * `ContextAttachmentsView.version` the client believed it was replacing. The
+ * write compares it under the same row lock it already takes and answers 409
+ * when it no longer matches, instead of applying a body computed from a
+ * snapshot the state has moved past. It is **optional**: a caller that omits it
+ * gets the previous last-writer-wins behaviour, which is what keeps this a
+ * compatible addition. Bounded because it is client-supplied and only ever
+ * compared for equality.
+ */
+export const ContextAttachmentsUpdate = z.object({
+  repo_id: z.string().uuid(),
+  paths: z.array(z.string().min(1).max(1024)).max(500),
+  expected_version: z.string().min(1).max(64).optional(),
+});
+export type ContextAttachmentsUpdate = z.infer<typeof ContextAttachmentsUpdate>;
+
+/**
+ * The serialisation preview: `block` is exactly what `assemblePrompt` emits for
+ * the `specs` slot, and `unread` lists the documents that were skipped, each
+ * with its reason.
+ */
+export const ContextPreview = z.object({
+  block: z.string(),
+  unread: z.array(z.string()),
+});
+export type ContextPreview = z.infer<typeof ContextPreview>;
 
 // ---- Run request (review trigger; owned by A2, contract lives here) ----
 export const RunRequest = z.object({

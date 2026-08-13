@@ -83,6 +83,9 @@ flowchart TB
   subgraph Conventions["Conventions"]
     conventions["conventions<br/>/repos/:id/conventions(/extract|/skill-draft|/skill)<br/>/conventions/:id"]
   end
+  subgraph ProjectContext["Project context"]
+    projectContext["project-context<br/>GET /repos/:repoId/context · /context/doc?path=<br/>GET/PUT /agents/:agentId/context · /skills/:skillId/context<br/>GET /skills/:skillId/context/preview"]
+  end
   subgraph Platform["Platform"]
     settings["settings<br/>/settings · /providers"]
     workspace["workspace<br/>/workspace"]
@@ -128,6 +131,31 @@ populated by opening a PR's detail, PRs nobody has opened are invisible to the
 join; the response carries `uncomparable_prs` so an empty list can never read as
 "nothing has touched these files". Contract, ordering, caps and that blind spot:
 [`specs/prior-prs.md`](specs/prior-prs.md).
+
+`GET /repos/:repoId/context` lists the markdown documents discovered under the
+workspace's `context_roots` (default `specs`, `docs`, `insights`) in that
+repository's clone, each with its root segment, byte size, token estimate and the
+number of agents that read it. A repository with no clone on disk is **200 with
+`status: 'no_clone'`** and an empty list, never a 5xx — the same visible-degradation
+shape `GET /pulls/:id/blast` uses. `GET /repos/:repoId/context/doc?path=` serves
+one document for the read-only preview; the path is confined lexically **and** by
+`realpath` before anything is opened, and a refusal carries a fixed reason
+(`path resolves outside the repository`, …) with no content, no absolute path and
+no echo of the input.
+
+`GET`/`PUT /agents/:agentId/context` and `GET`/`PUT /skills/:skillId/context`
+attach documents to an agent or a skill for one repository. `PUT` **replaces** the
+whole set for that repository and returns the recomputed view, and an agent's view
+includes the documents inherited from its enabled linked skills.
+`GET /skills/:skillId/context/preview` renders exactly what the run would inject —
+the `## Project context` heading with each document wrapped as
+`<untrusted source="spec-N">`, produced by the same `wrapUntrusted` the prompt
+uses. Every route is `getContext`-scoped: a non-uuid id is a 422 from the route
+schema, and a well-formed id belonging to another workspace is a **404, never a
+403**. The search roots are the typed `context_roots` settings key, changed
+through `PUT /settings` (a separator or `..` segment is a 422); a stored value
+that fails that schema degrades to the default roots rather than widening the
+walk.
 
 `POST /reviews/adhoc` runs the **same** reviewer over a posted unified diff with
 no PR behind it — the server side of `devdigest review --mode working` in
