@@ -167,6 +167,12 @@ stay.
 | `client/` | `@/*` → `./src/*`; `@devdigest/shared` → `./src/vendor/shared/index.ts`; `@devdigest/ui` → `./src/vendor/ui/index.ts` (+ `/*` forms) |
 | `reviewer-core/` | `@devdigest/shared` → `../server/src/vendor/shared/index.ts`; `zod` → `./node_modules/zod` (+ `/*` forms) |
 | `e2e/` | none |
+| `mcp/` | none — standalone; runtime deps are `@modelcontextprotocol/sdk` and its own `zod` |
+
+Because `mcp/` declares no aliases, **any** import from it into `server/`,
+`client/` or `reviewer-core/` is a finding — there is no sanctioned path for one.
+It also installs its own `zod`, so the cross-package `instanceof` rule applies to
+it exactly as it does to the other packages.
 
 A deep relative import that crosses a package boundary
 (`../../reviewer-core/src/...`, `../../server/src/...`) is a finding.
@@ -197,6 +203,10 @@ and root [`CLAUDE.md`](../../CLAUDE.md):
   concepts.
 - Static module registration in `src/modules/index.ts` is deliberate, not a
   missing autoload.
+
+`mcp/` has no package `CLAUDE.md` of its own. Its cross-package imports are in
+scope under B5; anything else about it is `not reviewed`, and the verdict table
+says so rather than passing it silently.
 
 ## How a finding is graded
 
