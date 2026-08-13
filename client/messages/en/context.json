@@ -1,24 +1,34 @@
 {
   "title": "Project Context",
-  "chunks": "{count} chunks",
-  "reindex": "Re-index",
-  "indexing": "Indexing…",
-  "resync": "Resync",
-  "resyncing": "Resyncing…",
-  "indexStatus": "Index status: {status}",
-  "loadError": "Couldn’t load specs",
+  "subtitle": "Markdown documents discovered in {repo}. Read-only here — attach them to an agent or a skill from its editor.",
+  "repoFallback": "this repository",
+  "rescan": "Rescan",
+  "loadError": "Couldn’t load project context",
   "kb": "{kb}kb",
+  "footer": "{count} documents · scanned {time}",
+  "omitted": "{count} further documents were found but not listed.",
+  "crumb": {
+    "workspace": "Workspace",
+    "context": "Project Context"
+  },
+  "row": {
+    "open": "Open {path}",
+    "usedBy": "Used by {count, plural, =1 {1 agent} other {# agents}}"
+  },
   "empty": {
-    "title": "No spec files yet",
-    "body": "Drop your PRDs, tech specs, and acceptance criteria under .devdigest/specs/. Every agent and the PR brief read them as grounding context."
+    "title": "No documents found",
+    "body": "Discovery reads .md files under these root folders, at any depth in the clone:"
   },
-  "mode": {
-    "preview": "preview",
-    "edit": "edit"
+  "noClone": {
+    "title": "{repo} is not cloned",
+    "body": "Project context is read from the repository clone on disk. Sync this repository, then rescan."
   },
-  "editor": {
-    "loadError": "Couldn’t load spec",
-    "save": "Save",
-    "saving": "Saving…"
+  "detail": {
+    "placeholder": "Pick a document to read it here.",
+    "loadError": "Couldn’t load this document",
+    "truncated": "Only the first 64kb of this document is shown — that is also all a review run reads."
+  },
+  "preview": {
+    "title": "Document preview"
   }
 }
