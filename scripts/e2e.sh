@@ -22,7 +22,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT"
 
-# --- config (all overridable; defaults dodge the dev stack on 5432/3000/3001) ---
+# --- config (all overridable; defaults dodge the dev stack on 5432/3002/3001) ---
 PG_CONTAINER="${E2E_PG_CONTAINER:-devdigest-e2e-postgres}"
 PG_PORT="${E2E_PG_PORT:-5433}"
 PG_IMAGE="${E2E_PG_IMAGE:-pgvector/pgvector:pg16}"
@@ -70,7 +70,7 @@ cleanup() {
   kill_tree "$WEB_PID"
   kill_tree "$SERVER_PID"
   # Backstop: reap whatever still holds the ISOLATED ports (never the dev stack's
-  # 3000/3001 — only the alt ports this script started).
+  # 3002/3001 — only the alt ports this script started).
   for port in "$WEB_PORT" "$API_PORT"; do
     local pids
     pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"

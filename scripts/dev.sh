@@ -106,7 +106,7 @@ log "starting API on :3001 (server)"
 SERVER_PID=$!
 
 if [ "$RUN_CLIENT" -eq 1 ]; then
-  log "starting web on :3000 (client) — Ctrl-C to stop both"
+  log "starting web on :3002 (client) — Ctrl-C to stop both"
   (cd client && pnpm dev)
 else
   log "API running (PID $SERVER_PID) — Ctrl-C to stop"
