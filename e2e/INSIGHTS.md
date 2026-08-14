@@ -37,6 +37,30 @@ an entry can age — verify before relying on one.
   static HTML fixture in both states (present and absent) before trusting it.
   (`specs/09-pr-smart-diff.flow.json`, `specs/08-pr-intent.flow.json:20`)
 
+- **2026-08-14** — **Second instance of the 2026-08-10 entry below, and it
+  settles the rule: this suite covers no expand-on-click path, in any flow.**
+  Flow `11`'s "the explanation reveals on expand" step failed in the
+  maintainer's hermetic run — `wait --text` timed out on the risk explanation
+  while the step *above* it (the row title, same component, same seeded row)
+  passed — and did not reproduce against the dev stack in either form: direct
+  URL to the PR, and the flow's own click-through path from the pulls list,
+  both `exit=0` on the click **and** the reveal. Ruled out and not worth
+  re-checking: the literal (it matches
+  [`../server/src/db/seed.ts`](../server/src/db/seed.ts)`:447` and the stored
+  `pr_brief` row character for character, so this is *not* the
+  literal-provenance class recorded under _Codebase patterns_), and the locator
+  (`find text` resolves the innermost node, the `<span>` holding the title,
+  which bubbles to the row's `<button>`). Leading suspect, **unproven**:
+  `RiskAreas` mounts inside `IntentCard`, whose `isLoading` / `isError` /
+  `!data` branches render no `RiskAreas` at all
+  (`../client/src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/IntentCard/IntentCard.tsx:50`),
+  so any blip in the **intent** query unmounts it and its `open` state — plain
+  component state, nothing in the URL — resets, collapsing an expanded row for
+  good. What to do instead: assert only what the **collapsed** render already
+  shows (the refs are visible collapsed, so the grounding assertion never
+  needed the click), and leave reveal-on-expand to `RiskAreas.test.tsx`, which
+  covers it four ways. (`specs/11-pr-brief.flow.json:23`)
+
 - **2026-08-10** — **Supersedes the "Applied in flow `09`'s post-click step"
   claim in the 2026-08-10 `get count` entry under _Codebase patterns & tool
   notes_: that step no longer exists.** Flow `09`'s "clicking the collapsed
