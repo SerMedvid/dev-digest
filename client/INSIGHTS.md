@@ -25,6 +25,26 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-14** — **`RiskAreas` is the brief's data mounted inside the
+  *intent's* card**, and `IntentCard` returns early for `isLoading`, `isError`
+  and `!data` — none of those three branches render `RiskAreas` at all
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/IntentCard/IntentCard.tsx:50`).
+  So a blip in `usePrIntent` takes the brief's risk list down with it even
+  though `usePrBrief` succeeded, and because the expanded row is plain
+  component state with nothing in the URL, the remount silently collapses it
+  and the reader's click is undone. The nesting is deliberate — "what this PR
+  is for" and "what could go wrong with it" read as one card — but the coupling
+  is not. **Fixed the same day**: the branches now return `head`/`foot` slots
+  and the card renders exactly three children — `foot` is `null`, never absent
+  — so `RiskAreas` holds index 1 whatever the intent query does. That last part
+  is the load-bearing bit and the reason a wrapper element or a conditional
+  sibling would *not* have fixed it: React matches children by position, so a
+  branch that renders a different number of children before the shared one
+  remounts it just as surely as an early return that omits it. The general
+  shape: a card that renders another query's data keeps that data out of its
+  own early returns, and keeps its position fixed across them.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/IntentCard/IntentCard.tsx:212`)
+
 - **2026-08-14** — **This app has no ambient refetch**, so any UI state whose
   only exit is "the server finished something" deadlocks unless it polls for
   that itself. [`providers.tsx`](src/lib/providers.tsx) sets `staleTime: 30_000`

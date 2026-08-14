@@ -30,6 +30,15 @@ the diff cheaper to read, not to replace it.
 |---|---|---|
 | `PrBriefCard` | `OverviewTab/_components/` | Section label, `VerdictBanner`, `what`, the stale marker, the generate/regenerate control and its errors |
 | `RiskAreas` | `IntentCard/_components/` | `brief.risks` rows: a severity icon, the title, and the refs **visible while collapsed**; the chevron expands only the explanation. Presentational — calls no hook |
+
+`RiskAreas` is drawn inside `IntentCard` but is **not gated by it**. The risks
+come from the brief, so `IntentCard` renders them in every one of its branches —
+loading, load error, no-intent-yet, and the full card — by returning its own
+content as `head`/`foot` slots around them. The card always renders exactly
+three children so the risk list holds a fixed position: React matches children
+by position, and a shifting one is a remount, which resets the expanded row and
+silently undoes the reader's click. A blip in `usePrIntent` must not take the
+brief's risks down with it.
 | `ReviewFocus` | `OverviewTab/_components/` | The ordered focus list and the jump to the diff |
 
 `PrBriefCard` **wraps** the existing `VerdictBanner` rather than adding a second

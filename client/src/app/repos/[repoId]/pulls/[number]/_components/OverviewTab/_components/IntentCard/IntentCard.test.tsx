@@ -4,6 +4,7 @@ import { render, screen, cleanup, fireEvent, waitFor } from "@testing-library/re
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { NextIntlClientProvider } from "next-intl";
 import messages from "../../../../../../../../../../messages/en/prReview.json";
+import briefMessages from "../../../../../../../../../../messages/en/brief.json";
 import { IntentCard } from "./IntentCard";
 
 const RECORD = {
@@ -163,5 +164,70 @@ describe("IntentCard", () => {
       expect.stringContaining("/pulls/pr1/intent"),
       expect.objectContaining({ method: "POST" }),
     );
+  });
+
+  /* The risks belong to the BRIEF, not to the intent — they are only drawn
+     inside this card because "what this PR is for" and "what could go wrong
+     with it" read as one card. The card must therefore never make them depend
+     on its own query: `RiskAreas` renders in every branch, and keeps its
+     identity across a branch change so an expanded row is not silently
+     collapsed under the reader. */
+  describe("the brief's risks are not hostage to the intent query", () => {
+    const RISKS = [
+      {
+        title: "A live secret is committed in configuration",
+        explanation: "Committed credentials are compromised the moment they are pushed.",
+        severity: "high" as const,
+        refs: ["src/config.ts"],
+      },
+    ];
+
+    /** Both namespaces: `RiskAreas` reads `brief`, the card reads `prReview`. */
+    function renderWithRisks(ui: React.ReactElement) {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const utils = render(
+        <NextIntlClientProvider
+          locale="en"
+          messages={{ prReview: messages, brief: briefMessages }}
+        >
+          <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
+        </NextIntlClientProvider>,
+      );
+      return { ...utils, qc };
+    }
+
+    it("keeps an expanded risk open when the intent query changes branch", async () => {
+      stubFetch(200, RECORD);
+      const { qc } = renderWithRisks(<IntentCard prId="pr1" headSha="sha-1" risks={RISKS} />);
+
+      fireEvent.click(await screen.findByRole("button", { name: /A live secret/ }));
+      expect(screen.getByText(RISKS[0]!.explanation)).toBeInTheDocument();
+
+      // The intent goes away — a blip, a re-derive, an empty state. Whatever
+      // the card does about that is the card's business; the reader's open
+      // risk row is not, and a remount here loses it for good.
+      await waitFor(() => qc.setQueryData(["pr-intent", "pr1"], null));
+
+      expect(screen.getByText(RISKS[0]!.title)).toBeInTheDocument();
+      expect(screen.getByText(RISKS[0]!.explanation)).toBeInTheDocument();
+    });
+
+    it("still renders the risks when the intent failed to load", async () => {
+      stubFetch(500, { error: { code: "internal", message: "boom" } });
+      renderWithRisks(<IntentCard prId="pr1" headSha="sha-1" risks={RISKS} />);
+
+      // The brief loaded. That the intent did not is no reason to hide it.
+      expect(await screen.findByText(RISKS[0]!.title)).toBeInTheDocument();
+    });
+
+    it("still renders the risks when no intent has been derived", async () => {
+      stubFetch(404, { error: { code: "not_found", message: "none" } });
+      renderWithRisks(<IntentCard prId="pr1" headSha="sha-1" risks={RISKS} />);
+
+      // `findBy` on both: the risks now render from the first paint, before the
+      // 404 that produces the derive button has landed.
+      expect(await screen.findByText(RISKS[0]!.title)).toBeInTheDocument();
+      expect(await screen.findByRole("button", { name: /derive intent/i })).toBeInTheDocument();
+    });
   });
 });
