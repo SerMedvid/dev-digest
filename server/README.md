@@ -86,12 +86,24 @@ flowchart TB
   subgraph ProjectContext["Project context"]
     projectContext["project-context<br/>GET /repos/:repoId/context · /context/doc?path=<br/>GET/PUT /agents/:agentId/context · /skills/:skillId/context<br/>GET /skills/:skillId/context/preview"]
   end
+  subgraph Onboarding["Onboarding tour"]
+    onboarding["onboarding<br/>GET /repos/:id/onboarding<br/>POST /repos/:id/onboarding/generate"]
+  end
   subgraph Platform["Platform"]
     settings["settings<br/>/settings · /providers"]
     workspace["workspace<br/>/workspace"]
   end
   HEALTH["/health (liveness) · /health/ready (DB ping → 200/503)"]
 ```
+
+`GET /repos/:id/onboarding` serves the repo's onboarding tour and is the poll
+target while one is being written; `POST /repos/:id/onboarding/generate` returns
+`202 + jobId` and `409` while a generation is in flight. The tour is five
+sections written by **one** structured LLM call, but every file path and shell
+command in it comes from the repo-intel index and the checkout — the model only
+supplies prose, and anything citing a path outside the index is dropped before
+the tour is stored. Status lives inside `onboarding.json` (the table has no
+status column), and `generated_at` means the last *successful* generation.
 
 `GET /pulls/:id/intent` serves the stored `pr_intent` record (404 until one
 exists); `POST` derives it synchronously (409 while one is in flight). A review

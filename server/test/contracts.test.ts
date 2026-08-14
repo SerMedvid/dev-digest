@@ -11,7 +11,8 @@ import {
   PrHistory,
   SmartDiff,
   Conformance,
-  Onboarding,
+  ONBOARDING_SECTION_IDS,
+  OnboardingView,
   EvalRun,
   MemoryItem,
   RunTrace,
@@ -289,18 +290,13 @@ describe('AI contracts parse fixtures', () => {
     expect(entry!.defaultModel).toBe('google/gemini-2.5-flash-lite');
   });
 
-  it('Conformance / Onboarding / EvalRun / MemoryItem', () => {
+  it('Conformance / EvalRun / MemoryItem', () => {
     expect(() =>
       Conformance.parse({
         spec_id: 's1',
         spec_title: 'Spec',
         items: [{ requirement: 'r', status: 'implemented' }],
         completeness_pct: 80,
-      }),
-    ).not.toThrow();
-    expect(() =>
-      Onboarding.parse({
-        sections: [{ kind: 'architecture', title: 'T', body: 'b', links: [] }],
       }),
     ).not.toThrow();
     expect(() =>
@@ -424,6 +420,49 @@ describe('platform DTOs', () => {
     // Category is a free string (plain text column), severity is not.
     expect(() => PrFindingPreview.parse({ ...preview, category: 'whatever' })).not.toThrow();
     expect(() => PrFindingPreview.parse({ ...preview, severity: 'NOPE' })).toThrow();
+  });
+});
+
+describe('onboarding contract', () => {
+  it('fixes the five section ids in order', () => {
+    expect(ONBOARDING_SECTION_IDS).toEqual([
+      'architecture',
+      'critical_paths',
+      'run_locally',
+      'reading_path',
+      'first_tasks',
+    ]);
+  });
+
+  it("defaults a section's collections so a sparse section still parses", () => {
+    const view = OnboardingView.parse({
+      status: 'ready',
+      sections: [{ id: 'architecture', title: 'Architecture overview', body: 'x' }],
+      generatedAt: '2026-08-14T00:00:00.000Z',
+      stale: false,
+      indexedFiles: 42,
+      error: null,
+      reason: null,
+    });
+    expect(view.sections[0]).toMatchObject({
+      diagram: null,
+      files: [],
+      commands: [],
+      tasks: [],
+    });
+  });
+
+  it('rejects an unknown section id', () => {
+    const bad = OnboardingView.safeParse({
+      status: 'ready',
+      sections: [{ id: 'glossary', title: 'x', body: '' }],
+      generatedAt: null,
+      stale: false,
+      indexedFiles: 0,
+      error: null,
+      reason: null,
+    });
+    expect(bad.success).toBe(false);
   });
 });
 

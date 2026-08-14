@@ -1,17 +1,35 @@
 {
-  "title": "Onboarding Tour",
-  "sections": "Sections",
-  "sectionCount": "{count} sections",
+  "title": "Onboarding for {repo}",
+  "crumb": {
+    "workspace": "Workspace",
+    "tour": "Onboarding Tour"
+  },
+  "toc": "On this page",
+  "subtitle": "Generated from index of {count} files · last refreshed {when}",
+  "subtitleNever": "Generated from index of {count} files",
   "regenerate": "Regenerate",
   "regenerating": "Regenerating…",
-  "unknownError": "Unknown error",
+  "shareLink": "Share link",
+  "linkCopied": "Link copied",
+  "stale": "Out of date — the index has moved on since this tour was written",
+  "openFile": "Open",
+  "copyCommand": "Copy command",
+  "emptySection": "Not enough signal in the index for this section yet.",
   "generate": {
     "title": "Generate onboarding tour",
-    "body": "DevDigest indexes the repo and specs, then writes a 5-section guided tour: overview, architecture, key modules, getting started, and conventions & gotchas.",
+    "body": "DevDigest reads the repository index and the checkout, then writes a five-section guided tour: architecture overview, critical paths, how to run locally, a guided reading path, and first tasks.",
     "cta": "Generate onboarding tour",
     "generating": "Generating…"
   },
+  "notIndexed": {
+    "title": "This repository isn't indexed yet",
+    "body": "The tour is built from the code index — file ranks pick the critical paths and the reading order. Run a resync from Project Context first, then come back."
+  },
+  "failed": {
+    "title": "Couldn't generate the onboarding tour",
+    "retry": "Retry"
+  },
   "loadError": {
-    "title": "Couldn’t load the onboarding tour"
+    "title": "Couldn't load the onboarding tour"
   }
 }

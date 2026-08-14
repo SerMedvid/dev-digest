@@ -26,7 +26,9 @@ export function isTextInput(el: EventTarget | null): boolean {
 export function activeKeyFor(pathname: string): string {
   if (pathname.startsWith("/settings")) return "settings";
   if (pathname.includes("/multi-agent")) return "multi-agent";
-  if (pathname.includes("/onboarding")) return "onboarding-tour";
+  // Anchored, not a substring match: bare `/onboarding` is the add-a-repository
+  // screen, and only `/repos/:id/onboarding` is the generated tour.
+  if (/^\/repos\/[^/]+\/onboarding/.test(pathname)) return "onboarding-tour";
   if (pathname.includes("/context")) return "context";
   if (pathname.includes("/conventions")) return "conventions";
   if (pathname.includes("/pulls")) return "pulls";

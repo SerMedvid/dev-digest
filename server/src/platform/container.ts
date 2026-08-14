@@ -42,6 +42,7 @@ import { BlastRepository } from '../modules/blast/repository.js';
 import { BlastService } from '../modules/blast/service.js';
 import { BlastSummaryModel } from '../modules/blast/model.js';
 import { ProjectContextRepository } from '../modules/project-context/repository.js';
+import { OnboardingRepository } from '../modules/onboarding/repository.js';
 import { ProjectContextService } from '../modules/project-context/service.js';
 import { CloneWalker } from '../modules/project-context/walk.js';
 import type { ContextReaderPort } from '../modules/project-context/ports.js';
@@ -138,6 +139,7 @@ export class Container {
   private _blastRepo?: BlastRepository;
   private _blastService?: BlastService;
   private _projectContextRepo?: ProjectContextRepository;
+  private _onboardingRepo?: OnboardingRepository;
   private _projectContext?: ProjectContextService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
@@ -322,6 +324,10 @@ export class Container {
 
   get projectContextRepo(): ProjectContextRepository {
     return (this._projectContextRepo ??= new ProjectContextRepository(this.db));
+  }
+
+  get onboardingRepo(): OnboardingRepository {
+    return (this._onboardingRepo ??= new OnboardingRepository(this.db));
   }
 
   /**
