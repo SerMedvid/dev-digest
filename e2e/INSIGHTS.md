@@ -37,6 +37,73 @@ an entry can age — verify before relying on one.
   static HTML fixture in both states (present and absent) before trusting it.
   (`specs/09-pr-smart-diff.flow.json`, `specs/08-pr-intent.flow.json:20`)
 
+- **2026-08-14** — **The local runner was serving `next dev` while CI serves a
+  PRODUCTION build, and that gap is why a whole class of failures "only happens
+  in CI".** [`e2e-web.yml`](../.github/workflows/e2e-web.yml) does
+  `pnpm build` + `pnpm start`; `scripts/e2e.sh` did `next dev`. Different React
+  build, routes compiled on demand, different hydration timing — so
+  [`CLAUDE.md`](CLAUDE.md)'s instruction to "check it passes under
+  `./scripts/e2e.sh` (the CI environment)" was not true of the one thing most
+  likely to differ. The script now builds by default, with `E2E_WEB_MODE=dev`
+  for the fast edit loop. Reach for this **first** when CI fails a step that no
+  local run can reproduce, before suspecting the locator, the seed or the
+  session. Caveat, recorded honestly: this was found while chasing flow `11`'s
+  CI-only click failures and is a real gap, but it has **not** been shown to
+  cause them — three attempts to reproduce under parity died on leaked ports and
+  a mis-aimed `pkill` before producing a verdict. (`../scripts/e2e.sh:164`)
+
+- **2026-08-14** — **Flow `11` is now READ-ONLY: both of its click-driven cases
+  are gone**, superseding the restore-and-it-passes entry this replaces. The
+  expand-on-click step failed in CI, was removed, restored after a clean local
+  run went 11/11 with it — and then CI failed the *next* click in the same flow
+  ("click the first focus row" → `wait --url tab=diff`, click reports `✓`, URL
+  never changes). Ruled out with evidence, so do not re-spend it: the literals
+  (they match [`../server/src/db/seed.ts`](../server/src/db/seed.ts)`:447` and
+  the stored row), the locator (`find text` resolves the innermost node, which
+  bubbles), **below-the-fold position** (reproduced at CI's exact 1280×577
+  viewport: the row sits at `top: 1206` and the click still works), and session
+  sharing (CI runs one suite on a clean runner). What is left unexplained is a
+  click that lands and produces no `router.replace`, in CI only. The rendering
+  assertions still cover the three brief surfaces; the interactions stay covered
+  by `RiskAreas.test.tsx` and `ReviewFocus.test.tsx`.
+  (`specs/11-pr-brief.flow.json`)
+
+- **2026-08-14** — **agent-browser is ONE session per machine, so two runs at
+  once silently corrupt each other — and the damage looks exactly like a flaky
+  interaction.** `run.ts` shells out to the CLI per step with no session id, so
+  a second suite (a colleague's, a leftover background run, a hung one that
+  never exited) drives the *same page*. The signature is diagnostic: every
+  `wait --text` still passes, because both runs sit on similar pages and the
+  literal is somewhere in the DOM, while every click-then-assert step fails,
+  because the other run navigates away between the click and the assertion.
+  Observed live: flow `11`'s "the click switches to the Files changed tab" step
+  failed in a run launched while a forgotten hermetic run was still stepping
+  through the same flows; the identical click passed `exit=0` on a clean
+  session moments later, URL and all. Scope it correctly, though: this explains
+  **local** confusion only. It cannot explain a CI failure — CI runs one suite
+  on a fresh runner — so it is not the answer to flow `11`'s, and the 2026-08-10
+  flow-`09` entry stays unexplained rather than closed by it. Before treating a
+  local interaction failure as flaky: confirm nothing else holds the session (a
+  stale `next dev` on 3100/3101 is the tell), then re-run alone.
+  (`../scripts/e2e.sh`, `run.ts:44`)
+
+- **2026-08-14** — **`scripts/e2e.sh`'s teardown leaks the API and web
+  processes on Windows**, so the *next* run meets a stack whose ports are bound
+  by a server with no database behind it — the isolated Postgres container is
+  removed by the same trap that fails to kill them. The backstop is
+  `lsof -nP -iTCP:"$port" -sTCP:LISTEN -t`, and `lsof` does not exist in Git
+  Bash; `kill_tree` alone misses the grandchild that `pnpm exec tsx` / `next
+  dev` actually spawn as the listener. Symptom: `curl localhost:3100` answers
+  404 and `localhost:3101/health` answers 200 while `docker ps` shows no
+  `devdigest-e2e-postgres`. **Fixed** the same day — the backstop now falls back
+  to `powershell -Command "(Get-NetTCPConnection …).OwningProcess"` when `lsof`
+  is absent — but it cost two dead runs before that, so if a run dies with
+  `EADDRINUSE` on 3100/3101, check for an orphan rather than assuming the
+  previous run is still alive. Related trap while cleaning up by hand: the dev
+  API and the hermetic API are the *same command line* (`tsx src/server.ts`), so
+  `pkill -f` matches both and takes the developer's stack down with it. Kill by
+  port or PID. (`../scripts/e2e.sh:70`)
+
 - **2026-08-14** — **Second instance of the 2026-08-10 entry below, and it
   settles the rule: this suite covers no expand-on-click path, in any flow.**
   Flow `11`'s "the explanation reveals on expand" step failed in the
