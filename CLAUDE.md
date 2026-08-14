@@ -70,29 +70,45 @@ The plugin is enabled in [`.claude/settings.json`](.claude/settings.json). Its o
 `using-superpowers` skill states that user instructions take precedence over
 skills, so this section is the policy.
 
-**Used:** `superpowers:writing-plans` and `superpowers:executing-plans` — the plan
-format and the execution loop, both already bent to this repo in
-[`.claude/agents/implementation-planner.md`](.claude/agents/implementation-planner.md)
-and [`.claude/agents/implementer.md`](.claude/agents/implementer.md) —
-plus `superpowers:test-driven-development`,
-`superpowers:systematic-debugging`,
-`superpowers:verification-before-completion`, and
-`superpowers:dispatching-parallel-agents`, which
-[`pr-self-review`](.claude/skills/pr-self-review/SKILL.md) needs to dispatch its
+**Feature work runs on superpowers, end to end.** The chain is
+`superpowers:brainstorming` → `superpowers:writing-plans` →
+`superpowers:executing-plans`, with `superpowers:test-driven-development`
+inside each task and `superpowers:systematic-debugging` for anything that
+misbehaves. `superpowers:verification-before-completion` gates the claim that
+it works, and `superpowers:dispatching-parallel-agents` is what
+[`pr-self-review`](.claude/skills/pr-self-review/SKILL.md) uses to dispatch its
 review lanes.
 
-**Not used, and why:**
+Three local amendments to that chain:
 
-- **`superpowers:brainstorming`** writes
-  `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` **and commits it**. That
-  folder now takes `SPEC-*.md` from
-  [`specreator`](.claude/agents/specreator.md), and no agent here commits.
+- **`brainstorming` writes the design doc to
+  `docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md` and commits it.** Write
+  the file, don't commit it — no agent here commits (see the last line of this
+  section). The doc *is* the spec; there is no separate spec artefact.
+- **`writing-plans` ends every task with a "Commit" step.** Replace it with the
+  task's verification command. Same reason.
+- **`executing-plans` opens by ensuring an isolated workspace via
+  `superpowers:using-git-worktrees`.** Skip that step. Instead, check the tree
+  is clean before task 1 and stop to ask if it is not — starting a feature on
+  top of someone else's uncommitted work mixes two changes into one diff and
+  makes either one impossible to revert.
+
+**The custom spec-driven chain is switched off.** `specreator`,
+`implementation-planner` and [`/impl-sdd`](.claude/skills/impl-sdd/SKILL.md)
+are not to be used to drive work: it is slow out of proportion to what it
+buys, and its remediation rounds have introduced defects of their own. The
+files stay in the tree for reference. `.claude/agents/implementer.md` is still
+the right prompt for a *subagent* asked to execute one task, but the plan and
+the loop around it are `writing-plans` and `executing-plans`.
+
+**Still not used, and why:**
+
 - **`superpowers:subagent-driven-development`** dispatches `general-purpose`
   subagents with its own implementer prompt, so this repo's implementer — skill
   routing, the per-package managers, `arch:check`, the two `vendor/shared`
   copies — is bypassed; its implementer template also commits each task, and its
-  controller is told to rule on conflicts rather than stop.
-  [`/impl-sdd`](.claude/skills/impl-sdd/SKILL.md) is the executor here.
+  controller is told to rule on conflicts rather than stop. Run plans inline
+  with `superpowers:executing-plans` instead.
 - **`superpowers:finishing-a-development-branch`** merges, pushes and opens PRs.
   All three are the caller's, and `gh pr create` is gated by the
   `pr-self-review` hook.
