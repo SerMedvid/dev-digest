@@ -22,9 +22,6 @@ export const s = {
     flexShrink: 0,
   }),
   main: { flex: 1, minWidth: 0 } satisfies CSSProperties,
-  /** Pushes the regenerate control to the end of the title row, so it reads as
-   *  the row's one action rather than one more chip among the badges. */
-  regenerate: { marginLeft: "auto" } satisfies CSSProperties,
   titleRow: {
     display: "flex",
     alignItems: "center",
@@ -44,6 +41,10 @@ export const s = {
     alignItems: "center",
     gap: 5,
     flexShrink: 0,
+    // The spend badge can sit under the label (`spendPlacement="score"`), and
+    // its detailed form is wider than the 52px dial — without this the column
+    // wraps the token flow onto its own line and the dial goes off-centre.
+    minWidth: 52,
   } satisfies CSSProperties,
   scoreLabel: {
     fontSize: 12,

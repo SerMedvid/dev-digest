@@ -4,7 +4,7 @@ import React from "react";
 import { SectionLabel } from "@devdigest/ui";
 import type { PrFile } from "@devdigest/shared";
 import { usePrBrief } from "@/lib/hooks/brief";
-import { usePrReviews } from "@/lib/hooks/reviews";
+import { usePrReviews, usePrRuns } from "@/lib/hooks/reviews";
 import { IntentCard } from "./_components/IntentCard";
 import { BlastCard } from "./_components/BlastCard";
 import { PrBriefCard } from "./_components/PrBriefCard";
@@ -36,13 +36,24 @@ export function OverviewTab({
   // — and a hook call in each would be three renders of one answer.
   const { data: brief, isLoading } = usePrBrief(prId);
   const { data: reviews } = usePrReviews(prId);
+  const { data: runs } = usePrRuns(prId);
   // Reviews come newest-first from the API; the banner describes the current
   // verdict, which is the newest review's.
   const latestReview = reviews?.[0];
+  // Spend lives on the RUN, not on the review — `ReviewRecord` carries no cost
+  // — so it is resolved by `run_id`, the same lookup `ReviewRunAccordion` does.
+  // Both queries are already on this page, so this costs no extra request.
+  const latestRun = runs?.find((r) => r.run_id === latestReview?.run_id);
 
   return (
     <>
-      <PrBriefCard prId={prId} brief={brief} loading={isLoading} review={latestReview} />
+      <PrBriefCard
+        prId={prId}
+        brief={brief}
+        loading={isLoading}
+        review={latestReview}
+        run={latestRun}
+      />
       <div style={s.grid}>
         <IntentCard prId={prId} headSha={headSha} risks={brief?.risks} />
         <BlastCard prId={prId} headSha={headSha} repoFullName={repoFullName} />

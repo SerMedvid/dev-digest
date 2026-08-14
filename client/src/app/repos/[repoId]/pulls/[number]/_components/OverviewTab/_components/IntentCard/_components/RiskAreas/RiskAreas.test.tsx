@@ -31,29 +31,36 @@ function renderRisks(ui: React.ReactElement) {
 }
 
 describe("RiskAreas", () => {
-  it("renders one row per risk with its severity spelled out (AC-14)", () => {
+  it("renders one row per risk, with its refs visible while collapsed (AC-14)", () => {
     renderRisks(<RiskAreas risks={RISKS} />);
 
     expect(screen.getByText("Committed secret")).toBeTruthy();
     expect(screen.getByText("Limiter fronts every public route")).toBeTruthy();
-    // Colour is never the only carrier of severity.
-    expect(screen.getByText("High risk")).toBeTruthy();
-    expect(screen.getByText("Medium risk")).toBeTruthy();
+    // The refs are the row's evidence and stay visible: every one has already
+    // passed the server's grounding gate, so a path shown here really is in the
+    // pull request. Hiding them made the risk a claim nobody could check.
+    expect(screen.getByText("src/config.ts")).toBeTruthy();
+    expect(screen.getByText("GET /api/public/items")).toBeTruthy();
   });
 
-  it("keeps explanations and refs collapsed until the row is expanded", () => {
+  it("announces severity even though no severity text is rendered", () => {
+    renderRisks(<RiskAreas risks={RISKS} />);
+    // The icon's shape and colour carry it visually — never colour alone — and
+    // the level rides on the toggle's accessible name.
+    expect(screen.getByRole("button", { name: /Committed secret — High risk/ })).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: /Limiter fronts every public route — Medium risk/ }),
+    ).toBeTruthy();
+  });
+
+  it("keeps only the explanation collapsed until the row is expanded", () => {
     renderRisks(<RiskAreas risks={RISKS} />);
 
     expect(screen.queryByText(RISKS[0]!.explanation)).toBeNull();
-    expect(screen.queryByText("src/config.ts")).toBeNull();
 
     fireEvent.click(screen.getByRole("button", { name: /Committed secret/ }));
 
     expect(screen.getByText(RISKS[0]!.explanation)).toBeTruthy();
-    // Both a path and an endpoint — every entry has already passed the
-    // server's grounding gate, so what renders here is what is really in the PR.
-    expect(screen.getByText("src/config.ts")).toBeTruthy();
-    expect(screen.getByText("GET /api/public/items")).toBeTruthy();
   });
 
   it("marks the expanded state for assistive technology", () => {
@@ -62,6 +69,17 @@ describe("RiskAreas", () => {
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("renders a risk with no surviving refs without an empty evidence row", () => {
+    // The gate drops a risk whose every ref was invented, but a risk can also
+    // arrive with none at all — it must not render a blank line where the
+    // evidence would be.
+    const { container } = renderRisks(
+      <RiskAreas risks={[{ ...RISKS[0]!, refs: [] }]} />,
+    );
+    expect(screen.getByText("Committed secret")).toBeTruthy();
+    expect(container.querySelectorAll("li")).toHaveLength(1);
   });
 
   it("collapses the open row when another is opened", () => {

@@ -4,7 +4,7 @@ import React from "react";
 import { useTranslations } from "next-intl";
 import { Icon } from "@devdigest/ui";
 import type { BriefRisk } from "@devdigest/shared";
-import { s, severityColor } from "./styles";
+import { s, severityIcon } from "./styles";
 
 interface RiskAreasProps {
   risks: BriefRisk[] | null | undefined;
@@ -40,33 +40,48 @@ export function RiskAreas({ risks }: RiskAreasProps) {
       <ul style={s.list}>
         {risks.map((risk) => {
           const expanded = open === risk.title;
+          const sev = severityIcon[risk.severity];
+          const SevIcon = Icon[sev.icon];
           return (
             <li key={risk.title} style={s.row}>
               <button
                 type="button"
-                style={{ ...s.toggle, color: severityColor[risk.severity] }}
+                style={s.toggle}
                 aria-expanded={expanded}
+                // The severity has no visible text, so it is announced here —
+                // the icon's shape and colour carry it visually.
+                aria-label={`${risk.title} — ${t(`risk.${risk.severity}`)}`}
                 onClick={() => setOpen(expanded ? null : risk.title)}
               >
-                <span style={s.dot} />
-                <span style={s.title}>{risk.title}</span>
-                {/* The level in text, not colour alone. */}
-                <span style={s.ref}>{t(`risk.${risk.severity}`)}</span>
+                <SevIcon size={14} style={{ color: sev.color, flexShrink: 0, marginTop: 2 }} />
+                <span style={s.rowMain}>
+                  <span style={s.title}>{risk.title}</span>
+                  {/* Visible while collapsed: the refs are the row's evidence,
+                      and every one has already passed the server's grounding
+                      gate, so a path shown here really is in the pull request.
+                      Hiding them made the risk a claim nobody could check
+                      without a click. */}
+                  {risk.refs.length > 0 && (
+                    <span style={s.refs}>
+                      {risk.refs.map((ref) => (
+                        <span key={ref} style={s.ref}>
+                          {ref}
+                        </span>
+                      ))}
+                    </span>
+                  )}
+                </span>
                 <Icon.ChevronDown
                   size={14}
-                  style={{ transform: expanded ? "rotate(180deg)" : undefined }}
+                  style={{
+                    ...s.chevron,
+                    transform: expanded ? "rotate(180deg)" : undefined,
+                  }}
                 />
               </button>
               {expanded && (
                 <div style={s.body}>
                   <p style={s.explanation}>{risk.explanation}</p>
-                  <div style={s.refs}>
-                    {risk.refs.map((ref) => (
-                      <span key={ref} style={s.ref}>
-                        {ref}
-                      </span>
-                    ))}
-                  </div>
                 </div>
               )}
             </li>

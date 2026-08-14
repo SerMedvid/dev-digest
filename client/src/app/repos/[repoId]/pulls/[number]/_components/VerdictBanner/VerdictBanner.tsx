@@ -23,6 +23,7 @@ export function VerdictBanner({
   riskLevel,
   onRegenerate,
   regenerating,
+  spendPlacement = "title",
 }: {
   verdict: Verdict;
   summary: string | null;
@@ -41,11 +42,29 @@ export function VerdictBanner({
   /** Regenerate the brief. Omitted renders no control. */
   onRegenerate?: (() => void) | null;
   regenerating?: boolean;
+  /**
+   * Where the spend badge sits. `"title"` (the default) keeps it inline among
+   * the badges, which is what the run accordion has always rendered. `"score"`
+   * moves it under the score column, which is what the PR-brief mockup draws —
+   * an explicit choice rather than something inferred from the other new props,
+   * so the accordion's layout cannot change by accident.
+   */
+  spendPlacement?: "title" | "score";
 }) {
   const t = useTranslations("prReview");
   const tb = useTranslations("brief");
   const m = VERDICT_META[verdict] ?? VERDICT_META.comment;
   const VIcon = Icon[m.icon];
+  const spend = (
+    <RunCostBadge
+      costUsd={costUsd}
+      tokensIn={tokensIn}
+      tokensOut={tokensOut}
+      variant="detailed"
+      tokens="flow"
+    />
+  );
+  const underScore = spendPlacement === "score";
   return (
     <div style={s.wrap}>
       <div style={s.iconBox(m.bg, m.c)}>
@@ -71,33 +90,37 @@ export function VerdictBanner({
               {agentName}
             </Badge>
           )}
-          <RunCostBadge
-            costUsd={costUsd}
-            tokensIn={tokensIn}
-            tokensOut={tokensOut}
-            variant="detailed"
-            tokens="flow"
-          />
-          {onRegenerate && (
-            <span style={s.regenerate}>
-              <Button
-                kind="ghost"
-                size="sm"
-                icon="RefreshCw"
-                onClick={onRegenerate}
-                disabled={!!regenerating}
-              >
-                {regenerating ? tb("regenerating") : tb("regenerate")}
-              </Button>
-            </span>
-          )}
+          {!underScore && spend}
         </div>
         {summary && <p style={s.summary}>{summary}</p>}
       </div>
-      {score != null && (
+
+      {/* Icon-only, and outside the badge row: it is the banner's one action,
+          and a labelled button among the chips read as one more chip. */}
+      {onRegenerate && (
+        <Button
+          kind="ghost"
+          size="sm"
+          icon="RefreshCw"
+          loading={!!regenerating}
+          disabled={!!regenerating}
+          onClick={onRegenerate}
+          title={regenerating ? tb("regenerating") : tb("regenerate")}
+          aria-label={regenerating ? tb("regenerating") : tb("regenerate")}
+        />
+      )}
+
+      {/* Rendered when there is a score OR a spend badge to put under it, so
+          moving the spend here cannot make it disappear on an unscored PR. */}
+      {(score != null || underScore) && (
         <div style={s.scoreCol}>
-          <CircularScore score={score} size={52} stroke={5} />
-          <span style={s.scoreLabel}>{t("verdict.prScore")}</span>
+          {score != null && (
+            <>
+              <CircularScore score={score} size={52} stroke={5} />
+              <span style={s.scoreLabel}>{t("verdict.prScore")}</span>
+            </>
+          )}
+          {underScore && spend}
         </div>
       )}
     </div>

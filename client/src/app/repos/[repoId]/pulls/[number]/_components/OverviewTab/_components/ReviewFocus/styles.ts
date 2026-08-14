@@ -1,5 +1,11 @@
 import type { CSSProperties } from "react";
 
+/** The two path variants differ only in colour; the layout lives in `pathBase`. */
+export const pathColor = {
+  linked: "var(--accent-text, var(--text-primary))",
+  plain: "var(--text-secondary)",
+} as const;
+
 export const s = {
   list: {
     display: "flex",
@@ -41,21 +47,33 @@ export const s = {
     minWidth: 16,
     flexShrink: 0,
   } satisfies CSSProperties,
-  path: {
+  /**
+   * Paths in this repo are long enough to starve the reason beside them —
+   * `_components/OverviewTab/_components/ReviewFocus/ReviewFocus.tsx` is a real
+   * entry. `flexShrink: 0` let the path claim whatever width it wanted and
+   * pushed the reason into a three-line ragged column, so the path is capped
+   * and wraps instead.
+   *
+   * `break-all` rather than `break-word`: a path is one unbroken token to the
+   * line breaker, so word-level breaking has nothing to work with and the cap
+   * would just overflow.
+   */
+  pathBase: {
     fontFamily: "var(--font-mono, ui-monospace, monospace)",
     fontSize: 13,
-    color: "var(--accent-text, var(--text-primary))",
+    // Grow not at all, shrink freely, and never past the cap — which is a
+    // percentage so the split holds at any container width.
+    flex: "0 1 auto",
+    maxWidth: "48%",
+    minWidth: 0,
     wordBreak: "break-all",
-    flexShrink: 0,
-  } satisfies CSSProperties,
-  pathPlain: {
-    fontFamily: "var(--font-mono, ui-monospace, monospace)",
-    fontSize: 13,
-    color: "var(--text-secondary)",
-    wordBreak: "break-all",
-    flexShrink: 0,
+    lineHeight: 1.5,
   } satisfies CSSProperties,
   reason: {
+    // Takes the remainder, and `minWidth: 0` is what lets it actually shrink
+    // inside a flex row rather than being floored at its longest word.
+    flex: "1 1 0",
+    minWidth: 0,
     fontSize: 13,
     color: "var(--text-secondary)",
     lineHeight: 1.5,

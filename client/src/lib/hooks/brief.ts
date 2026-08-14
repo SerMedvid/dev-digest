@@ -41,5 +41,14 @@ export function useGenerateBrief(prId: string | null | undefined) {
     onSuccess: (rec) => {
       qc.setQueryData(["pr-brief", prId], rec);
     },
+    onError: (err) => {
+      // A 409 does not mean the click failed — it means a generation for this
+      // PR is already in flight and will land a fresh row. Refetch so the user
+      // ends up with that result rather than sitting on the stale brief they
+      // were just told to regenerate.
+      if (err instanceof ApiError && err.status === 409) {
+        void qc.invalidateQueries({ queryKey: ["pr-brief", prId] });
+      }
+    },
   });
 }

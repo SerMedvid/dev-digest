@@ -8,7 +8,7 @@ import prReviewMessages from "../../../../../../../../../../messages/en/prReview
 import shellMessages from "../../../../../../../../../../messages/en/shell.json";
 // The banner embeds RunCostBadge, which reads the `runs` namespace.
 import runsMessages from "../../../../../../../../../../messages/en/runs.json";
-import type { PrBriefRecord, ReviewRecord } from "@devdigest/shared";
+import type { PrBriefRecord, ReviewRecord, RunSummary } from "@devdigest/shared";
 import { PrBriefCard } from "./PrBriefCard";
 
 const BRIEF: PrBriefRecord = {
@@ -66,6 +66,26 @@ const REVIEW: ReviewRecord = {
   ],
 };
 
+/** The run behind REVIEW — where spend actually lives. */
+const RUN: RunSummary = {
+  run_id: "run-2",
+  agent_id: null,
+  agent_name: "General Reviewer",
+  provider: "openai",
+  model: "gpt-4.1",
+  status: "done",
+  error: null,
+  duration_ms: 4200,
+  tokens_in: 200,
+  tokens_out: 1300,
+  cost_usd: 0.014,
+  findings_count: 1,
+  grounding: null,
+  ran_at: "2026-08-14T00:00:00.000Z",
+  score: 61,
+  blockers: 1,
+};
+
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
@@ -83,9 +103,11 @@ function stubPost(status: number, body: unknown) {
   return fetchMock;
 }
 
-function renderCard(ui: React.ReactElement) {
-  const qc = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } });
-  return render(
+/** One client per render, reused by `rerenderCard` so cache state survives. */
+let qc: QueryClient;
+
+function wrap(ui: React.ReactElement) {
+  return (
     <NextIntlClientProvider
       locale="en"
       messages={{
@@ -96,8 +118,16 @@ function renderCard(ui: React.ReactElement) {
       }}
     >
       <QueryClientProvider client={qc}>{ui}</QueryClientProvider>
-    </NextIntlClientProvider>,
+    </NextIntlClientProvider>
   );
+}
+
+function renderCard(ui: React.ReactElement) {
+  qc = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+  });
+  const utils = render(wrap(ui));
+  return { ...utils, rerenderCard: (next: React.ReactElement) => utils.rerender(wrap(next)) };
 }
 
 describe("PrBriefCard", () => {
@@ -156,18 +186,54 @@ describe("PrBriefCard", () => {
     expect(fetchMock.mock.calls[0]![0]).toContain("/pulls/pr1/brief");
   });
 
-  it("renders the conflict message for a 409, not the generic failure (AC-14)", async () => {
+  it("renders a 409 as a status, never an alert, and keeps the control busy (AC-14)", async () => {
     stubPost(409, { error: { code: "conflict", message: "A brief is already being generated" } });
-    renderCard(<PrBriefCard prId="pr1" brief={BRIEF} loading={false} review={REVIEW} />);
+    const { rerenderCard } = renderCard(
+      <PrBriefCard prId="pr1" brief={BRIEF} loading={false} review={REVIEW} />,
+    );
 
     fireEvent.click(screen.getByRole("button", { name: /regenerate/i }));
-    // "Already running" is not a failure the user should retry, so it gets its
-    // own string rather than the server's generic message.
+    // "Already running" is a state, not a failure. Styling it as an error put a
+    // red "you can't" beside the stale marker's "you should", with nothing on
+    // screen that resolved the contradiction.
     await waitFor(() =>
-      expect(screen.getByRole("alert").textContent).toBe(
+      expect(screen.getByRole("status").textContent).toBe(
         "A brief is already being generated for this pull request.",
       ),
     );
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByRole("button", { name: /regenerating/i }).hasAttribute("disabled")).toBe(
+      true,
+    );
+
+    // The in-flight generation landing IS the resolution — the message must not
+    // outlive the condition it describes.
+    rerenderCard(
+      <PrBriefCard
+        prId="pr1"
+        brief={{ ...BRIEF, created_at: "2026-08-14T01:00:00.000Z" }}
+        loading={false}
+        review={REVIEW}
+      />,
+    );
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+  });
+
+  it("shows the review run's spend in the banner", () => {
+    stubPost(200, BRIEF);
+    renderCard(
+      <PrBriefCard prId="pr1" brief={BRIEF} loading={false} review={REVIEW} run={RUN} />,
+    );
+    // Cost lives on the run, not on ReviewRecord — without it the badge renders
+    // a bare "—", which is what shipped first.
+    expect(screen.getByText(/0\.014/)).toBeTruthy();
+  });
+
+  it("renders the banner without a run, showing no spend rather than breaking", () => {
+    stubPost(200, BRIEF);
+    renderCard(<PrBriefCard prId="pr1" brief={BRIEF} loading={false} review={REVIEW} />);
+    expect(screen.getByText(BRIEF.why)).toBeTruthy();
+    expect(screen.queryByText(/0\.014/)).toBeNull();
   });
 
   it("surfaces the server's own message for any other failure", async () => {

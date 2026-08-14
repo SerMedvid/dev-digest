@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import type { IconName } from "@devdigest/ui";
 import type { RiskLevel } from "@devdigest/shared";
 
 export const s = {
@@ -13,7 +14,13 @@ export const s = {
     textTransform: "uppercase",
     color: "var(--text-muted)",
   } satisfies CSSProperties,
-  list: { display: "flex", flexDirection: "column", gap: 8, margin: 0, padding: 0 } satisfies CSSProperties,
+  list: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    margin: 0,
+    padding: 0,
+  } satisfies CSSProperties,
   row: {
     border: "1px solid var(--border)",
     borderRadius: 6,
@@ -24,7 +31,7 @@ export const s = {
    *  12px chevron. `text-align: left` because a button centres by default. */
   toggle: {
     display: "flex",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
     width: "100%",
     padding: "8px 10px",
@@ -32,24 +39,28 @@ export const s = {
     border: "none",
     cursor: "pointer",
     textAlign: "left",
-    color: "var(--text-primary)",
-    fontSize: 13,
   } satisfies CSSProperties,
-  dot: {
-    display: "inline-block",
-    width: 8,
-    height: 8,
-    borderRadius: 999,
-    flexShrink: 0,
-    // Inherits the row's severity colour, so the dot needs no per-level variant.
-    background: "currentColor",
-  } satisfies CSSProperties,
-  title: { flex: 1, minWidth: 0, color: "var(--text-primary)" } satisfies CSSProperties,
-  body: {
-    padding: "0 10px 10px 28px",
+  /** Title and refs stack; the icon and chevron flank them. */
+  rowMain: {
+    flex: 1,
+    minWidth: 0,
     display: "flex",
     flexDirection: "column",
-    gap: 8,
+    gap: 4,
+  } satisfies CSSProperties,
+  title: { fontSize: 13, color: "var(--text-primary)" } satisfies CSSProperties,
+  /** Refs are visible while collapsed — they are the row's evidence, and a
+   *  risk whose references are hidden is a claim the reader cannot check. */
+  refs: { display: "flex", flexWrap: "wrap", gap: 8 } satisfies CSSProperties,
+  /** Monospace because every entry is a path or a `METHOD /route`. */
+  ref: {
+    fontFamily: "var(--font-mono, ui-monospace, monospace)",
+    fontSize: 11,
+    color: "var(--accent-text, var(--text-secondary))",
+    wordBreak: "break-all",
+  } satisfies CSSProperties,
+  body: {
+    padding: "0 10px 10px 32px",
   } satisfies CSSProperties,
   explanation: {
     margin: 0,
@@ -57,28 +68,17 @@ export const s = {
     lineHeight: 1.55,
     color: "var(--text-secondary)",
   } satisfies CSSProperties,
-  refs: { display: "flex", flexWrap: "wrap", gap: 6 } satisfies CSSProperties,
-  /** Monospace because every entry is a path or a `METHOD /route`. */
-  ref: {
-    fontFamily: "var(--font-mono, ui-monospace, monospace)",
-    fontSize: 11,
-    padding: "1px 6px",
-    borderRadius: 4,
-    background: "var(--bg-elevated)",
-    color: "var(--text-secondary)",
-    wordBreak: "break-all",
-  } satisfies CSSProperties,
+  chevron: { flexShrink: 0, color: "var(--text-muted)", marginTop: 2 } satisfies CSSProperties,
 } as const;
 
 /**
- * The severity tint, worn by the row's dot and its title.
- *
- * Colour is never the only carrier: the severity is also announced to assistive
- * technology on the toggle, for the same WCAG reason the intent card spells its
- * confidence out.
+ * Severity is carried by icon **shape** as well as colour, so it is never
+ * colour alone — the design system's WCAG rule. The level is also on the
+ * toggle's `aria-label`, which is what a screen reader announces; the mockup
+ * has no visible severity text and this keeps it accessible without adding one.
  */
-export const severityColor: Record<RiskLevel, string> = {
-  high: "var(--crit)",
-  medium: "var(--warn)",
-  low: "var(--info)",
+export const severityIcon: Record<RiskLevel, { icon: IconName; color: string }> = {
+  high: { icon: "AlertOctagon", color: "var(--crit)" },
+  medium: { icon: "AlertTriangle", color: "var(--warn)" },
+  low: { icon: "Info", color: "var(--info)" },
 };

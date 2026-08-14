@@ -5,7 +5,7 @@ import { useTranslations } from "next-intl";
 import { SectionLabel, Badge } from "@devdigest/ui";
 import type { ReviewFocusItem } from "@devdigest/shared";
 import { fileAnchorId } from "@/components/diff-viewer";
-import { s } from "./styles";
+import { pathColor, s } from "./styles";
 
 interface ReviewFocusProps {
   items: ReviewFocusItem[] | null | undefined;
@@ -65,13 +65,13 @@ export function ReviewFocus({ items, diffPaths, onSetTab }: ReviewFocusProps) {
               {clickable ? (
                 <button type="button" style={s.button} onClick={() => jump(item.file)}>
                   <span style={s.ordinal}>{i + 1}</span>
-                  <span style={s.path}>{label}</span>
+                  <span style={{ ...s.pathBase, color: pathColor.linked }}>{label}</span>
                   <span style={s.reason}>{item.reason}</span>
                 </button>
               ) : (
                 <div style={s.staticRow}>
                   <span style={s.ordinal}>{i + 1}</span>
-                  <span style={s.pathPlain}>{label}</span>
+                  <span style={{ ...s.pathBase, color: pathColor.plain }}>{label}</span>
                   <span style={s.reason}>{item.reason}</span>
                 </div>
               )}
