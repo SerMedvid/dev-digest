@@ -79,6 +79,22 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-14** — Extends the 2026-08-05 entry below from *casing* to
+  *provenance*: a `--text` literal for seeded content must be read off
+  [`server/src/db/seed.ts`](../server/src/db/seed.ts), never copied from the
+  feature's unit tests. Both usually carry a fixture with the same shape and
+  similar prose, so the copy looks right in review and in the diff — flow `11`
+  asserted the brief's `why` as *"Unauthenticated clients can hammer …"* while
+  the seed says *"can **currently** hammer"*, one word apart, and the step timed
+  out. What made it expensive to read is that the step **above** it passed:
+  section labels like `PR BRIEF` render in the empty state too, so "the section
+  is there" is not evidence the data loaded, and the failure looks like a
+  broken query rather than a wrong string. When adding a flow over seeded data,
+  diff every literal against the seed — a one-liner over the flow's `--text`
+  arguments and the seeded row catches the whole class at once — and prefer
+  asserting a value only the *populated* state can render.
+  (`specs/11-pr-brief.flow.json:12`, `../server/src/db/seed.ts:441`)
+
 - **2026-08-10** — `get count` is a **single instantaneous DOM read** taken in
   its own process, with none of the polling every `wait` form does — so a
   `get count` immediately after a click asserts on whatever the DOM happened to
