@@ -94,14 +94,24 @@ describe("ProjectContextView", () => {
     stubApi(list());
     renderView();
 
-    // One row per document: the path, the root as *text* (AC-53), the count (AC-58).
+    /* One row per document: the file name, its folder, and the count (AC-58).
+       The folder is what carries the root as *text* (AC-53) now that the row is
+       one line high — `server/docs/onion-layers.md` renders as `onion-layers.md`
+       beside `server/docs`, which names the root and says where it actually
+       lives. A bare `docs` chip could not tell two roots of the same name in
+       different packages apart. */
     for (const doc of DOCS) {
       const row = await screen.findByRole("button", { name: new RegExp(doc.path) });
-      expect(within(row).getByText(doc.root)).toBeInTheDocument();
+      const cut = doc.path.lastIndexOf("/");
+      expect(within(row).getByText(doc.path.slice(cut + 1))).toBeInTheDocument();
+      const dir = doc.path.slice(0, cut);
+      expect(within(row).getByText(dir)).toBeInTheDocument();
+      expect(dir.split("/")).toContain(doc.root);
     }
-    expect(screen.getByText("Used by 3 agents")).toBeInTheDocument();
-    expect(screen.getByText("Used by 1 agent")).toBeInTheDocument();
-    expect(screen.getByText("Used by 0 agents")).toBeInTheDocument();
+    // The row's count is the short form; the reading pane's header spells it out.
+    expect(screen.getByText("3 agents")).toBeInTheDocument();
+    expect(screen.getByText("1 agent")).toBeInTheDocument();
+    expect(screen.getByText("0 agents")).toBeInTheDocument();
 
     // AC-38: the footer states the count and the scan time — and the screen
     // carries neither of the two figures the comp invented.

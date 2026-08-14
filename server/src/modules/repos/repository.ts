@@ -77,6 +77,20 @@ export class RepoRepository {
       .where(eq(t.repos.id, repoId));
   }
 
+  /**
+   * Persist the repository's own default branch, as GitHub reports it.
+   *
+   * The column has always defaulted to `'main'` and nothing ever wrote it, so
+   * every repository claimed `main` whatever its actual head — and `sync()`
+   * resets the clone to `origin/<defaultBranch>`, which on a `master` or
+   * `develop` repository is a branch that does not exist. Written by the clone
+   * job on every run, so renaming the default branch upstream is picked up on
+   * the next refresh rather than needing a re-import.
+   */
+  async updateDefaultBranch(repoId: string, defaultBranch: string): Promise<void> {
+    await this.db.update(t.repos).set({ defaultBranch }).where(eq(t.repos.id, repoId));
+  }
+
   async remove(workspaceId: string, id: string): Promise<boolean> {
     const deleted = await this.db
       .delete(t.repos)

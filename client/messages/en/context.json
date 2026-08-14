@@ -1,6 +1,5 @@
 {
   "title": "Project Context",
-  "subtitle": "Markdown documents discovered in {repo}. Read-only here — attach them to an agent or a skill from its editor.",
   "repoFallback": "this repository",
   "rescan": "Rescan",
   "loadError": "Couldn’t load project context",
@@ -13,7 +12,8 @@
   },
   "row": {
     "open": "Open {path}",
-    "usedBy": "Used by {count, plural, =1 {1 agent} other {# agents}}"
+    "usedBy": "Used by {count, plural, =1 {1 agent} other {# agents}}",
+    "usedByShort": "{count, plural, =1 {1 agent} other {# agents}}"
   },
   "empty": {
     "title": "No documents found",

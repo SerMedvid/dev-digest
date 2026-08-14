@@ -55,8 +55,23 @@ export class SimpleGitClient implements GitClient {
     const dest = this.clonePathFor(repo);
     await mkdir(join(this.cloneDir, repo.owner), { recursive: true });
     if (await this.exists(join(dest, '.git'))) {
-      // already cloned → fetch latest
-      await simpleGit(dest).fetch();
+      /* Already cloned → advance it, which means fetch AND reset.
+         This used to be a bare `fetch()`. A fetch moves `origin/<branch>` and
+         touches neither HEAD nor the worktree, so "re-fetch the clone" left
+         every file exactly as it was at the original clone — a repository sat
+         two months behind while its own `origin/main` was current, and every
+         consumer that reads files off the disk (project context, repo intel,
+         the indexer) reported that stale tree as the truth.
+         `reset --hard` is safe for the same reason `sync()` gives: the clone is
+         a read-only mirror we never commit to. Without a branch we cannot name
+         a reset target, so that case still degrades to the old fetch. */
+      const g = simpleGit(dest);
+      if (opts?.branch) {
+        await g.fetch(['origin', opts.branch, '--depth', String(RESYNC_FETCH_DEPTH)]);
+        await g.reset(['--hard', `origin/${opts.branch}`]);
+      } else {
+        await g.fetch();
+      }
       return { path: dest };
     }
     // A prior clone may have timed out mid-write, leaving a partial dir without

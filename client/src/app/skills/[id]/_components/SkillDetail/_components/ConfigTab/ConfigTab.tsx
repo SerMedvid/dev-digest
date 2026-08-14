@@ -9,7 +9,6 @@ import type { Skill, SkillType } from "@devdigest/shared";
 import { useUpdateSkill } from "../../../../../../../lib/hooks/skills";
 import { ApiError } from "../../../../../../../lib/api";
 import { MAX_SKILL_BODY_CHARS, SKILL_TYPES } from "../../constants";
-import { ProjectContextSection } from "./_components/ProjectContextSection";
 import { s } from "./styles";
 
 export function ConfigTab({ skill }: { skill: Skill }) {
@@ -132,10 +131,6 @@ export function ConfigTab({ skill }: { skill: Skill }) {
           {update.isPending ? t("config.saving") : t("config.save")}
         </Button>
       </div>
-
-      {/* Below the Save row on purpose: attachments save on toggle, so nothing
-          in this section is waiting for that button (AC-43). */}
-      <ProjectContextSection skill={skill} />
     </div>
   );
 }

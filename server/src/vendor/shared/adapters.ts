@@ -164,6 +164,23 @@ export interface GitHubClient {
   getIssue(repo: RepoRef, n: number): Promise<IssueMeta>;
   /** GET /user — for "posting as @user". */
   currentLogin(): Promise<string>;
+  /**
+   * GET /repos/{owner}/{repo} — the repository's own metadata.
+   *
+   * `defaultBranch` MUST be the branch of the repository named in `repo`. For a
+   * fork the same response also carries `parent.default_branch` and
+   * `source.default_branch` — the upstream's — and those are the wrong answer:
+   * the clone points at the fork, so a head resolved from the upstream names a
+   * branch that may not exist on it, or names one that exists and holds
+   * different work.
+   */
+  getRepoInfo(repo: RepoRef): Promise<RepoInfo>;
+}
+
+/** What the app needs from a repository's metadata. */
+export interface RepoInfo {
+  /** The repository's OWN default branch — never a fork parent's. */
+  defaultBranch: string;
 }
 
 // ---------- Git (simple-git, heavy) ----------

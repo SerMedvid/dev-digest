@@ -1,12 +1,14 @@
-/* ProjectContextView — the Project Context screen: what discovery found in the
-   clone, and the selected document rendered read-only beside it.
+/* ProjectContextView — the Project Context screen: a file column listing what
+   discovery found in the clone, and the selected document rendered read-only
+   beside it.
 
    Read-only is a decision, not an omission (AC-37). The comp this screen comes
    from draws a `Preview | Edit` toggle, a chunk count and a coverage gauge:
    there is no write path to the clone (a `sync` fast-forward would destroy a
    local edit), `code_chunks` has no producer anywhere in the repository, and
-   the coverage figure is defined nowhere. So the footer states the document
-   count and the scan time, and nothing else (AC-38).
+   the coverage figure is defined nowhere. Rendering them disabled would be
+   three controls that never become enabled, so the screen leaves them out and
+   the file column's footer states the document count and the scan time (AC-38).
 
    Attaching happens in the agent and skill editors; this screen only
    discovers. */
@@ -33,6 +35,7 @@ export function ProjectContextView({ repoId, repoName }: { repoId: string; repoN
   // Derived, not stored: a rescan can drop the document that was open, and a
   // stale selection would ask the API for a path discovery no longer lists.
   const openPath = selected && rows.some((d) => d.path === selected) ? selected : null;
+  const openDoc = openPath === null ? null : rows.find((d) => d.path === openPath);
 
   /** AC-39 — re-run discovery. Invalidating the key refetches the active query,
       so the list and the footer's stamp both come from the new scan. */
@@ -40,29 +43,31 @@ export function ProjectContextView({ repoId, repoName }: { repoId: string; repoN
     void qc.invalidateQueries({ queryKey: ["context-docs", repoId] });
   }
 
-  const header = (
-    <div style={s.header}>
-      <div style={s.headerRow}>
-        <h1 style={s.title}>{t("title")}</h1>
-        <Button
-          kind="ghost"
-          size="sm"
-          icon="RefreshCw"
-          onClick={rescan}
-          disabled={docs.isFetching}
-        >
-          {t("rescan")}
-        </Button>
+  /* The file column's head is the screen's title: the reading pane's head
+     belongs to whichever document is open. */
+  const sideHead = (
+    <div style={s.sideHead}>
+      <p style={s.eyebrow}>{t("title")}</p>
+      <div style={s.roots}>
+        {(data?.roots ?? []).map((root) => (
+          <span key={root} className="mono" style={s.root}>
+            {root}/
+          </span>
+        ))}
       </div>
-      <p style={s.subtitle}>{t("subtitle", { repo: repoName })}</p>
     </div>
   );
 
   if (docs.isLoading) {
     return (
       <div style={s.page}>
-        {header}
-        <Skeleton height={120} />
+        <div style={s.side}>
+          {sideHead}
+          <div style={s.list}>
+            <Skeleton height={120} />
+          </div>
+        </div>
+        <div style={s.main} />
       </div>
     );
   }
@@ -70,78 +75,102 @@ export function ProjectContextView({ repoId, repoName }: { repoId: string; repoN
   if (docs.isError || !data) {
     return (
       <div style={s.page}>
-        {header}
-        <ErrorState title={t("loadError")} onRetry={() => docs.refetch()} />
+        <div style={s.side}>{sideHead}</div>
+        <div style={s.main}>
+          <div style={s.bodyCentred}>
+            <ErrorState title={t("loadError")} onRetry={() => docs.refetch()} />
+          </div>
+        </div>
       </div>
     );
   }
 
+  /* A repository with no clone on disk is a 200 with `no_clone`, so it is an
+     explanation, never an error state (AC-40). Same for a clone that holds no
+     documents, which names the roots it searched (AC-41) — they are
+     configurable, so a fixed sentence would eventually describe somewhere else. */
+  const explanation =
+    data.status === "no_clone" ? (
+      <EmptyState
+        icon="GitBranch"
+        title={t("noClone.title", { repo: repoName })}
+        body={t("noClone.body")}
+      />
+    ) : rows.length === 0 ? (
+      <EmptyState
+        icon="FileText"
+        title={t("empty.title")}
+        body={
+          <>
+            {t("empty.body")}
+            <span style={s.emptyRoots}>
+              {data.roots.map((root) => (
+                <span key={root} className="mono" style={s.emptyRoot}>
+                  {root}
+                </span>
+              ))}
+            </span>
+          </>
+        }
+      />
+    ) : null;
+
   return (
     <div style={s.page}>
-      {header}
+      <div style={s.side}>
+        {sideHead}
+        <div style={s.toolbar}>
+          <Button
+            kind="ghost"
+            size="sm"
+            icon="RefreshCw"
+            onClick={rescan}
+            disabled={docs.isFetching}
+          >
+            {t("rescan")}
+          </Button>
+        </div>
 
-      {/* A repository with no clone on disk is a 200 with `no_clone`, so it is
-          an explanation, never an error state (AC-40). */}
-      {data.status === "no_clone" ? (
-        <EmptyState
-          icon="GitBranch"
-          title={t("noClone.title", { repo: repoName })}
-          body={t("noClone.body")}
-        />
-      ) : rows.length === 0 ? (
-        // EmptyState takes no children — the roots that were searched ride in
-        // `body`, which is a ReactNode (client/INSIGHTS.md, 2026-08-03). Naming
-        // them is the requirement (AC-41): they are configurable, so a fixed
-        // sentence would eventually describe somewhere else.
-        <EmptyState
-          icon="FileText"
-          title={t("empty.title")}
-          body={
-            <>
-              {t("empty.body")}
-              <span style={s.roots}>
-                {data.roots.map((root) => (
-                  <span key={root} className="mono" style={s.root}>
-                    {root}
-                  </span>
-                ))}
-              </span>
-            </>
-          }
-        />
-      ) : (
-        <>
+        <div style={s.list}>
           {data.omitted > 0 && <p style={s.omitted}>{t("omitted", { count: data.omitted })}</p>}
-          <div style={s.split}>
-            <div style={s.list}>
-              {rows.map((doc) => (
-                <DocRow
-                  key={doc.path}
-                  doc={doc}
-                  selected={doc.path === openPath}
-                  onSelect={setSelected}
-                />
-              ))}
-            </div>
-            <div style={s.detail}>
-              {openPath ? (
-                <>
-                  <p className="mono" style={s.detailPath}>
-                    {openPath}
-                  </p>
-                  <ContextDocBody repoId={repoId} path={openPath} />
-                </>
-              ) : (
-                <p style={s.detailPlaceholder}>{t("detail.placeholder")}</p>
-              )}
-            </div>
-          </div>
-        </>
-      )}
+          {rows.map((doc) => (
+            <DocRow
+              key={doc.path}
+              doc={doc}
+              selected={doc.path === openPath}
+              onSelect={setSelected}
+            />
+          ))}
+        </div>
 
-      <p style={s.footer}>
-        {t("footer", { count: rows.length, time: scanTime(data.scanned_at) })}
-      </p>
+        <p style={s.sideFoot}>
+          {t("footer", { count: rows.length, time: scanTime(data.scanned_at) })}
+        </p>
+      </div>
+
+      <div style={s.main}>
+        {openPath !== null && (
+          <div style={s.mainHead}>
+            <p className="mono" style={s.mainPath}>
+              {openPath}
+            </p>
+            {openDoc && (
+              <span style={s.usedBy}>
+                {t("row.usedBy", { count: openDoc.used_by_agents })}
+              </span>
+            )}
+          </div>
+        )}
+        {openPath !== null ? (
+          <div style={s.body}>
+            <ContextDocBody repoId={repoId} path={openPath} />
+          </div>
+        ) : (
+          <div style={s.bodyCentred}>
+            {explanation ?? <p style={s.placeholder}>{t("detail.placeholder")}</p>}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

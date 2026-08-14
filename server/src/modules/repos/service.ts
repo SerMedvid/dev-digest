@@ -52,8 +52,21 @@ export class RepoService {
     const { repoId, owner, name, url } = payload;
     const token = await this.container.secrets.get(GITHUB_TOKEN_SECRET);
     const cloneUrl = token ? withGitHubToken(url, token) : url;
+
+    /* Ask GitHub which branch THIS repository considers default, rather than
+       trusting the column's `'main'` default that nothing ever wrote. For a
+       fork that answer is the fork's own branch — `getRepoInfo` is explicit
+       about not reading the parent's — because the clone points at the fork and
+       a head taken from the upstream would name a branch we never fetch.
+
+       Best-effort: a token without metadata scope, a rate limit or a transient
+       failure must not block the clone, so we fall back to what is stored and
+       the clone proceeds exactly as it did before. */
+    const branch = await this.resolveDefaultBranch(repoId, { owner, name });
+
     const { path } = await this.container.git.clone({ owner, name }, cloneUrl, {
       depth: CLONE_DEPTH,
+      ...(branch === null ? {} : { branch }),
     });
     await this.repo.updateClonePath(repoId, path);
 
@@ -75,6 +88,28 @@ export class RepoService {
         // already succeeded, so we don't fail the job for an index-followup
         // miss. The user can hit POST /repos/:id/reindex to retry.
       }
+    }
+  }
+
+  /**
+   * The repository's own default branch, persisted for `sync()` to reset to.
+   *
+   * Returns `null` when GitHub could not be asked, which the caller treats as
+   * "clone the remote's HEAD as before" — degrading to today's behaviour rather
+   * than guessing a branch name that may not exist.
+   */
+  private async resolveDefaultBranch(
+    repoId: string,
+    ref: { owner: string; name: string },
+  ): Promise<string | null> {
+    try {
+      const github = await this.container.github();
+      const { defaultBranch } = await github.getRepoInfo(ref);
+      if (!defaultBranch) return null;
+      await this.repo.updateDefaultBranch(repoId, defaultBranch);
+      return defaultBranch;
+    } catch {
+      return null;
     }
   }
 

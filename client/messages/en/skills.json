@@ -37,6 +37,7 @@
     },
     "tabs": {
       "config": "Config",
+      "context": "Context",
       "preview": "Preview",
       "stats": "Stats",
       "versions": "Versions"
@@ -74,7 +75,8 @@
       "preview": "Preview {path}",
       "missing": "Missing from the clone",
       "beyondCap": "Not read: only 20 documents are read per run",
-      "otherRepo": "Attached in"
+      "otherRepo": "Attached in",
+      "dragHandle": "Reorder {path}"
     },
     "serialized": {
       "label": "SERIALIZES AS",

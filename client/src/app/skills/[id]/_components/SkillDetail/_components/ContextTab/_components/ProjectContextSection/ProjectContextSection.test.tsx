@@ -529,4 +529,33 @@ describe("ProjectContextSection", () => {
     });
     await waitFor(() => expect(screen.queryByText("Missing from the clone")).toBeNull());
   });
+
+  /* Drag. The section shipped without any — it was written as a block inside
+     the Config form, while the agent's Context tab (the same rows, the same
+     stored order) had it from the start. Order is a real edit here: it is the
+     order a run assembles the documents in, so the rows that carry a stored
+     position must be movable.
+
+     Only *this repository's attached* rows have one. An unattached document has
+     no position until it is attached, and a cross-repository row is not part of
+     this repository's stored order at all — a handle on either would offer a
+     move that no replace could express. */
+  it("gives a drag handle to this repository's attached rows and to nothing else", async () => {
+    stubApi();
+    renderSection();
+
+    await screen.findByRole("checkbox", { name: "specs/api-contract.md" });
+
+    const handles = screen.getAllByRole("button", { name: /^Reorder / });
+    expect(handles.map((h) => h.getAttribute("aria-label"))).toEqual([
+      "Reorder specs/api-contract.md",
+      "Reorder specs/gone.md",
+    ]);
+
+    // Discovered but unattached.
+    expect(screen.queryByRole("button", { name: "Reorder insights/ui-notes.md" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Reorder docs/onion-layers.md" })).toBeNull();
+    // Attached, but against another repository (AC-50).
+    expect(screen.queryByRole("button", { name: "Reorder guides/billing-notes.md" })).toBeNull();
+  });
 });

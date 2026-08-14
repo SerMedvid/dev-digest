@@ -4,11 +4,11 @@ import type { CSSProperties } from "react";
 export const s = {
   // A rule above the section, because it sits below the skill's own Save row and
   // saves on a different model: nothing here waits for that button.
-  section: {
-    marginTop: 28,
-    paddingTop: 24,
-    borderTop: "1px solid var(--border)",
-  } satisfies CSSProperties,
+  /* No top margin, padding or rule any more: this was a section appended below
+     ConfigTab's Save row, where the divider separated it from the form. It is
+     now the whole content of its own tab, so a rule across the top is a stray
+     line under the tab bar. */
+  section: {} satisfies CSSProperties,
   headRow: {
     display: "flex",
     alignItems: "center",

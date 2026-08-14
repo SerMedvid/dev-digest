@@ -12,6 +12,7 @@ vi.mock("../../../../../lib/hooks/agents", () => ({
 }));
 
 import { AgentEditor } from "./AgentEditor";
+import { TABS, VALID_TABS } from "./constants";
 
 afterEach(cleanup);
 
@@ -44,5 +45,18 @@ describe("A2 Agent Editor (smoke)", () => {
     expect(screen.getByText("Config")).toBeInTheDocument();
     expect(screen.getByText("Configuration")).toBeInTheDocument();
     expect(screen.getByText("Save agent")).toBeInTheDocument();
+  });
+
+  /* The route filters `?tab=` through `VALID_TABS` before handing it down. It
+     used to keep its own hardcoded `["config", "skills"]`, so adding Context to
+     `TABS` rendered a tab whose click wrote `?tab=context`, failed the
+     allowlist, and fell straight back to Config — a tab that could not be
+     opened. Deriving one list from the other is the fix; this is what fails if
+     anyone re-introduces a second list. */
+  it("accepts every rendered tab as a URL value", () => {
+    for (const tab of TABS) {
+      expect(VALID_TABS).toContain(tab.key);
+    }
+    expect(VALID_TABS).toContain("context");
   });
 });

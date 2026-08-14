@@ -19,56 +19,17 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import {
-  DndContext,
-  closestCenter,
-  type DragEndEvent,
-  PointerSensor,
-  useSensor,
-  useSensors,
-} from "@dnd-kit/core";
-import {
-  SortableContext,
-  useSortable,
-  verticalListSortingStrategy,
-} from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import { EmptyState, ErrorState, Skeleton, TextInput } from "@devdigest/ui";
 import type { Agent } from "@devdigest/shared";
+import { AttachmentList, moveAttached } from "@/components/context-attachments";
 import { ContextDocPreview } from "@/components/context-doc-preview";
 import { ApiError } from "@/lib/api";
 import { useRepos } from "@/lib/hooks/core";
 import { useAgentContext, useContextDocs, useSetContextAttachments } from "@/lib/hooks/project-context";
 import { useActiveRepo } from "@/lib/repo-context";
 import { ContextRow } from "./_components/ContextRow";
-import { directPathsOf, moveAttached, orderRows, type ContextRowModel } from "./helpers";
+import { directPathsOf, orderRows } from "./helpers";
 import { s } from "./styles";
-
-/** A directly attached row, wrapped so @dnd-kit can drag it by its handle. */
-function SortableContextRow({
-  row,
-  onToggle,
-  onPreview,
-}: {
-  row: ContextRowModel;
-  onToggle: (attached: boolean) => void;
-  onPreview: () => void;
-}) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
-    id: row.path,
-  });
-  return (
-    <div ref={setNodeRef} style={{ transform: CSS.Transform.toString(transform), transition }}>
-      <ContextRow
-        row={row}
-        dragging={isDragging}
-        onToggle={onToggle}
-        onPreview={onPreview}
-        handleProps={{ ...attributes, ...listeners }}
-      />
-    </div>
-  );
-}
 
 export function ContextTab({ agent }: { agent: Agent }) {
   const t = useTranslations("agents");
@@ -85,10 +46,6 @@ export function ContextTab({ agent }: { agent: Agent }) {
   // apart from `setAttachments.isError` so the banner can say why, and cleared
   // when the next replace is issued.
   const [conflict, setConflict] = React.useState(false);
-  // PointerSensor only, inherited from `SkillsTab`. A KeyboardSensor belongs to
-  // both tabs or neither (spec Open question 5) — not to this one alone.
-  const sensors = useSensors(useSensor(PointerSensor));
-
   const attachments = view.data;
   const serverPaths = React.useMemo(
     () => directPathsOf(attachments, repoId ?? ""),
@@ -166,15 +123,6 @@ export function ContextTab({ agent }: { agent: Agent }) {
   const toggle = (path: string, attached: boolean) =>
     commit(attached ? [...directPaths, path] : directPaths.filter((p) => p !== path));
 
-  function onDragEnd(e: DragEndEvent) {
-    const { active, over } = e;
-    if (!over || active.id === over.id) return;
-    const from = directPaths.indexOf(String(active.id));
-    const to = directPaths.indexOf(String(over.id));
-    if (from < 0 || to < 0) return;
-    commit(moveAttached(directPaths, from, to));
-  }
-
   const repoName = (id: string) => repos.data?.find((r) => r.id === id)?.name ?? id;
   const mapReduce = agent.strategy === "map-reduce" || agent.strategy === "auto";
 
@@ -212,21 +160,31 @@ export function ContextTab({ agent }: { agent: Agent }) {
         />
       ) : (
         <>
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-            <SortableContext
-              items={draggable.map((r) => r.path)}
-              strategy={verticalListSortingStrategy}
-            >
-              {draggable.map((row) => (
-                <SortableContextRow
-                  key={row.path}
+          {/* Only directly attached rows have a stored position to move.
+              `directPaths` is the payload of the replace, so a drag is indexed
+              into that list rather than into the filtered view. */}
+          <AttachmentList
+            ids={draggable.map((r) => r.path)}
+            onReorder={(activeId, overId) => {
+              const from = directPaths.indexOf(activeId);
+              const to = directPaths.indexOf(overId);
+              if (from < 0 || to < 0) return;
+              commit(moveAttached(directPaths, from, to));
+            }}
+            renderItem={(path, { dragging, handleProps }) => {
+              const row = draggable.find((r) => r.path === path);
+              if (!row) return null;
+              return (
+                <ContextRow
                   row={row}
+                  dragging={dragging}
+                  handleProps={handleProps}
                   onToggle={(attached) => toggle(row.path, attached)}
                   onPreview={() => setPreview(row.path)}
                 />
-              ))}
-            </SortableContext>
-          </DndContext>
+              );
+            }}
+          />
 
           {/* Keyed by repository as well as kind and path: the same document may
               be attached in several repositories, and each of those is its own
