@@ -6,6 +6,7 @@ import type {
   IntentRepoRef,
   IntentStoreRecord,
   IntentStoreUpsert,
+  IssueMetaShape,
 } from './domain.js';
 
 /**
@@ -35,7 +36,17 @@ export interface IssuePort {
   fetch(
     repo: { owner: string; name: string },
     numbers: number[],
-  ): Promise<{ found: IntentDoc[]; missing: string[] }>;
+  ): Promise<{
+    found: IntentDoc[];
+    missing: string[];
+    /**
+     * The FIRST issue that resolved, as metadata, or null when none did.
+     * Persisted on `pr_intent.linked_issue` for the brief to read without a
+     * network call of its own (L05). Separate from `found` because the brief
+     * renders title and body apart, while `found[].content` fuses them.
+     */
+    linked: IssueMetaShape | null;
+  }>;
 }
 
 export interface IntentModelPort {

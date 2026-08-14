@@ -23,6 +23,25 @@ export interface IntentDoc {
   content: string;
 }
 
+/**
+ * A linked issue's metadata, as persisted on `pr_intent.linked_issue`.
+ *
+ * A structural mirror of `@devdigest/shared`'s `IssueMeta`, declared here for
+ * the same reason `IntentStoreUpsert` below is: the reviews aggregate owns the
+ * column, and importing its repository would be a `no-cross-module-internals`
+ * violation. `IssueMeta` satisfies this interface, so the adapter assigns with
+ * no cast.
+ *
+ * `body` is the RAW issue body, not the `title\n\nbody` fusion `IntentDoc`
+ * carries: the brief renders title and body separately (L05).
+ */
+export interface IssueMetaShape {
+  number: number;
+  title: string;
+  body?: string | null;
+  state: string;
+}
+
 /** What the service produces before it becomes a `PrIntentRecord`. */
 export interface DerivedIntent {
   intent: Intent;
@@ -47,6 +66,8 @@ export interface IntentStoreUpsert {
   confidence: IntentConfidence;
   sources: string[];
   missingContext: string[];
+  /** The first linked issue, or null. Replaced wholesale on re-derivation. */
+  linkedIssue: IssueMetaShape | null;
   provider: string;
   model: string;
 }
@@ -56,6 +77,7 @@ export interface IntentStoreRecord extends Intent {
   confidence: IntentConfidence;
   sources: string[];
   missingContext: string[];
+  linkedIssue: IssueMetaShape | null;
   provider: string;
   model: string;
   createdAt: Date;

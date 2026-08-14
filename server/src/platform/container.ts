@@ -41,6 +41,10 @@ import { FileSummaryModel } from '../modules/smart-diff/model.js';
 import { BlastRepository } from '../modules/blast/repository.js';
 import { BlastService } from '../modules/blast/service.js';
 import { BlastSummaryModel } from '../modules/blast/model.js';
+import { BriefRepository } from '../modules/brief/repository.js';
+import { BriefService } from '../modules/brief/service.js';
+import { BriefModel } from '../modules/brief/model.js';
+import { docReferences } from '../modules/intent/helpers.js';
 import { ProjectContextRepository } from '../modules/project-context/repository.js';
 import { OnboardingRepository } from '../modules/onboarding/repository.js';
 import { ProjectContextService } from '../modules/project-context/service.js';
@@ -73,6 +77,15 @@ const BLAST_SUMMARY_REGISTRY_ENTRY = FEATURE_MODELS.find((f) => f.id === 'blast_
 const BLAST_SUMMARY_DEFAULT_MODEL = {
   provider: BLAST_SUMMARY_REGISTRY_ENTRY.defaultProvider,
   model: BLAST_SUMMARY_REGISTRY_ENTRY.defaultModel,
+};
+
+/** Registry default for the PR brief (L05) — never a local restatement. The
+    Settings screen renders this same entry, so a local copy would let it
+    advertise one model while another actually ran. */
+const BRIEF_REGISTRY_ENTRY = FEATURE_MODELS.find((f) => f.id === 'risk_brief')!;
+const BRIEF_DEFAULT_MODEL = {
+  provider: BRIEF_REGISTRY_ENTRY.defaultProvider,
+  model: BRIEF_REGISTRY_ENTRY.defaultModel,
 };
 
 /**
@@ -138,6 +151,8 @@ export class Container {
   private _smartDiffService?: SmartDiffService;
   private _blastRepo?: BlastRepository;
   private _blastService?: BlastService;
+  private _briefRepo?: BriefRepository;
+  private _briefService?: BriefService;
   private _projectContextRepo?: ProjectContextRepository;
   private _onboardingRepo?: OnboardingRepository;
   private _projectContext?: ProjectContextService;
@@ -318,6 +333,130 @@ export class Container {
         const llm = await this.llm(choice.provider as 'openai' | 'anthropic' | 'openrouter');
         return new BlastSummaryModel(llm, choice.provider, choice.model);
       },
+      ...(this.logger ? { log: this.logger } : {}),
+    }));
+  }
+
+  get briefRepo(): BriefRepository {
+    return (this._briefRepo ??= new BriefRepository(this.db));
+  }
+
+  /**
+   * The PR brief composes SEVEN sources — the pull row, its changed files, the
+   * derived intent and the issue it links, the blast map, the latest review's
+   * findings, and the specification documents the PR body references. Every
+   * port is built inline here, exactly as `blastService`'s are, so the module
+   * imports no other module's repository and never takes `Container`.
+   *
+   * Two of them cross a module boundary that only the composition root may
+   * cross: `blast.map` reaches `blastService`, and `docs.read` reaches the
+   * intent module's `docReferences` + `CloneDocReader` rather than growing a
+   * second confined reader with its own symlink checks to get wrong.
+   *
+   * No new `ContainerOverrides` key is needed — the existing `llm`, `repoIntel`
+   * and `cloneReader` overrides already reach everything this service touches.
+   */
+  get briefService(): BriefService {
+    return (this._briefService ??= new BriefService({
+      store: {
+        getPull: async (workspaceId, prId) => {
+          const pull = await this.reviewRepo.getPull(workspaceId, prId);
+          // Projected, not passed through: the port declares the nine fields
+          // the brief reads, and nothing more travels into the module.
+          return pull
+            ? {
+                id: pull.id,
+                number: pull.number,
+                title: pull.title,
+                body: pull.body,
+                headSha: pull.headSha,
+                repoId: pull.repoId,
+                author: pull.author,
+                headRef: pull.branch,
+                baseRef: pull.base,
+              }
+            : undefined;
+        },
+        getRepo: async (repoId) => {
+          const repo = await this.reviewRepo.getRepo(repoId);
+          return repo
+            ? { owner: repo.owner, name: repo.name, clonePath: repo.clonePath }
+            : undefined;
+        },
+        getPrFiles: async (prId) => {
+          const rows = await this.reviewRepo.getPrFiles(prId);
+          // `patch` is dropped HERE, at the boundary, not merely left unread
+          // downstream: no diff hunk body reaches this feature's prompt at any
+          // cap, and the narrowest place to enforce that is where the row
+          // crosses into the module.
+          return rows.map((r) => ({
+            path: r.path,
+            additions: r.additions,
+            deletions: r.deletions,
+          }));
+        },
+        getIntent: async (prId) => {
+          const intent = await this.reviewRepo.getIntent(prId);
+          return intent
+            ? {
+                intent: intent.intent,
+                in_scope: intent.in_scope,
+                out_of_scope: intent.out_of_scope,
+                confidence: intent.confidence,
+                linkedIssue: intent.linkedIssue,
+              }
+            : undefined;
+        },
+        latestReview: async (prId) => {
+          const rows = await this.reviewRepo.reviewsForPull(prId);
+          // `reviewsForPull` is newest-first, but the ordering is re-derived
+          // here rather than assumed: which review fed the brief decides
+          // `stale` on every later read, and a silently reordered query would
+          // make the card lie rather than fail.
+          const newest = rows.reduce<(typeof rows)[number] | undefined>(
+            (best, r) =>
+              !best || r.review.createdAt > best.review.createdAt ? r : best,
+            undefined,
+          );
+          if (!newest) return undefined;
+          return {
+            reviewId: newest.review.id,
+            // `rationale` and `suggestion` are dropped at the boundary for the
+            // same reason `patch` is: they are another model's prose, and
+            // feeding it back in launders a wrong conclusion into a confident one.
+            findings: newest.findings.map((f) => ({
+              file: f.file,
+              startLine: f.startLine,
+              endLine: f.endLine,
+              severity: f.severity,
+              category: f.category,
+              kind: f.kind,
+              title: f.title,
+            })),
+          };
+        },
+      },
+      briefs: this.briefRepo,
+      blast: { map: (workspaceId, prId) => this.blastService.get(workspaceId, prId) },
+      docs: {
+        read: async (repo, body) => {
+          const refs = docReferences(body, repo.owner, repo.name);
+          if (refs.length === 0) return { found: [], missing: [] };
+          if (!repo.clonePath) {
+            return {
+              found: [],
+              missing: refs.map((r) => `${r} was not read: this repository has no clone on disk`),
+            };
+          }
+          return new CloneDocReader().read(repo.clonePath, refs);
+        },
+      },
+      model: async (workspaceId) => {
+        const choice = (await this.briefRepo.featureModelChoice(workspaceId)) ?? BRIEF_DEFAULT_MODEL;
+        const llm = await this.llm(choice.provider as 'openai' | 'anthropic' | 'openrouter');
+        return new BriefModel(llm, choice.provider, choice.model);
+      },
+      tokenCount: (text) => this.tokenizer.count(text),
       ...(this.logger ? { log: this.logger } : {}),
     }));
   }

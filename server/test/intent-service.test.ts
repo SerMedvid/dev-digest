@@ -33,6 +33,7 @@ function deps(over: Partial<IntentServiceDeps> = {}): IntentServiceDeps {
           confidence: rec.confidence,
           sources: rec.sources,
           missingContext: rec.missingContext,
+          linkedIssue: rec.linkedIssue,
           provider: rec.provider,
           model: rec.model,
           createdAt: new Date('2026-08-05T00:00:00Z'),
@@ -42,7 +43,13 @@ function deps(over: Partial<IntentServiceDeps> = {}): IntentServiceDeps {
       read: async () => ({ found: [{ label: 'doc:docs/plans/rate-limit.md', content: '# Plan' }], missing: [] }),
     },
     issues: {
-      fetch: async () => ({ found: [{ label: 'issue#471', content: 'Rate limit us' }], missing: [] }),
+      fetch: async () => ({
+        found: [{ label: 'issue#471', content: 'Rate limit us' }],
+        missing: [],
+        // The raw body, not the `title\n\nbody` fusion `found[].content`
+        // carries — the brief renders the two separately (L05).
+        linked: { number: 471, title: 'Rate limit us', body: 'Please.', state: 'open' },
+      }),
     },
     diff: { hunkDigest: async () => 'src/a.ts (+2 -0)\n  @@ -1,1 +1,3 @@' },
     model: async () => ({
@@ -189,7 +196,13 @@ describe('IntentService.derive', () => {
   it('records unretrievable material and caps confidence at medium', async () => {
     const rec = await new IntentService(
       deps({
-        issues: { fetch: async () => ({ found: [], missing: ['issue #471 could not be fetched: 404'] }) },
+        issues: {
+          fetch: async () => ({
+            found: [],
+            missing: ['issue #471 could not be fetched: 404'],
+            linked: null,
+          }),
+        },
         docs: { read: async () => ({ found: [], missing: ['docs/plans/rate-limit.md was not read: not found in the repository clone'] }) },
       }),
     ).derive('w1', 'pr1');
@@ -394,5 +407,82 @@ describe('IntentService.ensureFresh', () => {
       }),
     ).ensureFresh('w1', 'pr1', 'sha-1', { onLog: boom });
     expect(rec).toBeUndefined();
+  });
+});
+
+/**
+ * `pr_intent.linked_issue` (L05, AC-13). Storage only: the brief reads this
+ * column instead of making a GitHub call of its own, so what matters is that
+ * the metadata lands, that it does not survive an unlink, and that it changes
+ * nothing about confidence or the missing-context trail.
+ */
+describe('IntentService — linked_issue', () => {
+  it('stores the first fetched issue and surfaces it on the record', async () => {
+    const d = deps();
+    const put = vi.spyOn(d.store, 'put');
+    const rec = await new IntentService(d).derive('w1', 'pr1');
+
+    expect(rec.linked_issue).toEqual({
+      number: 471,
+      title: 'Rate limit us',
+      body: 'Please.',
+      state: 'open',
+    });
+    expect(put.mock.calls[0]![1].linkedIssue).toMatchObject({ number: 471 });
+  });
+
+  it('stores null when the PR body links no issue', async () => {
+    const fetch = vi.fn(async () => ({ found: [], missing: [], linked: null }));
+    const d = deps({
+      repo: {
+        getPull: async () => ({ ...PULL, body: 'No ticket for this one.' }),
+        getRepo: async () => ({ id: 'repo1', owner: 'acme', name: 'payments-api', clonePath: '/clone' }),
+        featureModelChoice: async () => undefined,
+      },
+      issues: { fetch },
+    });
+    const rec = await new IntentService(d).derive('w1', 'pr1');
+
+    // The port is not called at all — a PR linking nothing can never acquire
+    // an issue-shaped anything, whatever an implementation hands back.
+    expect(fetch).not.toHaveBeenCalled();
+    expect(rec.linked_issue).toBeNull();
+  });
+
+  it('stores null but keeps the missing-context note when the fetch failed', async () => {
+    const rec = await new IntentService(
+      deps({
+        issues: {
+          fetch: async () => ({
+            found: [],
+            missing: ['issue #471 could not be fetched: 404'],
+            linked: null,
+          }),
+        },
+      }),
+    ).derive('w1', 'pr1');
+
+    expect(rec.linked_issue).toBeNull();
+    expect(rec.missing_context).toContain('issue #471 could not be fetched: 404');
+  });
+
+  it('does not let a stored issue inflate confidence on its own', async () => {
+    // `computeConfidence` reads `issues.found`, not the stored column. A
+    // fetched-but-empty result must not read as evidence.
+    const rec = await new IntentService(
+      deps({
+        issues: {
+          fetch: async () => ({
+            found: [],
+            missing: [],
+            linked: { number: 471, title: 't', body: null, state: 'closed' },
+          }),
+        },
+        docs: { read: async () => ({ found: [], missing: [] }) },
+      }),
+    ).derive('w1', 'pr1');
+
+    expect(rec.linked_issue).toMatchObject({ number: 471 });
+    expect(rec.confidence).toBe('medium');
   });
 });

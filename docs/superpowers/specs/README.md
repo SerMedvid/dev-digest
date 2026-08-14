@@ -25,9 +25,16 @@ Plans do **not** live here. They go to [`../plans/`](../plans/).
 | **Specs** (current) | `SPEC-YYYY-MM-DD-<feature>.md` | `Spec ID: SPEC-YYYY-MM-DD-<feature>`, EARS acceptance criteria with `AC-N` ids. |
 
 The design docs are **not** retro-numbered — they record what was decided and
-when, and rewriting their headers would destroy that. New work uses the
-`SPEC-YYYY-MM-DD-<feature>` form, produced by the
-[`specreator`](../../../.claude/agents/specreator.md) agent.
+when, and rewriting their headers would destroy that.
+
+*(Corrected 2026-08-14)* — the `SPEC-*` form was produced by the
+[`specreator`](../../../.claude/agents/specreator.md) agent, which the root
+[`CLAUDE.md`](../../../CLAUDE.md) has since retired. **New work uses the
+`YYYY-MM-DD-<feature>-design.md` form again**, written by
+`superpowers:brainstorming`; that doc *is* the spec, and there is no separate
+spec artefact. The two `SPEC-*` files stay as they are. Everything below about
+`AC-N` ids still applies — a design doc's `## Acceptance` table carries them, and
+plans and tests cite them the same way.
 
 ## Writing a new spec
 
@@ -80,6 +87,7 @@ no Spec ID at all.
 
 | File | Status | Subject |
 |---|---|---|
+| [`2026-08-14-pr-brief-design.md`](2026-08-14-pr-brief-design.md) | draft — awaiting review | PR Why + Risk Brief: intent, blast, diff stats, linked issue, specs and the latest review's findings composed into one grounded `Brief`, cached per `head_sha`. Expected halves: `server/specs/brief.md`, `client/specs/pr-brief-card.md` |
 | [`SPEC-2026-08-13-project-context.md`](SPEC-2026-08-13-project-context.md) | draft | Repository `.md` documents discovered under configurable roots, attached by hand to agents and skills, and injected as untrusted text into the review prompt's `## Project context` slot. Expected halves: `server/specs/project-context.md`, `client/specs/project-context.md` |
 | [`SPEC-2026-08-13-impl-sdd.md`](SPEC-2026-08-13-impl-sdd.md) | draft | `/impl-sdd` — executes an approved plan, traces it against the spec, reviews it on three axes, and remediates the findings in bounded rounds. Repo tooling only |
 | [`2026-08-10-prior-prs-design.md`](2026-08-10-prior-prs-design.md) | approved, ready for planning | Merged/closed PRs overlapping this PR's files, and the `uncomparable_prs` disclosure. Shipped halves: [`server/specs/prior-prs.md`](../../../server/specs/prior-prs.md), [`client/specs/blast-radius-card.md`](../../../client/specs/blast-radius-card.md) |

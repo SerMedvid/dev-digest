@@ -1,0 +1,43 @@
+{
+  "name": "PR overview shows the seeded Why + Risk brief",
+  "description": "From PR #482, stay on the default Overview tab and confirm the three brief surfaces render the SEEDED pr_brief row (server/src/db/seed.ts): the PR BRIEF banner with its `why` paragraph and risk badge, the RISK AREAS block inside the Intent card, and the Review focus list — then click a focus row and land on that file in the Files-changed tab. Exercises PrBriefCard + RiskAreas + ReviewFocus + usePrBrief → GET /pulls/:id/brief. Read-only seeded data: the flow never clicks Regenerate, because a live generation needs a model key and e2e runs without one. The brief must NOT be labelled stale — the seed writes the PR's own head_sha and points review_id at the seeded review — which is asserted by the absence of the stale marker. The risk ref asserted below (src/config.ts) is deliberately also a row in the Files-changed tab: that is the grounding gate's promise checked end to end, not just the card's rendering. Text is matched in its RENDERED case — section labels are uppercased by CSS text-transform and agent-browser matches innerText. Assumes a freshly-seeded DB where acme/payments-api (PR #482) is the first repo — guaranteed by e2e-web.yml; run locally via the hermetic stack (see e2e/README.md).",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the PR list" },
+    { "cmd": ["wait", "--text", "Add rate limiting to public API endpoints"], "label": "seeded PR title row is visible" },
+    { "cmd": ["find", "text", "Add rate limiting to public API endpoints", "click"], "label": "open the PR row" },
+    { "cmd": ["wait", "--url", "/pulls/482"], "label": "navigate to the PR detail route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "PR detail data settles" },
+
+    { "cmd": ["wait", "--text", "PR BRIEF"], "label": "the brief section renders at the top of the Overview tab" },
+    { "cmd": ["wait", "--text", "Unauthenticated clients can hammer the public endpoints without limit."], "label": "the seeded `why` paragraph renders in the banner" },
+    { "cmd": ["wait", "--text", "Adds token-bucket rate limiting to the public API endpoints"], "label": "the seeded `what` sentence renders below it" },
+    { "cmd": ["wait", "--text", "High risk"], "label": "the risk level badge renders, spelled out and not colour-only" },
+    {
+      "cmd": ["get", "count", "text=A newer review has run since this brief was generated."],
+      "label": "the brief is NOT labelled stale — the seed writes the PR's own head_sha and its review id",
+      "assert": { "stdoutIncludes": "0" }
+    },
+
+    { "cmd": ["wait", "--text", "RISK AREAS"], "label": "the risk block renders inside the Intent card" },
+    { "cmd": ["wait", "--text", "A live secret is committed in configuration"], "label": "a seeded risk row renders" },
+    { "cmd": ["find", "text", "A live secret is committed in configuration", "click"], "label": "expand that risk" },
+    { "cmd": ["wait", "--text", "Committed credentials are compromised the moment they are pushed"], "label": "the explanation reveals on expand" },
+    { "cmd": ["wait", "--text", "src/config.ts"], "label": "its grounded ref renders — a path that is really in this PR" },
+
+    { "cmd": ["wait", "--text", "REVIEW FOCUS"], "label": "the read-these-first section renders below the grid" },
+    { "cmd": ["wait", "--text", "The committed secret — read this before anything else."], "label": "the first focus item's reason renders" },
+    { "cmd": ["wait", "--text", "src/config.ts:12"], "label": "the line is shown because a seeded finding covers line 12" },
+    { "cmd": ["wait", "--text", "The whole limiter is new; check the window and ceiling arithmetic."], "label": "a focus item with a null line renders too" },
+    {
+      "cmd": ["get", "count", "text=src/middleware/ratelimit.ts:"],
+      "label": "that item shows NO :line — nothing in the inputs vouched for one",
+      "assert": { "stdoutIncludes": "0" }
+    },
+
+    { "cmd": ["find", "text", "src/config.ts:12", "click"], "label": "click the first focus row" },
+    { "cmd": ["wait", "--url", "tab=diff"], "label": "the click switches to the Files changed tab" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "the diff settles" },
+    { "cmd": ["wait", "--text", "src/config.ts"], "label": "the file the brief pointed at is present in the diff" }
+  ]
+}

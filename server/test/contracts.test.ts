@@ -7,8 +7,8 @@ import {
   PrIntentRecord,
   PrFileSummaryRecord,
   BlastRadius,
-  Risks,
-  PrHistory,
+  Brief,
+  PrBriefRecord,
   SmartDiff,
   Conformance,
   ONBOARDING_SECTION_IDS,
@@ -78,7 +78,7 @@ describe('AI contracts parse fixtures', () => {
     expect(f.trifecta_components).toContain('exfil_path');
   });
 
-  it('Intent / BlastRadius / Risks / PrHistory', () => {
+  it('Intent / BlastRadius / Brief / PrBriefRecord', () => {
     expect(() =>
       Intent.parse({ intent: 'x', in_scope: ['a'], out_of_scope: ['b'] }),
     ).not.toThrow();
@@ -96,23 +96,42 @@ describe('AI contracts parse fixtures', () => {
         summary: 's',
       }),
     ).not.toThrow();
+    // The composed brief (L05). `Risks`/`PrHistory` used to be asserted here;
+    // they were replaced rather than extended — see contracts/brief.ts.
+    const brief = {
+      what: 'Adds rate limiting to the public API.',
+      why: 'Unauthenticated clients can hammer the public endpoints.',
+      risk_level: 'high' as const,
+      risks: [
+        {
+          title: 'Committed secret',
+          explanation: 'A live key is in the diff.',
+          severity: 'high' as const,
+          refs: ['src/config.ts'],
+        },
+      ],
+      review_focus: [{ file: 'src/config.ts', line: 12, reason: 'The secret.' }],
+    };
+    expect(() => Brief.parse(brief)).not.toThrow();
+    // `line` is NULLABLE, not optional: a focus item whose line no finding
+    // vouched for keeps the key and carries null, so the client can tell
+    // "no line" from "field missing".
     expect(() =>
-      Risks.parse({
-        risks: [{ kind: 'security', title: 't', explanation: 'e', severity: 'high', file_refs: [] }],
-      }),
+      Brief.parse({ ...brief, review_focus: [{ file: 'src/config.ts', line: null, reason: 'r' }] }),
     ).not.toThrow();
+    expect(() => Brief.parse({ ...brief, risk_level: 'severe' })).toThrow();
     expect(() =>
-      PrHistory.parse({
-        history: [
-          {
-            pr_number: 401,
-            title: 't',
-            merged_at: '2026-03-18',
-            author: 'a',
-            files_overlap: [],
-            notes: 'n',
-          },
-        ],
+      PrBriefRecord.parse({
+        ...brief,
+        pr_id: 'pr1',
+        head_sha: 'a1b2c3',
+        review_id: null,
+        stale: false,
+        sources: ['pr', 'files'],
+        est_tokens_in: 1200,
+        provider: 'openai',
+        model: 'gpt-4.1',
+        created_at: '2026-08-14T00:00:00.000Z',
       }),
     ).not.toThrow();
   });

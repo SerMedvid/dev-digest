@@ -4,10 +4,10 @@
 
 import React from "react";
 import { useTranslations } from "next-intl";
-import { Icon, Badge, CircularScore } from "@devdigest/ui";
-import type { Verdict } from "@devdigest/shared";
+import { Icon, Badge, Button, CircularScore } from "@devdigest/ui";
+import type { Verdict, RiskLevel } from "@devdigest/shared";
 import { RunCostBadge } from "@/components/run-cost-badge";
-import { VERDICT_META } from "./constants";
+import { VERDICT_META, RISK_BADGE } from "./constants";
 import { s } from "./styles";
 
 export function VerdictBanner({
@@ -20,6 +20,9 @@ export function VerdictBanner({
   costUsd,
   tokensIn,
   tokensOut,
+  riskLevel,
+  onRegenerate,
+  regenerating,
 }: {
   verdict: Verdict;
   summary: string | null;
@@ -32,8 +35,15 @@ export function VerdictBanner({
   costUsd?: number | null;
   tokensIn?: number | null;
   tokensOut?: number | null;
+  /** The brief's risk level (L05). Additive: omitted renders no badge, so the
+   *  run-accordion call site is unchanged. */
+  riskLevel?: RiskLevel | null;
+  /** Regenerate the brief. Omitted renders no control. */
+  onRegenerate?: (() => void) | null;
+  regenerating?: boolean;
 }) {
   const t = useTranslations("prReview");
+  const tb = useTranslations("brief");
   const m = VERDICT_META[verdict] ?? VERDICT_META.comment;
   const VIcon = Icon[m.icon];
   return (
@@ -44,6 +54,14 @@ export function VerdictBanner({
       <div style={s.main}>
         <div style={s.titleRow}>
           <span style={s.label(m.c)}>{t(`verdict.${m.labelKey}`)}</span>
+          {/* The level is spelled out, never carried by colour alone — the
+              design system's rule for severity chips, and the same reason the
+              intent card writes its confidence out. */}
+          {riskLevel && (
+            <Badge color={RISK_BADGE[riskLevel].color} bg={RISK_BADGE[riskLevel].bg}>
+              {tb(`risk.${riskLevel}`)}
+            </Badge>
+          )}
           <Badge color="var(--text-secondary)">
             {t("verdict.findingsCount", { count: findingsCount })}
             {blockers > 0 ? t("verdict.blockers", { count: blockers }) : ""}
@@ -60,6 +78,19 @@ export function VerdictBanner({
             variant="detailed"
             tokens="flow"
           />
+          {onRegenerate && (
+            <span style={s.regenerate}>
+              <Button
+                kind="ghost"
+                size="sm"
+                icon="RefreshCw"
+                onClick={onRegenerate}
+                disabled={!!regenerating}
+              >
+                {regenerating ? tb("regenerating") : tb("regenerate")}
+              </Button>
+            </span>
+          )}
         </div>
         {summary && <p style={s.summary}>{summary}</p>}
       </div>

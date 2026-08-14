@@ -38,7 +38,9 @@ filter is **code, not a prompt instruction**: the model may mark a finding
 - Cross-repository issues and documents — recognised only to be *recorded* as
   unretrieved.
 - Using `in_scope` to select which files get reviewed (a Smart Diff concern).
-- A `linked_issue` column, PR labels, and feeding the intent into `PrBrief` (L05).
+- PR labels, and composing the intent into the PR brief (L05, see
+  [`brief.md`](brief.md)). The `linked_issue` column this section once reserved
+  **landed with L05** — it is written here, at derivation, and read there.
 - Any UI badge on an out-of-scope finding — see §7.
 
 ## 2. Contract
@@ -195,6 +197,7 @@ One row per PR (`pr_id` is the primary key and the FK, `ON DELETE CASCADE`):
 | `confidence` | §3.2, computed |
 | `sources` | the labels that composed the prompt, plus `hunk_headers` |
 | `missing_context` | every entry from §3.1's refusals, in the order they occurred |
+| `linked_issue` | the FIRST linked issue that resolved, as an `IssueMeta` (`number`, `title`, raw `body` capped at `MAX_ISSUE_BYTES`, `state`); `null` when the body linked none or every fetch failed. Replaced wholesale on re-derivation, so an issue unlinked since the last one does not survive. Storage only — it feeds no `confidence`, `sources` or `missing_context` decision (L05) |
 | `provider`, `model` | what actually ran (§3.5), not what was configured |
 | `created_at` | the time of *this* derivation |
 

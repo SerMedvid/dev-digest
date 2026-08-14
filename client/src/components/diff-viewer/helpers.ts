@@ -1,6 +1,23 @@
 /** Pure helpers for the DiffViewer. */
 import { HUNK_HEADER_RE } from "./constants";
 
+/**
+ * The DOM id of a file's block in the diff, derived from its path.
+ *
+ * Lives on `FileCard`, so both viewers get it from one place — the flat
+ * `DiffViewer` and Smart Diff's grouped layout both compose that component, and
+ * an anchor added to only one of them would work on whichever ordering the URL
+ * happened to be in.
+ *
+ * Paths are used verbatim after the prefix. HTML5 ids permit everything except
+ * whitespace, and the consumer resolves them with `getElementById`, never a CSS
+ * selector — so `/` and `.` need no escaping, and escaping them would break the
+ * round trip from a path the API returned.
+ */
+export function fileAnchorId(path: string): string {
+  return `file-${path}`;
+}
+
 export interface Line {
   kind: "add" | "del" | "ctx" | "hunk";
   text: string;

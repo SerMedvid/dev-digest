@@ -32,4 +32,11 @@ export type {
 } from "@devdigest/shared";
 
 export type { Review, Finding, Severity, Verdict } from "@devdigest/shared";
-export type { PrBrief, SmartDiff } from "@devdigest/shared";
+export type {
+  Brief,
+  PrBriefRecord,
+  BriefRisk,
+  ReviewFocusItem,
+  RiskLevel,
+  SmartDiff,
+} from "@devdigest/shared";

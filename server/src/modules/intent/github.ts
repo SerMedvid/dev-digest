@@ -1,6 +1,6 @@
 import type { GitHubClient } from '@devdigest/shared';
 import { MAX_ERROR_CHARS, MAX_ISSUES, MAX_ISSUE_BYTES } from './constants.js';
-import type { IntentDoc } from './domain.js';
+import type { IntentDoc, IssueMetaShape } from './domain.js';
 import type { IssuePort } from './ports.js';
 
 /**
@@ -26,8 +26,8 @@ export class GitHubIssueReader implements IssuePort {
   async fetch(
     repo: { owner: string; name: string },
     numbers: number[],
-  ): Promise<{ found: IntentDoc[]; missing: string[] }> {
-    if (numbers.length === 0) return { found: [], missing: [] };
+  ): Promise<{ found: IntentDoc[]; missing: string[]; linked: IssueMetaShape | null }> {
+    if (numbers.length === 0) return { found: [], missing: [], linked: null };
 
     let client: GitHubClient;
     try {
@@ -37,16 +37,30 @@ export class GitHubIssueReader implements IssuePort {
       return {
         found: [],
         missing: numbers.map((n) => `issue #${n} could not be fetched: ${note}`),
+        linked: null,
       };
     }
 
     const found: IntentDoc[] = [];
     const missing: string[] = [];
+    // The first issue that RESOLVED, not the first requested: a 404 on #12
+    // must not stop #34's metadata from being stored.
+    let linked: IssueMetaShape | null = null;
     for (const n of numbers.slice(0, MAX_ISSUES)) {
       try {
         const issue = await client.getIssue({ owner: repo.owner, name: repo.name }, n);
         const body = [issue.title, issue.body ?? ''].filter(Boolean).join('\n\n');
         found.push({ label: `issue#${n}`, content: body.slice(0, MAX_ISSUE_BYTES) });
+        linked ??= {
+          number: issue.number,
+          title: issue.title,
+          // The RAW body, capped by the same budget as the fused prose above —
+          // the brief renders title and body separately, so it cannot be fed
+          // `found[].content`. Capped here and not at read time: this text is
+          // author-controlled and ends up on a paid model call.
+          body: issue.body?.slice(0, MAX_ISSUE_BYTES) ?? null,
+          state: issue.state,
+        };
       } catch (err) {
         missing.push(`issue #${n} could not be fetched: ${errorNote(err)}`);
       }
@@ -54,6 +68,6 @@ export class GitHubIssueReader implements IssuePort {
     for (const n of numbers.slice(MAX_ISSUES)) {
       missing.push(`issue #${n} was not fetched: only ${MAX_ISSUES} linked issues are read per PR`);
     }
-    return { found, missing };
+    return { found, missing, linked };
   }
 }

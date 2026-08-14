@@ -13,6 +13,21 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-14** — A service that persists a row and then **reconstructs** the
+  wire record it returns hands the caller a `created_at` that does not exist in
+  the database: the repository's `put` stamps its own `new Date()`, the service
+  stamps a second one, and the POST response and the GET that follows it
+  disagree about the same generation by a few milliseconds. It is invisible in
+  hermetic tests — a hand-built repo stub has no timestamp of its own — and only
+  shows up in an `.it.test.ts` that asserts `POST` and `GET` return the same
+  record. `BriefService.generate` now re-reads the row (`briefs.get(prId)`)
+  after writing it and builds the record from that; one extra SELECT on an
+  explicit user action is cheap, and it makes "the row is the record" true rather
+  than approximately true. **`IntentService.derive` still has this defect** —
+  it returns `created_at: new Date().toISOString()` while `upsertIntent` writes
+  its own — so `POST /pulls/:id/intent` and the subsequent `GET` disagree there
+  too. (`src/modules/brief/service.ts:147`, `src/modules/intent/service.ts:230`)
+
 - **2026-08-10** — `DepCruiseGraph.buildEdges` returned **zero edges on Windows,
   silently**, and one line caused it: `toRel` ended `return relative(root, abs)`,
   which emits NATIVE separators, while `pipeline/walk.ts:119` deliberately
@@ -155,6 +170,21 @@ an entry can age — verify before relying on one.
   `ContainerOverrides`. (`src/modules/repo-intel/service.ts:104`)
 
 ## Codebase patterns & tool notes
+
+- **2026-08-14** — In the house module shape (`ports.ts` / `prompt.ts` /
+  `helpers.ts` / `service.ts`), the obvious wiring closes a `no-circular` cycle:
+  `ports.ts` type-imports the model's output shape from `prompt.ts`, `prompt.ts`
+  imports a transform from `helpers.ts`, and `helpers.ts` imports its row types
+  back from `ports.ts`. `tsPreCompilationDeps: true` means the type-only edge
+  counts, so `arch:check` fails on three files that could not cycle at runtime.
+  `blast` never hit it only because its output is one field and `ports.ts`
+  inlines `{ summary: string }` — which does not scale to a five-field schema.
+  The rule that resolves it: **`ports.ts` imports nothing from its own module.**
+  Put every shape both the prompt and the helpers touch there (the module's
+  `BriefSection` and its structural `BriefOutputShape`), and have `prompt.ts`
+  annotate its zod schema as `z.ZodType<ThatShape>` so the schema and the mirror
+  cannot drift silently. (`src/modules/brief/ports.ts:1`,
+  `src/modules/brief/prompt.ts:33`)
 
 - **2026-08-14** — [`src/vendor/shared/contracts/knowledge.ts`](src/vendor/shared/contracts/knowledge.ts)
   holds **producer-less sketch contracts for lessons that have not shipped**
@@ -314,6 +344,18 @@ an entry can age — verify before relying on one.
   (`src/modules/reviews/run-executor.ts:213`)
 
 ## Recurring errors & fixes
+
+- **2026-08-14** — `onConflictDoUpdate` on the `settings` table fails at runtime
+  with `there is no unique or exclusion constraint matching the ON CONFLICT
+  specification`, whichever target you name. Its unique index is
+  `(workspace_id, user_id, key)` and **`user_id` is nullable**: a workspace-level
+  row has `user_id IS NULL`, Postgres treats every NULL as distinct, so no
+  conflict is ever detected — and `(workspace_id, key)` alone is not an index at
+  all. Seeding a `feature_models` row in a test therefore has to be
+  delete-then-insert, not an upsert. Worth knowing because the failure only
+  appears when the test runs against real Postgres, and the message points at
+  the ON CONFLICT clause rather than at the nullable column that causes it.
+  (`src/db/schema/core.ts:46`, `test/brief-repo.it.test.ts:130`)
 
 - **2026-08-14** — A route that enqueues a `container.jobs` job returns **before
   the job runs**, so in an `*.it.test.ts` the job's terminal write lands during

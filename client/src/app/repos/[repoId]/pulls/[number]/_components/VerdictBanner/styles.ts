@@ -22,6 +22,9 @@ export const s = {
     flexShrink: 0,
   }),
   main: { flex: 1, minWidth: 0 } satisfies CSSProperties,
+  /** Pushes the regenerate control to the end of the title row, so it reads as
+   *  the row's one action rather than one more chip among the badges. */
+  regenerate: { marginLeft: "auto" } satisfies CSSProperties,
   titleRow: {
     display: "flex",
     alignItems: "center",

@@ -5,6 +5,9 @@
 export { DiffViewer } from "./DiffViewer";
 export { FileCard } from "./FileCard";
 export type { DiffCommentApi } from "./comments";
+/* The per-file anchor, so "Review focus" (L05) can scroll the diff to a path
+   without knowing how either viewer lays its files out. */
+export { fileAnchorId } from "./helpers";
 /* Severity presentation, shared with Smart Diff's own header adornments so the
    colour of a file's finding dot and the colour of the line chip it scrolls to
    can never disagree. */

@@ -5,6 +5,8 @@ import { useTranslations } from "next-intl";
 import { SectionLabel, Button, Skeleton, Icon } from "@devdigest/ui";
 import { usePrIntent, useDeriveIntent } from "@/lib/hooks/intent";
 import { ApiError } from "@/lib/api";
+import type { BriefRisk } from "@devdigest/shared";
+import { RiskAreas } from "./_components/RiskAreas";
 import { isStale, sourceLine } from "./helpers";
 import { s, badgeConfidence } from "./styles";
 
@@ -12,6 +14,14 @@ interface IntentCardProps {
   prId: string | null;
   /** The PR's current head commit — an intent derived against another is stale. */
   headSha: string;
+  /**
+   * The brief's risk areas (L05), rendered below the scope lists.
+   *
+   * Passed in rather than fetched: `OverviewTab` owns the one `usePrBrief`
+   * call, so the card stays presentational and the overview makes one query
+   * for the three places the brief appears.
+   */
+  risks?: BriefRisk[] | null;
 }
 
 /**
@@ -20,7 +30,7 @@ interface IntentCardProps {
  * and the confidence badge are the point: a conclusion without its evidence is
  * not checkable.
  */
-export function IntentCard({ prId, headSha }: IntentCardProps) {
+export function IntentCard({ prId, headSha, risks }: IntentCardProps) {
   const t = useTranslations("prReview");
   const { data, isLoading, isError, error, refetch, isFetching } = usePrIntent(prId);
   const derive = useDeriveIntent(prId);
@@ -154,6 +164,8 @@ export function IntentCard({ prId, headSha }: IntentCardProps) {
           )}
         </div>
       </div>
+
+      <RiskAreas risks={risks} />
 
       {data.missing_context.length > 0 && (
         <ul style={s.warning}>

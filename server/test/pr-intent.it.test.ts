@@ -63,6 +63,7 @@ d('pr_intent persistence (Testcontainers pg)', () => {
       confidence: 'low',
       sources: ['title', 'hunk_headers'],
       missingContext: ['issue #7 could not be fetched: 404'],
+      linkedIssue: { number: 12, title: 'Rate limit us', body: 'Please.', state: 'open' },
       provider: 'openrouter',
       model: 'google/gemini-2.5-flash-lite',
     });
@@ -74,6 +75,12 @@ d('pr_intent persistence (Testcontainers pg)', () => {
     expect(first?.missingContext).toEqual(['issue #7 could not be fetched: 404']);
     expect(first?.headSha).toBe('sha-one');
     expect(first?.createdAt).toBeInstanceOf(Date);
+    expect(first?.linkedIssue).toEqual({
+      number: 12,
+      title: 'Rate limit us',
+      body: 'Please.',
+      state: 'open',
+    });
 
     await reviewRepo.upsertIntent(prId, {
       intent: { intent: 'Add rate limiting, take two', in_scope: ['middleware'], out_of_scope: [] },
@@ -81,6 +88,10 @@ d('pr_intent persistence (Testcontainers pg)', () => {
       confidence: 'high',
       sources: ['title', 'description', 'issue#471'],
       missingContext: [],
+      // A PR that no longer links an issue. The column is in `values`, so
+      // re-derivation replaces it wholesale — a stale reference surviving here
+      // is a reference the brief would then render as current (L05).
+      linkedIssue: null,
       provider: 'openrouter',
       model: 'google/gemini-2.5-flash-lite',
     });
@@ -90,6 +101,7 @@ d('pr_intent persistence (Testcontainers pg)', () => {
     expect(second?.confidence).toBe('high');
     expect(second?.missingContext).toEqual([]);
     expect(second?.out_of_scope).toEqual([]);
+    expect(second?.linkedIssue).toBeNull();
   });
 
   it('returns undefined for a PR with no intent', async () => {

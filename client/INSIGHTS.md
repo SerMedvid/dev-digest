@@ -94,6 +94,18 @@ an entry can age — verify before relying on one.
   the Smart Diff e2e flow ended up on `nth-of-type` chains.
   (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/IntentCard/styles.ts`)
 
+- **2026-08-14** — Switching tab and scrolling to an element **in the same
+  handler** silently does nothing on the PR detail page. `page.tsx` renders each
+  tab behind `tab === "..."`, and `tab` comes from `useSearchParams` via
+  `router.replace`, so the target tab's DOM does not exist until that navigation
+  commits — `document.getElementById(...)` in the click handler returns `null`
+  and the click reads as dead. Defer the lookup by one frame
+  (`requestAnimationFrame`) after calling the tab setter. Note this is a
+  different problem from the one-shot latch on `FindingCard`/`FileCard`'s
+  `scrollToLine` (2026-08-02 below): there the element exists and the effect
+  replays, here the element does not exist yet.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/ReviewFocus/ReviewFocus.tsx:41`)
+
 - **2026-08-06** — Every PR-detail tab takes `prId: string | null`
   (`OverviewTab`, `FindingsTab`, `DiffTab`, and `IntentCard` under it), so a
   null-`prId` branch inside one reads as a live user-facing path. It is

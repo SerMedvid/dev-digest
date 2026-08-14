@@ -13,7 +13,7 @@ import type { FindingMark } from "@devdigest/shared";
 import type { PrFile } from "@/lib/types";
 import { AUTO_EXPAND_MAX_LINES } from "../constants";
 import { SEVERITY_RANK } from "./constants";
-import { parsePatch, type Line } from "../helpers";
+import { fileAnchorId, parsePatch, type Line } from "../helpers";
 import {
   buildThreads,
   keysForLine,
@@ -136,7 +136,7 @@ export function FileCard({
   }, [scrollToLine, open, lines]);
 
   return (
-    <div style={s.fileCard}>
+    <div id={fileAnchorId(file.path)} style={s.fileCard}>
       <div onClick={toggle} style={s.fileHeader}>
         <Icon.ChevronRight size={13} style={chevronFor(open)} />
         <Icon.FileText size={14} style={s.fileIcon} />
