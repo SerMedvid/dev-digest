@@ -25,6 +25,42 @@ an entry can age — verify before relying on one.
 
 ## What doesn't work
 
+- **2026-08-14** — **`RiskAreas` is the brief's data mounted inside the
+  *intent's* card**, and `IntentCard` returns early for `isLoading`, `isError`
+  and `!data` — none of those three branches render `RiskAreas` at all
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/IntentCard/IntentCard.tsx:50`).
+  So a blip in `usePrIntent` takes the brief's risk list down with it even
+  though `usePrBrief` succeeded, and because the expanded row is plain
+  component state with nothing in the URL, the remount silently collapses it
+  and the reader's click is undone. The nesting is deliberate — "what this PR
+  is for" and "what could go wrong with it" read as one card — but the coupling
+  is not. **Fixed the same day**: the branches now return `head`/`foot` slots
+  and the card renders exactly three children — `foot` is `null`, never absent
+  — so `RiskAreas` holds index 1 whatever the intent query does. That last part
+  is the load-bearing bit and the reason a wrapper element or a conditional
+  sibling would *not* have fixed it: React matches children by position, so a
+  branch that renders a different number of children before the shared one
+  remounts it just as surely as an early return that omits it. The general
+  shape: a card that renders another query's data keeps that data out of its
+  own early returns, and keeps its position fixed across them.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/IntentCard/IntentCard.tsx:212`)
+
+- **2026-08-14** — **This app has no ambient refetch**, so any UI state whose
+  only exit is "the server finished something" deadlocks unless it polls for
+  that itself. [`providers.tsx`](src/lib/providers.tsx) sets `staleTime: 30_000`
+  **and** `refetchOnWindowFocus: false` globally, so nothing re-reads a query
+  after a one-shot `invalidateQueries` — not a tab switch, not returning to the
+  window. The PR brief shipped with exactly that hole: a 409 (a generation is
+  already in flight) put the card in a busy state, `onError` invalidated
+  `["pr-brief", prId]` **once**, that refetch raced the generation it was waiting
+  for and got the same 404, and the control then read "Generating…" *disabled,
+  forever* — with the brief already stored server-side and only a full page
+  reload clearing it. Answer a "someone else is doing it" response with a bounded
+  poll, and bound it in both directions: the work landing ends the wait, and so
+  does a give-up timer, because work that **fails** never lands anything and
+  waiting on it forever is the same stuck control by another route.
+  (`src/lib/hooks/brief.ts:76`)
+
 - **2026-08-10** — **Clamping a force-layout's output into a fixed viewBox is
   not containment — it is the bug.** `forceCenter` only translates the centroid;
   nothing in `d3-force` bounds the extent, and the settled blob's diameter grows
@@ -93,6 +129,18 @@ an entry can age — verify before relying on one.
   locators available are roles, visible text, and positional CSS — which is why
   the Smart Diff e2e flow ended up on `nth-of-type` chains.
   (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/IntentCard/styles.ts`)
+
+- **2026-08-14** — Switching tab and scrolling to an element **in the same
+  handler** silently does nothing on the PR detail page. `page.tsx` renders each
+  tab behind `tab === "..."`, and `tab` comes from `useSearchParams` via
+  `router.replace`, so the target tab's DOM does not exist until that navigation
+  commits — `document.getElementById(...)` in the click handler returns `null`
+  and the click reads as dead. Defer the lookup by one frame
+  (`requestAnimationFrame`) after calling the tab setter. Note this is a
+  different problem from the one-shot latch on `FindingCard`/`FileCard`'s
+  `scrollToLine` (2026-08-02 below): there the element exists and the effect
+  replays, here the element does not exist yet.
+  (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/ReviewFocus/ReviewFocus.tsx:41`)
 
 - **2026-08-06** — Every PR-detail tab takes `prId: string | null`
   (`OverviewTab`, `FindingsTab`, `DiffTab`, and `IntentCard` under it), so a
@@ -261,6 +309,19 @@ an entry can age — verify before relying on one.
   (`src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/BlastCard/_components/BlastGraph/helpers.ts:24`)
 
 ## Recurring errors & fixes
+
+- **2026-08-14** — A test that combines `vi.useFakeTimers()` with RTL's
+  `waitFor` **hangs to the 5s test timeout instead of failing**, which reads as
+  "the code never settles" when the timers simply never advanced: `waitFor`
+  polls on `setTimeout` and detects *Jest's* fake timers, not Vitest's, so with
+  frozen timers its own poll never fires. Use
+  `vi.useFakeTimers({ shouldAdvanceTime: true })` — real time still drives
+  `waitFor`, while `await vi.advanceTimersByTimeAsync(ms)` (the async form, so
+  the microtasks a refetch queues actually flush) jumps the interval or timeout
+  under test. Needed for anything polling-shaped: the brief's 409 watch, and any
+  future `refetchInterval`. Same failure signature as the `retry: false` entry
+  under *Codebase patterns* — a slow test masquerading as a broken one.
+  (`src/lib/hooks/brief.test.ts:86`)
 
 - **2026-08-10** — A **local green build is not evidence this package builds**.
   [`.github/workflows/client.yml`](../.github/workflows/client.yml) runs

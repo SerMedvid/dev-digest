@@ -169,6 +169,8 @@ export default function PRDetailPage() {
             prId={prId}
             headSha={pr.head_sha}
             repoFullName={repoFullName}
+            files={pr.files}
+            onSetTab={setTab}
           />
         )}
 

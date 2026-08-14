@@ -46,6 +46,14 @@ export async function markReviewed(db: Db, prId: string, sha: string): Promise<v
 
 // ---- intent ---------------------------------------------------------------
 
+/** The `pr_intent.linked_issue` payload — `@devdigest/shared`'s `IssueMeta`. */
+export interface LinkedIssue {
+  number: number;
+  title: string;
+  body?: string | null;
+  state: string;
+}
+
 export interface IntentUpsert {
   intent: Intent;
   /** The head commit this intent was derived against. */
@@ -53,6 +61,8 @@ export interface IntentUpsert {
   confidence: IntentConfidence;
   sources: string[];
   missingContext: string[];
+  /** The first issue the PR body linked, or null when it linked none (L05). */
+  linkedIssue: LinkedIssue | null;
   provider: string;
   model: string;
 }
@@ -62,6 +72,7 @@ export interface StoredIntent extends Intent {
   confidence: IntentConfidence;
   sources: string[];
   missingContext: string[];
+  linkedIssue: LinkedIssue | null;
   provider: string;
   model: string;
   createdAt: Date;
@@ -76,6 +87,10 @@ export async function upsertIntent(db: Db, prId: string, rec: IntentUpsert): Pro
     confidence: rec.confidence,
     sources: rec.sources,
     missingContext: rec.missingContext,
+    // In `values` so re-derivation replaces it wholesale, `null` included: an
+    // issue unlinked since the last derivation must not survive as a stale
+    // reference the brief would then render.
+    linkedIssue: rec.linkedIssue,
     provider: rec.provider,
     model: rec.model,
     // Re-derivation replaces the record wholesale, timestamp included: the row
@@ -99,6 +114,7 @@ export async function getIntent(db: Db, prId: string): Promise<StoredIntent | un
     confidence: row.confidence as IntentConfidence,
     sources: row.sources,
     missingContext: row.missingContext,
+    linkedIssue: row.linkedIssue ?? null,
     provider: row.provider,
     model: row.model,
     createdAt: row.createdAt,

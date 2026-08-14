@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { Finding, Verdict } from './findings.js';
 import { Intent, SmartDiff } from './brief.js';
+import { IssueMeta } from './platform.js';
 
 /**
  * A2 — Review-Core API surface contracts. These extend the core
@@ -71,6 +72,13 @@ export const PrIntentRecord = Intent.extend({
   sources: z.array(z.string()),
   /** Referenced material we tried and failed to retrieve. Never invented over. */
   missing_context: z.array(z.string()),
+  /**
+   * The FIRST issue the PR body linked, as fetched at derivation time — the
+   * same `IssueMeta` shape `PrDetail.linked_issue` uses, so nothing new is
+   * minted. Null when the body linked none or the fetch failed; replaced
+   * wholesale on re-derivation, so an unlinked issue does not survive (L05).
+   */
+  linked_issue: IssueMeta.nullish(),
   provider: z.string(),
   model: z.string(),
   created_at: z.string(),

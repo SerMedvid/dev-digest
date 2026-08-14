@@ -71,10 +71,19 @@ cleanup() {
   kill_tree "$SERVER_PID"
   # Backstop: reap whatever still holds the ISOLATED ports (never the dev stack's
   # 3002/3001 — only the alt ports this script started).
+  # `lsof` does not exist in Git Bash, so on Windows this backstop used to do
+  # nothing at all: the container went away while the API and web kept the ports,
+  # and the NEXT run died with EADDRINUSE against a stack whose database was
+  # already gone. Fall back to PowerShell, which is always present there.
   for port in "$WEB_PORT" "$API_PORT"; do
     local pids
     pids="$(lsof -nP -iTCP:"$port" -sTCP:LISTEN -t 2>/dev/null || true)"
-    [ -n "$pids" ] && kill $pids 2>/dev/null || true
+    if [ -z "$pids" ] && command -v powershell >/dev/null 2>&1; then
+      pids="$(powershell -NoProfile -Command \
+        "(Get-NetTCPConnection -LocalPort $port -State Listen -ErrorAction SilentlyContinue).OwningProcess" \
+        2>/dev/null | tr -d '\r')"
+    fi
+    [ -n "$pids" ] && kill -9 $pids 2>/dev/null || true
   done
   docker rm -f "$PG_CONTAINER" >/dev/null 2>&1 || true
   exit "$code"
@@ -143,9 +152,23 @@ done
 [ "$api_up" -eq 1 ] || { echo "API never became healthy on :$API_PORT"; exit 1; }
 log "API healthy"
 
-# --- web on :$WEB_PORT (next dev → reads NEXT_PUBLIC_API_BASE from env) -------
-log "starting web on :$WEB_PORT"
-(cd client && pnpm exec next dev -p "$WEB_PORT") &
+# --- web on :$WEB_PORT --------------------------------------------------------
+# CI serves a PRODUCTION build (`pnpm build` + `pnpm start` in e2e-web.yml), and
+# this script used to serve `next dev`. That is not a detail: a dev server ships
+# a different React build, compiles routes on demand, and hydrates on its own
+# schedule, so a flow can pass here and fail in CI for reasons no amount of
+# re-reading the flow explains. Match CI by default and keep dev behind a knob
+# for the fast edit loop. NEXT_PUBLIC_API_BASE is inlined at BUILD time, which
+# is why it is exported before this and not after.
+if [ "${E2E_WEB_MODE:-build}" = "dev" ]; then
+  log "starting web on :$WEB_PORT (next dev — NOT what CI runs)"
+  (cd client && pnpm exec next dev -p "$WEB_PORT") &
+else
+  log "building web (production, as CI does)"
+  (cd client && pnpm exec next build) || { echo "web build failed"; exit 1; }
+  log "starting web on :$WEB_PORT (next start)"
+  (cd client && pnpm exec next start -p "$WEB_PORT") &
+fi
 WEB_PID=$!
 log "waiting for web :$WEB_PORT"
 web_up=0

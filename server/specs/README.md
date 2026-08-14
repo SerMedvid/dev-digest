@@ -44,6 +44,11 @@ Conventions:
   `uncomparable_prs` disclosure that keeps an empty list from reading as an
   all-clear. Client half:
   [`client/specs/blast-radius-card.md`](../../client/specs/blast-radius-card.md).
+- [`brief.md`](brief.md) — the PR Why + Risk Brief: the two endpoints, the seven
+  inputs and their caps, the `head_sha` cache key and the `review_id` staleness
+  marker, and the grounding gate that drops anything the model named which the
+  inputs do not contain. Client half:
+  [`client/specs/pr-brief-card.md`](../../client/specs/pr-brief-card.md).
 - [`smart-diff.md`](smart-diff.md) — grouping a PR's changed files into
   `core`/`wiring`/`boilerplate`, the deterministic ordering and split
   suggestion, the on-demand per-file summary endpoint, and what lands in

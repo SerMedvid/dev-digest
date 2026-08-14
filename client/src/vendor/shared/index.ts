@@ -3,7 +3,8 @@
  *
  * Exports (Zod schemas + inferred TS types):
  *  - contracts/findings   Review, Finding, Severity, Verdict, FindingAction, trifecta
- *  - contracts/brief      Intent, BlastRadius, Risks, PrHistory, SmartDiff, PrBrief
+ *  - contracts/brief      Intent, BlastRadius, SmartDiff, RiskLevel, BriefRisk,
+ *                         ReviewFocusItem, Brief, PrBriefRecord
  *  - contracts/blast      BlastStatus, BlastCallerC/BlastSymbolC, BlastRadiusResponse
  *  - contracts/knowledge  Conformance, Onboarding, EvalRun/EvalCase, MemoryItem,
  *                         Skill/CommunitySkill, ConventionCandidate, Agent

@@ -37,6 +37,97 @@ an entry can age — verify before relying on one.
   static HTML fixture in both states (present and absent) before trusting it.
   (`specs/09-pr-smart-diff.flow.json`, `specs/08-pr-intent.flow.json:20`)
 
+- **2026-08-14** — **The local runner was serving `next dev` while CI serves a
+  PRODUCTION build, and that gap is why a whole class of failures "only happens
+  in CI".** [`e2e-web.yml`](../.github/workflows/e2e-web.yml) does
+  `pnpm build` + `pnpm start`; `scripts/e2e.sh` did `next dev`. Different React
+  build, routes compiled on demand, different hydration timing — so
+  [`CLAUDE.md`](CLAUDE.md)'s instruction to "check it passes under
+  `./scripts/e2e.sh` (the CI environment)" was not true of the one thing most
+  likely to differ. The script now builds by default, with `E2E_WEB_MODE=dev`
+  for the fast edit loop. Reach for this **first** when CI fails a step that no
+  local run can reproduce, before suspecting the locator, the seed or the
+  session. Caveat, recorded honestly: this was found while chasing flow `11`'s
+  CI-only click failures and is a real gap, but it has **not** been shown to
+  cause them — three attempts to reproduce under parity died on leaked ports and
+  a mis-aimed `pkill` before producing a verdict. (`../scripts/e2e.sh:164`)
+
+- **2026-08-14** — **Flow `11` is now READ-ONLY: both of its click-driven cases
+  are gone**, superseding the restore-and-it-passes entry this replaces. The
+  expand-on-click step failed in CI, was removed, restored after a clean local
+  run went 11/11 with it — and then CI failed the *next* click in the same flow
+  ("click the first focus row" → `wait --url tab=diff`, click reports `✓`, URL
+  never changes). Ruled out with evidence, so do not re-spend it: the literals
+  (they match [`../server/src/db/seed.ts`](../server/src/db/seed.ts)`:447` and
+  the stored row), the locator (`find text` resolves the innermost node, which
+  bubbles), **below-the-fold position** (reproduced at CI's exact 1280×577
+  viewport: the row sits at `top: 1206` and the click still works), and session
+  sharing (CI runs one suite on a clean runner). What is left unexplained is a
+  click that lands and produces no `router.replace`, in CI only. The rendering
+  assertions still cover the three brief surfaces; the interactions stay covered
+  by `RiskAreas.test.tsx` and `ReviewFocus.test.tsx`.
+  (`specs/11-pr-brief.flow.json`)
+
+- **2026-08-14** — **agent-browser is ONE session per machine, so two runs at
+  once silently corrupt each other — and the damage looks exactly like a flaky
+  interaction.** `run.ts` shells out to the CLI per step with no session id, so
+  a second suite (a colleague's, a leftover background run, a hung one that
+  never exited) drives the *same page*. The signature is diagnostic: every
+  `wait --text` still passes, because both runs sit on similar pages and the
+  literal is somewhere in the DOM, while every click-then-assert step fails,
+  because the other run navigates away between the click and the assertion.
+  Observed live: flow `11`'s "the click switches to the Files changed tab" step
+  failed in a run launched while a forgotten hermetic run was still stepping
+  through the same flows; the identical click passed `exit=0` on a clean
+  session moments later, URL and all. Scope it correctly, though: this explains
+  **local** confusion only. It cannot explain a CI failure — CI runs one suite
+  on a fresh runner — so it is not the answer to flow `11`'s, and the 2026-08-10
+  flow-`09` entry stays unexplained rather than closed by it. Before treating a
+  local interaction failure as flaky: confirm nothing else holds the session (a
+  stale `next dev` on 3100/3101 is the tell), then re-run alone.
+  (`../scripts/e2e.sh`, `run.ts:44`)
+
+- **2026-08-14** — **`scripts/e2e.sh`'s teardown leaks the API and web
+  processes on Windows**, so the *next* run meets a stack whose ports are bound
+  by a server with no database behind it — the isolated Postgres container is
+  removed by the same trap that fails to kill them. The backstop is
+  `lsof -nP -iTCP:"$port" -sTCP:LISTEN -t`, and `lsof` does not exist in Git
+  Bash; `kill_tree` alone misses the grandchild that `pnpm exec tsx` / `next
+  dev` actually spawn as the listener. Symptom: `curl localhost:3100` answers
+  404 and `localhost:3101/health` answers 200 while `docker ps` shows no
+  `devdigest-e2e-postgres`. **Fixed** the same day — the backstop now falls back
+  to `powershell -Command "(Get-NetTCPConnection …).OwningProcess"` when `lsof`
+  is absent — but it cost two dead runs before that, so if a run dies with
+  `EADDRINUSE` on 3100/3101, check for an orphan rather than assuming the
+  previous run is still alive. Related trap while cleaning up by hand: the dev
+  API and the hermetic API are the *same command line* (`tsx src/server.ts`), so
+  `pkill -f` matches both and takes the developer's stack down with it. Kill by
+  port or PID. (`../scripts/e2e.sh:70`)
+
+- **2026-08-14** — **Second instance of the 2026-08-10 entry below, and it
+  settles the rule: this suite covers no expand-on-click path, in any flow.**
+  Flow `11`'s "the explanation reveals on expand" step failed in the
+  maintainer's hermetic run — `wait --text` timed out on the risk explanation
+  while the step *above* it (the row title, same component, same seeded row)
+  passed — and did not reproduce against the dev stack in either form: direct
+  URL to the PR, and the flow's own click-through path from the pulls list,
+  both `exit=0` on the click **and** the reveal. Ruled out and not worth
+  re-checking: the literal (it matches
+  [`../server/src/db/seed.ts`](../server/src/db/seed.ts)`:447` and the stored
+  `pr_brief` row character for character, so this is *not* the
+  literal-provenance class recorded under _Codebase patterns_), and the locator
+  (`find text` resolves the innermost node, the `<span>` holding the title,
+  which bubbles to the row's `<button>`). Leading suspect, **unproven**:
+  `RiskAreas` mounts inside `IntentCard`, whose `isLoading` / `isError` /
+  `!data` branches render no `RiskAreas` at all
+  (`../client/src/app/repos/[repoId]/pulls/[number]/_components/OverviewTab/_components/IntentCard/IntentCard.tsx:50`),
+  so any blip in the **intent** query unmounts it and its `open` state — plain
+  component state, nothing in the URL — resets, collapsing an expanded row for
+  good. What to do instead: assert only what the **collapsed** render already
+  shows (the refs are visible collapsed, so the grounding assertion never
+  needed the click), and leave reveal-on-expand to `RiskAreas.test.tsx`, which
+  covers it four ways. (`specs/11-pr-brief.flow.json:23`)
+
 - **2026-08-10** — **Supersedes the "Applied in flow `09`'s post-click step"
   claim in the 2026-08-10 `get count` entry under _Codebase patterns & tool
   notes_: that step no longer exists.** Flow `09`'s "clicking the collapsed
@@ -78,6 +169,22 @@ an entry can age — verify before relying on one.
   `specs/02-repo-pulls-detail.flow.json:8`)
 
 ## Codebase patterns & tool notes
+
+- **2026-08-14** — Extends the 2026-08-05 entry below from *casing* to
+  *provenance*: a `--text` literal for seeded content must be read off
+  [`server/src/db/seed.ts`](../server/src/db/seed.ts), never copied from the
+  feature's unit tests. Both usually carry a fixture with the same shape and
+  similar prose, so the copy looks right in review and in the diff — flow `11`
+  asserted the brief's `why` as *"Unauthenticated clients can hammer …"* while
+  the seed says *"can **currently** hammer"*, one word apart, and the step timed
+  out. What made it expensive to read is that the step **above** it passed:
+  section labels like `PR BRIEF` render in the empty state too, so "the section
+  is there" is not evidence the data loaded, and the failure looks like a
+  broken query rather than a wrong string. When adding a flow over seeded data,
+  diff every literal against the seed — a one-liner over the flow's `--text`
+  arguments and the seeded row catches the whole class at once — and prefer
+  asserting a value only the *populated* state can render.
+  (`specs/11-pr-brief.flow.json:12`, `../server/src/db/seed.ts:441`)
 
 - **2026-08-10** — `get count` is a **single instantaneous DOM read** taken in
   its own process, with none of the polling every `wait` form does — so a

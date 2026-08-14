@@ -2,8 +2,12 @@ import { z } from 'zod';
 import { Severity } from './findings.js';
 
 /**
- * PR Brief building blocks: Intent, Blast radius, Risks, PR History,
- * Smart Diff. Composed into PrBrief.
+ * PR Brief building blocks: Intent, Blast radius, Smart Diff — plus the
+ * composed `Brief` / `PrBriefRecord` the brief module persists (L05).
+ *
+ * The earlier `Risk` / `Risks` / `PrHistory` / `PrBrief` scaffolding was
+ * replaced rather than extended: it had no consumer, and its `file_refs` had no
+ * grounding guarantee behind it. `BriefRisk.refs` does.
  */
 
 // ---- Intent ----
@@ -43,40 +47,6 @@ export const BlastRadius = z.object({
   summary: z.string(),
 });
 export type BlastRadius = z.infer<typeof BlastRadius>;
-
-// ---- Risks ----
-export const RiskSeverity = z.enum(['high', 'medium', 'low']);
-export type RiskSeverity = z.infer<typeof RiskSeverity>;
-
-export const Risk = z.object({
-  kind: z.string(),
-  title: z.string(),
-  explanation: z.string(),
-  severity: RiskSeverity,
-  file_refs: z.array(z.string()),
-});
-export type Risk = z.infer<typeof Risk>;
-
-export const Risks = z.object({
-  risks: z.array(Risk),
-});
-export type Risks = z.infer<typeof Risks>;
-
-// ---- PR History ----
-export const PrHistoryItem = z.object({
-  pr_number: z.number().int(),
-  title: z.string(),
-  merged_at: z.string(),
-  author: z.string(),
-  files_overlap: z.array(z.string()),
-  notes: z.string(),
-});
-export type PrHistoryItem = z.infer<typeof PrHistoryItem>;
-
-export const PrHistory = z.object({
-  history: z.array(PrHistoryItem),
-});
-export type PrHistory = z.infer<typeof PrHistory>;
 
 // ---- Smart Diff ----
 export const SmartDiffRole = z.enum(['core', 'wiring', 'boilerplate']);
@@ -127,11 +97,68 @@ export const SmartDiff = z.object({
 });
 export type SmartDiff = z.infer<typeof SmartDiff>;
 
-// ---- Composed PR Brief (pr_brief.json) ----
-export const PrBrief = z.object({
-  intent: Intent,
-  blast: BlastRadius,
-  risks: Risks,
-  history: PrHistory,
+// ---- PR Why + Risk Brief (pr_brief) ----
+
+/**
+ * How much care this pull request needs. A closed enum rather than a score:
+ * the model produces it, and a number would invite the reader to believe a
+ * precision the inputs cannot support.
+ */
+export const RiskLevel = z.enum(['high', 'medium', 'low']);
+export type RiskLevel = z.infer<typeof RiskLevel>;
+
+export const BriefRisk = z.object({
+  title: z.string(),
+  explanation: z.string(),
+  severity: RiskLevel,
+  /**
+   * File paths, or endpoint/cron identifiers drawn from the blast map.
+   *
+   * The SERVER — not the model — guarantees every entry here exists in the
+   * pull request's own inputs: `groundBrief` (server/src/modules/brief/
+   * helpers.ts) drops an entry naming anything else, and drops the whole risk
+   * when nothing survives. Treat these as verified references, and never widen
+   * that guarantee to a field the gate does not check.
+   */
+  refs: z.array(z.string()),
 });
-export type PrBrief = z.infer<typeof PrBrief>;
+export type BriefRisk = z.infer<typeof BriefRisk>;
+
+/** One "read this first" pointer. `line` is null unless a finding vouches for it. */
+export const ReviewFocusItem = z.object({
+  file: z.string(),
+  line: z.number().int().nullable(),
+  reason: z.string(),
+});
+export type ReviewFocusItem = z.infer<typeof ReviewFocusItem>;
+
+/** The five fields one structured call produces. Nothing the server computes. */
+export const Brief = z.object({
+  what: z.string(),
+  why: z.string(),
+  risk_level: RiskLevel,
+  risks: z.array(BriefRisk),
+  review_focus: z.array(ReviewFocusItem),
+});
+export type Brief = z.infer<typeof Brief>;
+
+/**
+ * The persisted brief plus its evidence trail.
+ *
+ * `stale` is computed by the server and is deliberately NOT in `Brief`: the
+ * model never sees it and cannot assert its own freshness. `head_sha` is the
+ * cache key; `review_id` is only a freshness marker — see server/specs/brief.md.
+ */
+export const PrBriefRecord = Brief.extend({
+  pr_id: z.string(),
+  head_sha: z.string(),
+  review_id: z.string().nullable(),
+  stale: z.boolean(),
+  /** Labels of the sources that composed the prompt, e.g. 'files (60 of 214)'. */
+  sources: z.array(z.string()),
+  est_tokens_in: z.number().int(),
+  provider: z.string(),
+  model: z.string(),
+  created_at: z.string(),
+});
+export type PrBriefRecord = z.infer<typeof PrBriefRecord>;

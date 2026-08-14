@@ -68,6 +68,13 @@ The isolated Postgres is ephemeral (no persistent volume), so it's empty every
 run and the seeded demo repo `acme/payments-api` is the only one — which is
 exactly what flows 02/04/05 need.
 
+Unlike CI, it runs with **your** credentials (`~/.devdigest/secrets.json` and
+`server/.env`), so the PR list makes a real `api.github.com` call per load —
+harmless, it 404s on the seeded fake repo and degrades to persisted PRs, but it
+is why the API log carries `HttpError: Not Found` lines that CI never shows.
+Flows must keep clear of any control that would spend a model call: in CI there
+is no key to spend, locally there is.
+
 ### Against your own running stack
 
 Only safe if your dev DB contains *only* the seeded repo (see precondition
@@ -103,3 +110,4 @@ a CI artifact by `.github/workflows/e2e-web.yml`).
 | `08-pr-intent` | PR #482 → Overview tab → seeded Intent card: statement, both scope lists, confidence badge, source line, not stale (never derives) |
 | `09-pr-smart-diff` | PR #482 → Files changed tab → Smart Diff groups render (Core/Wiring/Boilerplate), split banner absent, `package-lock.json` present but collapsed (asserted by count, not just header presence). Never summarizes. Neither expand-on-click interaction is covered here: the finding badge has no clickable target in the current seed (no boilerplate file carries a finding), and the header click was removed on 2026-08-10 after failing in one environment and proving unreproducible in every other — both stay covered by the hermetic client tests (see the flow's own description and `INSIGHTS.md`) |
 | `10-onboarding-tour` | sidebar → `/repos/<id>/onboarding` → the generate gate renders. Read-only: never clicks Generate, so no LLM call and no row written |
+| `11-pr-brief` | PR #482 → Overview tab → the seeded PR brief: banner `why` + risk badge, not stale, a RISK AREAS row with its grounded ref (asserted while collapsed), and the Review focus list — `:line` present only where a seeded finding covers it. **Read-only**: both click cases (expand a risk, jump from a focus row to the diff) were removed on 2026-08-14 after failing in CI and passing every local reproduction — see `INSIGHTS.md` before re-adding either. Never regenerates, so no LLM call |

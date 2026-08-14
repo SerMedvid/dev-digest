@@ -43,6 +43,10 @@ Conventions:
   dialog, plus the prior-PRs section inside its border. Producers are
   `GET /pulls/:id/blast` and `GET /pulls/:id/prior-prs`; server half of the
   latter is [`server/specs/prior-prs.md`](../../server/specs/prior-prs.md).
+- [`pr-brief-card.md`](pr-brief-card.md) — the PR Overview tab's brief: the
+  banner with its risk badge and regenerate control, the risk areas inside the
+  Intent card, and the ordered "read these first" list that jumps into the diff.
+  Server half: [`server/specs/brief.md`](../../server/specs/brief.md).
 - [`smart-diff-display.md`](smart-diff-display.md) — the Files changed tab's
   default rendering: files grouped by role, findings marked inline, collapse
   precedence, the order toggle, and the on-demand per-file summary. Server

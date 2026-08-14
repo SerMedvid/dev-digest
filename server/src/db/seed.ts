@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { createDb, type Db } from './client.js';
 import * as t from './schema.js';
-import { eq, and, inArray } from 'drizzle-orm';
+import { eq, and, desc, inArray } from 'drizzle-orm';
 import { pathToFileURL } from 'node:url';
 import {
   GENERAL_REVIEWER_PROMPT,
@@ -409,6 +409,87 @@ export async function seed(db: Db): Promise<{ workspaceId: string; userId: strin
       confidence: 'low',
       sources: ['title', 'description', 'hunk_headers'],
       missingContext: [],
+      provider: 'seed',
+      model: 'seed',
+    })
+    .onConflictDoNothing();
+
+  // ---- composed PR brief for the demo PR (L05) ----
+  // Outside the `if (!pr)` block for the same reason as the intent above: a DB
+  // seeded before the brief layer existed already has PR #482, and would
+  // otherwise never acquire a card. `head_sha` is read off the seeded row, or
+  // the card would render as permanently stale, and `review_id` points at the
+  // PR's seeded review so `stale` is false.
+  //
+  // Every path and endpoint named below appears in the seeded `pr_files`,
+  // `file_facts` or findings above, and every `review_focus` line falls inside
+  // a seeded finding's range. That is not decoration: a fixture that violates
+  // the grounding gate it exists to demonstrate is worse than no fixture, and
+  // the e2e flow asserts a risk ref against the Files-changed tab.
+  const [seededReview] = await db
+    .select({ id: t.reviews.id })
+    .from(t.reviews)
+    .where(eq(t.reviews.prId, pr!.id))
+    .orderBy(desc(t.reviews.createdAt))
+    .limit(1);
+  await db
+    .insert(t.prBrief)
+    .values({
+      prId: pr!.id,
+      json: {
+        what: 'Adds token-bucket rate limiting to the public API endpoints and wires it into the server boot path.',
+        why: 'Unauthenticated clients can currently hammer the public endpoints without limit. The change is small in surface but sits on the request path of every public route, so a mistake here degrades all of them at once — and it lands alongside a committed secret and an N+1 query that the last review already flagged.',
+        risk_level: 'high',
+        risks: [
+          {
+            title: 'A live secret is committed in configuration',
+            explanation:
+              'The configuration file gained a literal Stripe secret key in this pull request. Committed credentials are compromised the moment they are pushed, so rotating the key matters more than removing the line.',
+            severity: 'high',
+            refs: ['src/config.ts'],
+          },
+          {
+            title: 'The limiter sits in front of every public route',
+            explanation:
+              'The new middleware is reached from the public router, the webhook handler and the boot path, so a wrong window or ceiling returns 429 across all of them rather than in one place.',
+            severity: 'medium',
+            refs: [
+              'src/middleware/ratelimit.ts',
+              'src/api/public/index.ts',
+              'GET /api/public/items',
+              'POST /api/public/webhooks',
+            ],
+          },
+          {
+            title: 'A per-user query loop under a new limiter',
+            explanation:
+              'The user-list endpoint issues one query per user. Under a limiter that lets a burst through, that loop is what the burst lands on.',
+            severity: 'medium',
+            refs: ['src/api/users.ts'],
+          },
+        ],
+        review_focus: [
+          {
+            file: 'src/config.ts',
+            line: 12,
+            reason: 'The committed secret — read this before anything else.',
+          },
+          {
+            file: 'src/api/users.ts',
+            line: 45,
+            reason: 'The N+1 loop the limiter now fronts.',
+          },
+          {
+            file: 'src/middleware/ratelimit.ts',
+            line: null,
+            reason: 'The whole limiter is new; check the window and ceiling arithmetic.',
+          },
+        ],
+      },
+      headSha: pr!.headSha,
+      reviewId: seededReview?.id ?? null,
+      sources: ['pr', 'files', 'intent', 'blast', 'findings'],
+      estTokensIn: 0,
       provider: 'seed',
       model: 'seed',
     })

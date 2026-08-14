@@ -1,7 +1,7 @@
 import type { IntentConfidence, PrIntentRecord } from '@devdigest/shared';
 import { ConflictError, NotFoundError } from '../../platform/errors.js';
 import { MAX_BODY_BYTES } from './constants.js';
-import type { IntentDoc } from './domain.js';
+import type { IntentDoc, IssueMetaShape } from './domain.js';
 import { computeConfidence, crossRepoIssueRefs, docReferences, linkedIssueNumbers } from './helpers.js';
 import type { IntentServiceDeps } from './ports.js';
 
@@ -47,6 +47,7 @@ export class IntentService {
       confidence: stored.confidence,
       sources: stored.sources,
       missing_context: stored.missingContext,
+      linked_issue: stored.linkedIssue,
       provider: stored.provider,
       model: stored.model,
       created_at: stored.createdAt.toISOString(),
@@ -134,10 +135,10 @@ export class IntentService {
       // the rule at the service boundary: a PR that links no issue can never
       // acquire an `issue#` source or an issue-shaped missing-context note,
       // whatever a port implementation hands back for an empty request.
-      const issues: { found: IntentDoc[]; missing: string[] } =
+      const issues: { found: IntentDoc[]; missing: string[]; linked: IssueMetaShape | null } =
         issueNumbers.length > 0
           ? await this.deps.issues.fetch({ owner: repo.owner, name: repo.name }, issueNumbers)
-          : { found: [], missing: [] };
+          : { found: [], missing: [], linked: null };
       sources.push(...issues.found);
       missingContext.push(...issues.missing);
       for (const ref of crossRepoIssueRefs(pull.body)) {
@@ -206,6 +207,10 @@ export class IntentService {
         confidence,
         sources: sourceLabels,
         missingContext,
+        // Storage only. Nothing about `confidence`, `sources` or
+        // `missingContext` reads this — `computeConfidence` still weighs
+        // `issues.found`, so a stored issue can never inflate the claim.
+        linkedIssue: issues.linked,
         provider: model.provider,
         model: model.model,
       });
@@ -225,6 +230,7 @@ export class IntentService {
         confidence,
         sources: sourceLabels,
         missing_context: missingContext,
+        linked_issue: issues.linked,
         provider: model.provider,
         model: model.model,
         created_at: new Date().toISOString(),
