@@ -55,7 +55,7 @@ answer.
 | Stale (`stale: true`) | Everything above, plus an explicit marker saying a newer review has run. The brief is still served — one review out of date beats an empty card |
 | Generating | The control is disabled and reads `brief.regenerating`; the existing brief stays on screen |
 | Generation failed | The server's own message, inline and `role="alert"`, directly under the control that produced it |
-| Generation conflicted (`409`) | `brief.conflict` as a **`role="status"`, not an alert**, and the control stays in its busy state. A 409 means a generation is already in flight — a state, not a failure. Styling it as an error put a red "you can't" beside the stale marker's "you should", with nothing on screen that resolved the contradiction. The hook refetches on 409 so the winning generation's result lands, and the message is cleared once a newer `created_at` arrives, so it cannot outlive the condition |
+| Generation conflicted (`409`) | `brief.conflict` as a **`role="status"`, not an alert**, and the control stays in its busy state. A 409 means a generation is already in flight — a state, not a failure. Styling it as an error put a red "you can't" beside the stale marker's "you should", with nothing on screen that resolved the contradiction. The hook then **watches** for the winning generation (below), and the message clears once a newer `created_at` arrives, so it cannot outlive the condition |
 | No risks survived the gate | `RiskAreas` renders **nothing at all**. An empty block under a heading reads as a feature that failed |
 | No review focus | `ReviewFocus` renders nothing |
 | A focus file absent from the diff | The row renders unlinked rather than as a control that scrolls nowhere |
@@ -72,6 +72,25 @@ answer.
 `useGenerateBrief` writes the returned record straight into the cache with
 `setQueryData`. The POST already returns the fresh record, so a follow-up
 invalidation would spend a request to learn what is already held.
+
+### The 409 watch
+
+A 409 is answered by one immediate refetch **and then a poll**, every
+`CONFLICT_POLL_MS`, until the brief's `created_at` changes or `CONFLICT_GIVE_UP_MS`
+elapses. The single refetch that shipped first is not enough: it races the
+generation it is waiting for, so it sees the same 404, and nothing on the page
+refetches again — `staleTime` is 30s and `refetchOnWindowFocus` is off. The card
+was left holding a conflict state with the brief already stored on the server,
+clearing only on a full page reload.
+
+Both endings clear the mutation, which is what re-enables the control:
+
+- **It landed.** A changed `created_at` — including the first brief for a PR that
+  had none — stops the poll and drops the message.
+- **It gave up.** A generation that *fails* never lands a row, so an unbounded
+  wait is the same stuck control by another route. The bound sits past the
+  server's own ceiling for one generation (`withRetry`'s 4 attempts at a 60s
+  `withTimeout` each), so reaching it means the other generation died.
 
 Nothing calls the POST on mount. It always regenerates, and mounting the card
 would then spend a model call on every page open.
@@ -111,6 +130,8 @@ would then spend a model call on every page open.
 - [ ] Clicking regenerate calls the mutation and shows the in-flight label.
 - [ ] A 409 renders the conflict message as a `status`, never an `alert`, keeps
       the control busy, and clears once a newer brief arrives.
+- [ ] After a 409 the hook keeps polling until the winning generation lands, and
+      gives up at the bound so the control cannot stay busy forever.
 - [ ] The banner shows the review run's cost and tokens, and renders without a
       run rather than breaking.
 - [ ] `RiskAreas` renders one row per risk with its refs **visible collapsed**;
