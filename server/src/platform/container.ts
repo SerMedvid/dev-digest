@@ -41,6 +41,12 @@ import { FileSummaryModel } from '../modules/smart-diff/model.js';
 import { BlastRepository } from '../modules/blast/repository.js';
 import { BlastService } from '../modules/blast/service.js';
 import { BlastSummaryModel } from '../modules/blast/model.js';
+import { ProjectContextRepository } from '../modules/project-context/repository.js';
+import { OnboardingRepository } from '../modules/onboarding/repository.js';
+import { ProjectContextService } from '../modules/project-context/service.js';
+import { CloneWalker } from '../modules/project-context/walk.js';
+import type { ContextReaderPort } from '../modules/project-context/ports.js';
+import { CloneReader } from '../adapters/clone-reader/index.js';
 import { loadDiff } from '../modules/reviews/diff-loader.js';
 import type { RepoIntel } from '../modules/repo-intel/types.js';
 import { RepoIntelService } from '../modules/repo-intel/service.js';
@@ -90,6 +96,18 @@ export interface ContainerOverrides {
   /** repo-intel T3 adapters — only the indexer pipeline reads these. */
   depgraph?: DepGraph;
   tokenizer?: Tokenizer;
+  /**
+   * The confined clone reader (`adapters/clone-reader/`), so a test can drive
+   * `container.projectContext` without a clone on disk.
+   *
+   * Typed by the consuming module's port rather than by a `@devdigest/shared`
+   * interface, which is where `server/CLAUDE.md`'s adapter checklist would
+   * normally put it: this port describes a *filesystem* read, and
+   * `@devdigest/shared` is copied verbatim into `client/`, which has no
+   * filesystem and no use for it. `ports.ts` declares the shape structurally, so
+   * `CloneReader.open` satisfies it with no adapter class and no cast.
+   */
+  cloneReader?: ContextReaderPort;
 }
 
 export class Container {
@@ -120,6 +138,9 @@ export class Container {
   private _smartDiffService?: SmartDiffService;
   private _blastRepo?: BlastRepository;
   private _blastService?: BlastService;
+  private _projectContextRepo?: ProjectContextRepository;
+  private _onboardingRepo?: OnboardingRepository;
+  private _projectContext?: ProjectContextService;
   private _repoIntel?: RepoIntel;
   private _depgraph?: DepGraph;
   private _tokenizer?: Tokenizer;
@@ -298,6 +319,42 @@ export class Container {
         return new BlastSummaryModel(llm, choice.provider, choice.model);
       },
       ...(this.logger ? { log: this.logger } : {}),
+    }));
+  }
+
+  get projectContextRepo(): ProjectContextRepository {
+    return (this._projectContextRepo ??= new ProjectContextRepository(this.db));
+  }
+
+  get onboardingRepo(): OnboardingRepository {
+    return (this._onboardingRepo ??= new OnboardingRepository(this.db));
+  }
+
+  /**
+   * Project-context documents, needed by two callers — the module's routes and
+   * the review pre-work in `run-executor` — so the composition root is here.
+   *
+   * This assignment is also the **only** place the two filesystem ports are
+   * checked against their implementations: `ports.ts` declares `walker` and
+   * `reader` structurally rather than importing `CloneWalker`/`CloneReader`'s own
+   * types, because `tsPreCompilationDeps: true` makes a type-only import a real
+   * graph edge and would put `node:fs` in the module core's dependency graph.
+   * `server/tsconfig.json` includes `src/**` only, so `pnpm typecheck` never sees
+   * `server/test/**` — the test's type-level conformance check does not run in
+   * the gate, and this line does.
+   *
+   * `CloneReader.open` is a static that never touches `this`, so passing it
+   * detached is safe.
+   */
+  get projectContext(): ProjectContextService {
+    return (this._projectContext ??= new ProjectContextService({
+      store: this.projectContextRepo,
+      walker: new CloneWalker(),
+      reader: this.overrides.cloneReader ?? { open: CloneReader.open },
+      tokenCount: (text) => this.tokenizer.count(text),
+      // Discovery logs paths, counts and a duration — never document content and
+      // never the clone's absolute path.
+      ...(this.logger ? { logger: this.logger } : {}),
     }));
   }
 

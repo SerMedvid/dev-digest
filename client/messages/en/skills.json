@@ -37,6 +37,7 @@
     },
     "tabs": {
       "config": "Config",
+      "context": "Context",
       "preview": "Preview",
       "stats": "Stats",
       "versions": "Versions"
@@ -57,6 +58,34 @@
     "saving": "Saving…",
     "saveFailed": "Could not save this skill.",
     "enabled": "Enabled"
+  },
+  "projectContext": {
+    "heading": "Project context to use",
+    "hint": "Documents attached here are read into every review run by every agent that uses this skill — configure the pairing once and each agent inherits it. Earlier documents appear earlier in the assembled prompt, and every change is saved as you make it.",
+    "badge": "{attached} of {discovered} attached",
+    "filterPlaceholder": "Filter documents…",
+    "noRepo": "Pick a repository in the top bar to attach its documents.",
+    "loadError": "Couldn’t load the attached documents.",
+    "discoveryError": "Couldn’t scan the repository clone. Attached documents are still listed and can be detached.",
+    "noClone": "This repository has no clone on disk, so nothing was discovered. Attached documents are still listed.",
+    "empty": "No documents found. Discovery reads .md files under the repository's configured context roots.",
+    "saveFailed": "Couldn’t save the attached documents. Nothing was changed.",
+    "saveConflict": "These documents changed somewhere else while you were editing, so nothing was saved. The list below is the current one — make the change again.",
+    "row": {
+      "preview": "Preview {path}",
+      "missing": "Missing from the clone",
+      "beyondCap": "Not read: only 20 documents are read per run",
+      "otherRepo": "Attached in",
+      "dragHandle": "Reorder {path}"
+    },
+    "serialized": {
+      "label": "SERIALIZES AS",
+      "hint": "Exactly what a review run sends for this skill: the same heading, and each document wrapped as untrusted data.",
+      "empty": "Nothing is attached, so no project-context section is sent.",
+      "loadError": "Couldn’t build the serialisation preview.",
+      "unreadHeading": "Not read",
+      "unreadHint": "These attachments are named in the run trace instead of being sent."
+    }
   },
   "stats": {
     "usedBy": "Used by",

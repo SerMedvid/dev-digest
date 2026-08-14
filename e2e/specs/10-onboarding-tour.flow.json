@@ -1,0 +1,12 @@
+{
+  "name": "Onboarding Tour screen renders from the sidebar",
+  "description": "From the seeded repo, navigate to the Onboarding Tour via the sidebar and confirm the screen renders its generate gate. Exercises the repo-scoped route /repos/<id>/onboarding, the nav entry, and the GET /repos/:id/onboarding view endpoint. STRICTLY read-only: it never clicks Generate — that would spend a real LLM call on every e2e run and write a row. The generation path is covered by the hermetic server tests (onboarding-service, onboarding-gate). Assumes a freshly-seeded DB where acme/payments-api is the first repo, same as flows 02/04/05.",
+  "steps": [
+    { "cmd": ["open", "{BASE}/"], "label": "load the app root" },
+    { "cmd": ["wait", "--url", "/pulls"], "label": "land on the seeded repo's PR list" },
+    { "cmd": ["find", "text", "Onboarding Tour", "click"], "label": "open the Onboarding Tour from the sidebar" },
+    { "cmd": ["wait", "--url", "/onboarding"], "label": "navigate to the tour route" },
+    { "cmd": ["wait", "--load", "networkidle"], "label": "the tour view settles" },
+    { "cmd": ["wait", "--text", "Generate onboarding tour"], "label": "the generate gate renders for a repo with no tour yet" }
+  ]
+}

@@ -17,6 +17,7 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  RepoInfo,
   GitClient,
   CloneOptions,
   UnifiedDiff,
@@ -125,6 +126,8 @@ export interface MockGitHubOptions {
   login?: string;
   /** Existing inline review comments returned by listReviewComments. */
   comments?: PrReviewComment[];
+  /** The repository's own default branch, as `getRepoInfo` reports it. */
+  defaultBranch?: string;
 }
 
 export class MockGitHubClient implements GitHubClient {
@@ -236,6 +239,13 @@ export class MockGitHubClient implements GitHubClient {
 
   async currentLogin(): Promise<string> {
     return this.opts.login ?? 'mock-user';
+  }
+
+  /* Defaults to `main` because most fixtures are on it — but it is an option,
+     so a test can assert the branch is *read* rather than assumed. That
+     assumption is the bug this method exists to fix. */
+  async getRepoInfo(_repo: RepoRef): Promise<RepoInfo> {
+    return { defaultBranch: this.opts.defaultBranch ?? 'main' };
   }
 }
 

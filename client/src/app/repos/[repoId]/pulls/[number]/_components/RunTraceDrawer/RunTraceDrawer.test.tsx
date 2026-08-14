@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, vi } from "vitest";
-import { render, screen, cleanup, fireEvent } from "@testing-library/react";
+import { render, screen, cleanup, fireEvent, within } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import type { RunTrace } from "@devdigest/shared";
 import messages from "../../../../../../../../messages/en/runs.json"; // apps/web/messages/en/runs.json
@@ -19,8 +19,11 @@ const TRACE: RunTrace = {
   ],
 };
 
+/** What the mocked `useRunTrace` hands back; a case re-points it before rendering. */
+let traceData: RunTrace = TRACE;
+
 vi.mock("../../../../../../../lib/hooks/trace", () => ({
-  useRunTrace: () => ({ data: TRACE, isLoading: false }),
+  useRunTrace: () => ({ data: traceData, isLoading: false }),
 }));
 vi.mock("../../../../../../../lib/hooks/reviews", () => ({
   useRunEvents: () => ({ events: [], running: false }),
@@ -28,7 +31,10 @@ vi.mock("../../../../../../../lib/hooks/reviews", () => ({
 
 import RunTraceDrawer from "./RunTraceDrawer";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  traceData = TRACE;
+});
 
 function renderWithIntl(ui: React.ReactElement) {
   return render(
@@ -52,5 +58,47 @@ describe("A5 Run Trace drawer (smoke)", () => {
     fireEvent.click(screen.getByText("log"));
     // LiveLogStream renders its filter input
     expect(screen.getByPlaceholderText("Filter log…")).toBeInTheDocument();
+  });
+
+  /* AC-35. The slot is fed from stored configuration now, so `(dynamic)` is
+     actively false and the label has to say what the block is — attached specs —
+     and that its contents are untrusted. The Prompt-assembly section is
+     `defaultOpen={false}`, so it has to be opened before the block's label
+     exists in the DOM at all. */
+  it("names the project-context prompt block as attached, untrusted specs", () => {
+    traceData = {
+      ...TRACE,
+      prompt_assembly: {
+        ...TRACE.prompt_assembly,
+        specs: '## Project context\n<untrusted source="spec-0">\n# API contract\n</untrusted>',
+      },
+    };
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+
+    fireEvent.click(screen.getByText("Prompt assembly"));
+
+    expect(screen.getByText("Project context — attached specs (untrusted)")).toBeInTheDocument();
+    expect(screen.queryByText("Project context (dynamic)")).toBeNull();
+  });
+
+  /* AC-33: `RunTrace` gained no field, so an archived trace whose `specs_read` is
+     the hardcoded empty array still renders — as "none", not as a crash or a gap.
+     Scoped to the row, because "none" is not a unique string on this surface. */
+  it("still renders an empty specs_read as none", () => {
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+
+    const row = screen.getByText("Specs read").parentElement!;
+    expect(within(row).getByText("none")).toBeInTheDocument();
+  });
+
+  /* The guard is real: no persisted specs block, no label. Without this the
+     AC-35 assertion above could be satisfied by a label rendered unconditionally. */
+  it("renders no project-context block when the trace has none", () => {
+    renderWithIntl(<RunTraceDrawer runId="r1" agentName="Security" prNumber={482} onClose={() => {}} />);
+
+    fireEvent.click(screen.getByText("Prompt assembly"));
+
+    expect(screen.getByText("System")).toBeInTheDocument();
+    expect(screen.queryByText("Project context — attached specs (untrusted)")).toBeNull();
   });
 });

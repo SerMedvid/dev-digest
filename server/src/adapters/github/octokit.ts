@@ -11,6 +11,7 @@ import type {
   OpenPrPayload,
   CommitFilesPayload,
   IssueMeta,
+  RepoInfo,
 } from '@devdigest/shared';
 import { withRetry, withTimeout } from '../../platform/resilience.js';
 
@@ -377,5 +378,17 @@ export class OctokitGitHubClient implements GitHubClient {
       withTimeout(this.octokit.rest.users.getAuthenticated(), TIMEOUT),
     );
     return res.data.login;
+  }
+
+  async getRepoInfo(repo: RepoRef): Promise<RepoInfo> {
+    const res = await withRetry(() =>
+      withTimeout(this.octokit.rest.repos.get({ owner: repo.owner, repo: repo.name }), TIMEOUT),
+    );
+    /* `res.data.default_branch` is THIS repository's. When `repo` is a fork the
+       payload also carries `res.data.parent.default_branch` and
+       `res.data.source.default_branch`, both belonging to the upstream — taking
+       either would point the clone's head at a branch of a repository we do not
+       clone. Read the top-level field and nothing nested. */
+    return { defaultBranch: res.data.default_branch };
   }
 }

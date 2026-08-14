@@ -26,25 +26,9 @@ export const Conformance = z.object({
 export type Conformance = z.infer<typeof Conformance>;
 
 // ---- Onboarding ----
-export const OnboardingLink = z.object({
-  label: z.string(),
-  path: z.string(),
-});
-export type OnboardingLink = z.infer<typeof OnboardingLink>;
-
-export const OnboardingSection = z.object({
-  kind: z.string(),
-  title: z.string(),
-  body: z.string(), // markdown
-  diagram: z.string().nullish(), // mermaid
-  links: z.array(OnboardingLink),
-});
-export type OnboardingSection = z.infer<typeof OnboardingSection>;
-
-export const Onboarding = z.object({
-  sections: z.array(OnboardingSection),
-});
-export type Onboarding = z.infer<typeof Onboarding>;
+// Moved to `contracts/onboarding.ts`, which owns the five-section tour the
+// generator actually produces. The sketch that stood here (kind/links, no
+// producer) claimed the `OnboardingSection` name and would have collided.
 
 // ---- Eval ----
 export const EvalPerTrace = z.object({

@@ -127,6 +127,37 @@ an entry can age — verify before relying on one.
 
 ## Recurring errors & fixes
 
+- **2026-08-14** — A `next dev` server that was **already running while files
+  were edited** — especially anything under
+  [`../client/src/vendor/ui/`](../client/src/vendor/ui/), which every screen
+  imports — serves `Application error: a client-side exception has occurred`
+  on routes that are perfectly fine after a restart. Running the flows against
+  it produces a failure pattern that reads exactly like a real regression: the
+  `wait --url` steps pass (routing works), every `wait --text` step times out
+  (nothing painted), and the browser console shows only React's DevTools notice
+  because the error boundary already swallowed the throw. Two cheap checks
+  before believing it: open a route the change cannot touch (`/settings/...`
+  passing while `/pulls` fails means the shell is fine), and reload the failing
+  route once more — a stale-HMR crash clears on a fresh load, a real one does
+  not. Restart the dev server before a local e2e run, or drive
+  [`../scripts/e2e.sh`](../scripts/e2e.sh), which starts a fresh one.
+  (`specs/02-repo-pulls-detail.flow.json`)
+
+- **2026-08-14** — Extends the entry below with the *other* half of the Windows
+  story: [`../scripts/e2e.sh`](../scripts/e2e.sh) does not tear its stack down
+  there. Its `cleanup` trap kills by walking the process tree with `pgrep -P` and
+  backstops with `lsof -nP -iTCP:<port>`, and **neither binary exists in Git
+  Bash** — so the trap removes the ephemeral Postgres container (`docker rm -f`
+  works) while the API and web children survive as orphans. The state that
+  leaves behind is actively misleading: `:3101/health` still answers `{"status":
+  "ok"}` (liveness does not ping the DB) so the stack looks up, while every real
+  endpoint 500s with `connect ECONNREFUSED 127.0.0.1:5433`, and the next run's
+  `docker run` collides with nothing so the failure does not repeat identically.
+  Reap them by port before re-running:
+  `netstat -ano | grep ":<port> " | awk '{print $5}'` then `taskkill //PID <pid>
+  //F`. Prefer driving `npm test` against an already-running stack on Windows and
+  leave `e2e.sh` to Linux/CI. (`../scripts/e2e.sh:68`)
+
 - **2026-08-05** — On Windows, [`run.ts`](run.ts)'s `execFile` cannot launch the
   npm shim: bare `agent-browser` is `spawn ENOENT` (no `.cmd` resolution without
   a shell) and `agent-browser.cmd` is `spawn EINVAL` (Node's batch-file spawn

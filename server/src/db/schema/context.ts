@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   uuid,
@@ -9,9 +10,13 @@ import {
   vector,
   index,
   uniqueIndex,
+  check,
 } from 'drizzle-orm/pg-core';
+import { now } from './_shared';
 import { workspaces } from './core';
 import { repos } from './repos';
+import { agents } from './agents';
+import { skills } from './skills';
 
 // ============================================================ Context & codebase
 
@@ -114,6 +119,59 @@ export const references = pgTable(
       t.toSymbol,
     ),
     byFile: index('references_repo_from_idx').on(t.repoId, t.fromPath),
+  }),
+);
+
+/**
+ * `context_attachments` — which repo documents (specs/docs/insights) an agent or
+ * a skill pulls into its review prompt. **Paths only**: the document text lives
+ * in the repository clone and is read per run, never copied here.
+ *
+ * Two nullable owner FKs rather than one polymorphic `owner_id` + `owner_kind`,
+ * because an attachment must disappear when *its* owner does, and only a real
+ * FK can carry `ON DELETE CASCADE`. A polymorphic id column cannot reference two
+ * parents, so it would leave orphan rows behind every agent and skill deletion.
+ * `owner_kind` is kept as the discriminator the repository and the wire contract
+ * read; exactly one of `agent_id` / `skill_id` is ever set.
+ *
+ * The two unique indexes are **partial** (`WHERE agent_id IS NOT NULL` /
+ * `WHERE skill_id IS NOT NULL`) and that is load-bearing, not an optimisation:
+ * Postgres treats NULLs as distinct in a unique index unless it is declared
+ * `NULLS NOT DISTINCT`, so a plain unique index on `(skill_id, repo_id, path)`
+ * would let a skill-owned row (`agent_id` NULL) duplicate freely and would never
+ * match `onConflictDoUpdate`. `settings_ws_user_key_uq` in `schema/core.ts` has
+ * exactly that defect with its nullable `user_id` — don't repeat it.
+ */
+export const contextAttachments = pgTable(
+  'context_attachments',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    workspaceId: uuid('workspace_id')
+      .notNull()
+      .references(() => workspaces.id, { onDelete: 'cascade' }),
+    ownerKind: text('owner_kind', { enum: ['agent', 'skill'] }).notNull(),
+    agentId: uuid('agent_id').references(() => agents.id, { onDelete: 'cascade' }),
+    skillId: uuid('skill_id').references(() => skills.id, { onDelete: 'cascade' }),
+    repoId: uuid('repo_id')
+      .notNull()
+      .references(() => repos.id, { onDelete: 'cascade' }),
+    /** Repo-relative POSIX path. No content column — and there must not be one. */
+    path: text('path').notNull(),
+    order: integer('order').notNull().default(0),
+    createdAt: now(),
+  },
+  (t) => ({
+    agentUq: uniqueIndex('context_attachments_agent_uq')
+      .on(t.agentId, t.repoId, t.path)
+      .where(sql`${t.agentId} IS NOT NULL`),
+    skillUq: uniqueIndex('context_attachments_skill_uq')
+      .on(t.skillId, t.repoId, t.path)
+      .where(sql`${t.skillId} IS NOT NULL`),
+    repoIdx: index('context_attachments_repo_idx').on(t.repoId),
+    oneOwner: check(
+      'context_attachments_one_owner',
+      sql`(${t.agentId} IS NOT NULL) <> (${t.skillId} IS NOT NULL)`,
+    ),
   }),
 );
 

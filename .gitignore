@@ -19,6 +19,7 @@ coverage/
 .devdigest/cache/
 .devdigest/pr-self-review/
 .devdigest/impl-sdd/
+.devdigest/workflow-retro/
 clones/
 playwright-report/
 test-results/

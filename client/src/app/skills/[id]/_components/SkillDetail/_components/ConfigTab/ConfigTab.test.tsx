@@ -70,8 +70,11 @@ describe("ConfigTab", () => {
     fireEvent.change(screen.getByLabelText(/change note/i), { target: { value: "Tightened" } });
     fireEvent.click(screen.getByRole("button", { name: /save/i }));
 
-    await waitFor(() => expect(put).toHaveBeenCalled());
-    expect(put.mock.calls[0]?.[1]).toMatchObject({ body: "# changed", summary: "Tightened" });
+    // The recorder sees *every* fetch, so the save is the call that carries a
+    // body rather than whichever one happens to be first.
+    const saved = () => put.mock.calls.find(([, body]) => body !== undefined);
+    await waitFor(() => expect(saved()).toBeDefined());
+    expect(saved()?.[1]).toMatchObject({ body: "# changed", summary: "Tightened" });
   });
 
   it("shows the reason the save failed", async () => {

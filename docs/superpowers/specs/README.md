@@ -80,6 +80,7 @@ no Spec ID at all.
 
 | File | Status | Subject |
 |---|---|---|
+| [`SPEC-2026-08-13-project-context.md`](SPEC-2026-08-13-project-context.md) | draft | Repository `.md` documents discovered under configurable roots, attached by hand to agents and skills, and injected as untrusted text into the review prompt's `## Project context` slot. Expected halves: `server/specs/project-context.md`, `client/specs/project-context.md` |
 | [`SPEC-2026-08-13-impl-sdd.md`](SPEC-2026-08-13-impl-sdd.md) | draft | `/impl-sdd` — executes an approved plan, traces it against the spec, reviews it on three axes, and remediates the findings in bounded rounds. Repo tooling only |
 | [`2026-08-10-prior-prs-design.md`](2026-08-10-prior-prs-design.md) | approved, ready for planning | Merged/closed PRs overlapping this PR's files, and the `uncomparable_prs` disclosure. Shipped halves: [`server/specs/prior-prs.md`](../../../server/specs/prior-prs.md), [`client/specs/blast-radius-card.md`](../../../client/specs/blast-radius-card.md) |
 | [`2026-08-10-blast-radius-ui-parity-design.md`](2026-08-10-blast-radius-ui-parity-design.md) | approved, ready for planning | `client/` — bringing the blast radius card to parity with the design comp |

@@ -46,6 +46,32 @@
     "open": "Open",
     "dragHandle": "Drag to reorder"
   },
+  "contextTab": {
+    "heading": "Project context",
+    "badge": "{effective} of {discovered} attached",
+    "direct": "{count} attached directly",
+    "hint": "Attached documents are read into every review this agent runs. Order matters — earlier documents appear earlier in the prompt. Documents carried by a linked skill are inherited: detach those in the skill.",
+    "filterPlaceholder": "Filter documents…",
+    "footer": "≈{tokens} tokens per review",
+    "footerMapReduce": "In map-reduce the whole block is re-sent once per changed file.",
+    "noRepoTitle": "No repository selected",
+    "noRepoBody": "Pick a repository in the top bar to attach its documents.",
+    "loadError": "Couldn’t load the attached documents.",
+    "discoveryError": "Couldn’t scan the repository clone. Attached documents are still listed and can be detached.",
+    "noClone": "This repository has no clone on disk, so nothing was discovered. Attached documents are still listed.",
+    "emptyTitle": "No documents found",
+    "emptyBody": "Discovery reads .md files under the repository's configured context roots.",
+    "saveFailed": "Couldn’t save the attached documents. Nothing was changed.",
+    "saveConflict": "This agent changed somewhere else while you were editing, so nothing was saved. The list below is the current one — make the change again.",
+    "row": {
+      "dragHandle": "Reorder {path}",
+      "preview": "Preview {path}",
+      "missing": "Missing from the clone",
+      "beyondCap": "Not read: only 20 documents are read per run",
+      "inherited": "Inherited from",
+      "otherRepo": "Attached in"
+    }
+  },
   "editor": {
     "loadErrorTitle": "Couldn’t load this agent",
     "loadErrorBody": "The agent could not be loaded.",
@@ -58,6 +84,7 @@
     "tabs": {
       "config": "Config",
       "skills": "Skills",
+      "context": "Context",
       "evals": "Evals",
       "stats": "Stats",
       "ci": "CI"

@@ -156,6 +156,21 @@ an entry can age — verify before relying on one.
 
 ## Codebase patterns & tool notes
 
+- **2026-08-14** — [`src/vendor/shared/contracts/knowledge.ts`](src/vendor/shared/contracts/knowledge.ts)
+  holds **producer-less sketch contracts for lessons that have not shipped**
+  (`Onboarding`/`OnboardingSection`/`OnboardingLink`, `Conformance`, `EvalRun`,
+  `MemoryItem`), and the shared barrel re-exports every contract file with
+  `export *`. So the obvious move when building one of those features — add
+  `contracts/<feature>.ts` with the real schema — collides on a name that is
+  already taken by a sketch nothing consumes, and the barrel then has two star
+  exports of it. Grep `knowledge.ts` for your feature's nouns **before** naming
+  anything: the fix is to delete the superseded sketch (it has no producer and
+  usually models a different shape entirely) rather than to alias around it, and
+  the deletion is a two-copy edit like every shared change. The only reader of
+  the `Onboarding` sketch was one case in `test/contracts.test.ts`.
+  (`src/vendor/shared/contracts/knowledge.ts:28`,
+  `src/vendor/shared/contracts/onboarding.ts:1`)
+
 - **2026-08-10** — `dependency-cruiser`'s `cruise()` returns `module.source` and
   `dependency.resolved` as **cwd-relative POSIX** strings, never absolute — even
   when you hand it absolute paths. Two consequences. (1) A test fixture for this
@@ -299,6 +314,19 @@ an entry can age — verify before relying on one.
   (`src/modules/reviews/run-executor.ts:213`)
 
 ## Recurring errors & fixes
+
+- **2026-08-14** — A route that enqueues a `container.jobs` job returns **before
+  the job runs**, so in an `*.it.test.ts` the job's terminal write lands during
+  the *next* test — after `beforeEach` has cleared the row — and overwrites the
+  state that test just set up. The symptom points at the wrong place entirely:
+  the POST-202 case passes, and the two cases after it fail with `expected 202 to
+  be 409` and `expected 'failed' to be 'running'`, i.e. they look like route
+  bugs. `app.close()` does not drain the queue. Any test that fires a
+  fire-and-forget endpoint must wait for the job's own terminal status before it
+  ends — poll the row until its status leaves `running` — and a test that needs
+  an in-flight state should **seed that state through the repository** rather
+  than racing a second request against the first job.
+  (`test/onboarding-routes.it.test.ts:52`)
 
 - **2026-08-10** — Every `octokit.rest.*.list*` call here is a **single page**
   unless it goes through `octokit.paginate`, and `per_page: 100` is GitHub's

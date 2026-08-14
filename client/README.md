@@ -29,6 +29,7 @@ flowchart TD
 
   AGENTS["/agents"] --> AGENT["/agents/:id<br/>editor (config · skills)"]
   SKILLS["/skills<br/>rule library"] --> SKILL["/skills/:id<br/>config · preview · stats · versions"]
+  TOUR["/repos/:repoId/onboarding<br/>generated 5-section repo tour"]
   CONV["/repos/:repoId/conventions<br/>extract · accept/reject/edit · create skill"]
   SETTINGS["/settings/:section<br/>API keys · models"]
 
@@ -36,9 +37,21 @@ flowchart TD
   PR -->|"GET /pulls/:id · /reviews · /pulls/:id/comments · /pulls/:id/intent · /pulls/:id/smart-diff<br/>POST /pulls/:id/review · /pulls/:id/intent · /pulls/:id/smart-diff/summary · /findings/:id/(accept|dismiss)"| API
   AGENTS -->|"/agents · /agents/:id · /agents/:id/skills"| API
   SKILLS -->|"/skills · /skills/:id · /skills/:id/(stats|versions)"| API
+  TOUR -->|"GET /repos/:id/onboarding<br/>POST /repos/:id/onboarding/generate"| API
   CONV -->|"GET/POST /repos/:id/conventions(/extract|/skill-draft|/skill)<br/>PATCH /conventions/:id"| API
   SETTINGS -->|"/settings · /providers"| API
 ```
+
+`/repos/:repoId/onboarding` is the **Onboarding Tour** — five sections written
+from the repo-intel index in one LLM call: architecture overview, critical
+paths, how to run locally, a guided reading path and first tasks. It reads
+`GET /repos/:id/onboarding` and regenerates through
+`POST /repos/:id/onboarding/generate`, both via `lib/hooks/onboarding.ts`, and
+polls every 4s while the status is `running`. The screen never reorders what the
+server sent: the reading path is in file-rank order, which is decided
+server-side and is the whole point of the section.
+
+Not to be confused with `/onboarding`, which is the **add-a-repository** screen.
 
 The PR detail route's **Overview** tab opens with the `IntentCard`: what the
 system thinks the PR is for, its in/out-of-scope lists, the computed confidence
